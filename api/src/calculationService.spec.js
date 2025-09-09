@@ -5,6 +5,8 @@ import {
   calculatePVAF,
   calculateForTargetPV,
   evaluateCustomPrice,
+  customYearlyThenEqualTargetPV,
+  customYearlyThenEqualUseStdPrice,
   Frequencies,
   CalculationModes,
   calculateByMode
@@ -74,6 +76,41 @@ async function run() {
   })
   // Net total should be lower than stdPlan.totalPrice due to discount
   assert(evalRes.totalNominalPrice < stdPlan.totalPrice, 'Discount applied')
+
+  // Custom structure: use std price with a custom year and split Y1
+  const customUseStd = customYearlyThenEqualUseStdPrice(stdPlan, {
+    dpType: 'amount',
+    downPaymentValue: 0,
+    planDurationYears: 5,
+    installmentFrequency: Frequencies.Quarterly,
+    additionalHandoverPayment: 0,
+    handoverYear: 2,
+    splitFirstYearPayments: true,
+    firstYearPayments: [
+      { amount: 50000, month: 1, type: 'dp' },
+      { amount: 25000, month: 6, type: 'regular' }
+    ],
+    subsequentYears: [
+      { totalNominal: 120000, frequency: Frequencies.Quarterly } // Year 2
+    ]
+  })
+  assert(customUseStd.totalNominalPrice === stdPlan.totalPrice, 'Use std price total equality')
+
+  // Custom structure: target PV with custom year
+  const customTarget = customYearlyThenEqualTargetPV(stdPlan, {
+    dpType: 'amount',
+    downPaymentValue: 0,
+    planDurationYears: 5,
+    installmentFrequency: Frequencies.Quarterly,
+    additionalHandoverPayment: 0,
+    handoverYear: 2,
+    splitFirstYearPayments: false,
+    firstYearPayments: [],
+    subsequentYears: [
+      { totalNominal: 120000, frequency: Frequencies.Quarterly } // Year 1
+    ]
+  })
+  assertAlmostEqual(customTarget.calculatedPV, stdPlan.calculatedPV, 1e-3, 'Custom Target PV match')
 
   // Dispatcher sanity
   const dispRes = calculateByMode(CalculationModes.CalculateForTargetPV, stdPlan, inputs)

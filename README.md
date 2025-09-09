@@ -105,11 +105,15 @@ curl -s -X POST http://localhost:3000/api/calculate \
   }' | jq
 
 Client demo
-- The client has a \"Calculation API Demo\" section with a button that calls /api/calculate using a sample payload and displays the result.
+- The client has a "Calculation API Demo" with:
+  - A sample button for a quick request
+  - A form to try your own payload (mode, stdPlan, and inputs) and see results
 
 Run tests (API)
-- Lightweight tests cover calculation service logic without extra dependencies:
+- Unit/lightweight tests for the calculation service:
   cd api && npm run test
+- Integration tests for the HTTP endpoint using supertest:
+  cd api && npm run test:integration
 
 Development notes
 - Code changes in client/ and api/ are live-reloaded inside containers.
