@@ -104,6 +104,13 @@ curl -s -X POST http://localhost:3000/api/calculate \
     }
   }' | jq
 
+Client demo
+- The client has a \"Calculation API Demo\" section with a button that calls /api/calculate using a sample payload and displays the result.
+
+Run tests (API)
+- Lightweight tests cover calculation service logic without extra dependencies:
+  cd api && npm run test
+
 Development notes
 - Code changes in client/ and api/ are live-reloaded inside containers.
 - The client reads VITE_API_URL (defaults to http://localhost:3000). docker-compose sets it for you in dev.

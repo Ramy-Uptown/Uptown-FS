@@ -33,6 +33,9 @@ app.get('/api/message', (req, res) => {
 function isObject(v) {
   return v && typeof v === 'object' && !Array.isArray(v)
 }
+function isBoolean(v) {
+  return typeof v === 'boolean'
+}
 function bad(res, code, message, details) {
   return res.status(code).json({
     error: { message, details },
@@ -42,6 +45,68 @@ function bad(res, code, message, details) {
 
 const allowedModes = new Set(Object.values(CalculationModes))
 const allowedFrequencies = new Set(Object.values(Frequencies))
+
+/**
+ * Validate inputs payload more granularly
+ */
+function validateInputs(inputs) {
+  const errors = []
+
+  // Required fields
+  if (inputs.installmentFrequency && !allowedFrequencies.has(inputs.installmentFrequency)) {
+    errors.push({ field: 'installmentFrequency', message: 'Invalid frequency' })
+  }
+  if (inputs.planDurationYears == null) {
+    errors.push({ field: 'planDurationYears', message: 'Required' })
+  } else {
+    const yrs = Number(inputs.planDurationYears)
+    if (!Number.isInteger(yrs) || yrs <= 0) errors.push({ field: 'planDurationYears', message: 'Must be integer >= 1' })
+  }
+
+  // dpType and value
+  if (inputs.dpType && !['amount', 'percentage'].includes(inputs.dpType)) {
+    errors.push({ field: 'dpType', message: 'Must be "amount" or "percentage"' })
+  }
+  if (inputs.downPaymentValue != null) {
+    const v = Number(inputs.downPaymentValue)
+    if (!isFinite(v) || v < 0) errors.push({ field: 'downPaymentValue', message: 'Must be non-negative number' })
+  }
+
+  // Handover
+  if (inputs.handoverYear != null) {
+    const hy = Number(inputs.handoverYear)
+    if (!Number.isInteger(hy) || hy <= 0) errors.push({ field: 'handoverYear', message: 'Must be integer >= 1' })
+  }
+  if (inputs.additionalHandoverPayment != null) {
+    const ah = Number(inputs.additionalHandoverPayment)
+    if (!isFinite(ah) || ah < 0) errors.push({ field: 'additionalHandoverPayment', message: 'Must be non-negative number' })
+  }
+
+  // Flags and arrays
+  if (inputs.splitFirstYearPayments != null && !isBoolean(inputs.splitFirstYearPayments)) {
+    errors.push({ field: 'splitFirstYearPayments', message: 'Must be boolean' })
+  }
+
+  if (Array.isArray(inputs.firstYearPayments)) {
+    inputs.firstYearPayments.forEach((p, idx) => {
+      const amt = Number(p?.amount)
+      const month = Number(p?.month)
+      if (!isFinite(amt) || amt < 0) errors.push({ field: `firstYearPayments[${idx}].amount`, message: 'Must be non-negative number' })
+      if (!Number.isInteger(month) || month < 1 || month > 12) errors.push({ field: `firstYearPayments[${idx}].month`, message: 'Must be integer 1..12' })
+      if (p?.type && !['dp', 'regular'].includes(p.type)) errors.push({ field: `firstYearPayments[${idx}].type`, message: 'Must be "dp" or "regular"' })
+    })
+  }
+
+  if (Array.isArray(inputs.subsequentYears)) {
+    inputs.subsequentYears.forEach((y, idx) => {
+      const total = Number(y?.totalNominal)
+      if (!isFinite(total) || total < 0) errors.push({ field: `subsequentYears[${idx}].totalNominal`, message: 'Must be non-negative number' })
+      if (!allowedFrequencies.has(y?.frequency)) errors.push({ field: `subsequentYears[${idx}].frequency`, message: 'Invalid frequency' })
+    })
+  }
+
+  return errors
+}
 
 /**
  * POST /api/calculate
@@ -81,9 +146,9 @@ app.post('/api/calculate', (req, res) => {
     if (!isObject(inputs)) {
       return bad(res, 400, 'inputs must be an object')
     }
-    // Frequency validation if provided
-    if (inputs.installmentFrequency && !allowedFrequencies.has(inputs.installmentFrequency)) {
-      return bad(res, 400, 'inputs.installmentFrequency is invalid', { allowedFrequencies: [...allowedFrequencies] })
+    const inputErrors = validateInputs(inputs)
+    if (inputErrors.length > 0) {
+      return bad(res, 422, 'Invalid inputs', inputErrors)
     }
 
     const result = calculateByMode(mode, stdPlan, inputs)
