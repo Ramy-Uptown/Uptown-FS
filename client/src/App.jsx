@@ -27,6 +27,15 @@ export default function App() {
     splitFirstYearPayments: false
   })
 
+  // Dynamic arrays
+  const [firstYearPayments, setFirstYearPayments] = useState([
+    // { amount: 50000, month: 1, type: 'dp' },
+    // { amount: 25000, month: 6, type: 'regular' }
+  ])
+  const [subsequentYears, setSubsequentYears] = useState([
+    // { totalNominal: 120000, frequency: 'quarterly' }
+  ])
+
   useEffect(() => {
     async function load() {
       try {
@@ -106,8 +115,15 @@ export default function App() {
           additionalHandoverPayment: Number(inputs.additionalHandoverPayment),
           handoverYear: Number(inputs.handoverYear),
           splitFirstYearPayments: !!inputs.splitFirstYearPayments,
-          firstYearPayments: [],
-          subsequentYears: []
+          firstYearPayments: firstYearPayments.map(p => ({
+            amount: Number(p.amount) || 0,
+            month: Number(p.month) || 0,
+            type: p.type || 'regular'
+          })),
+          subsequentYears: subsequentYears.map(y => ({
+            totalNominal: Number(y.totalNominal) || 0,
+            frequency: y.frequency || 'annually'
+          }))
         }
       }
       const resp = await fetch(`${API_URL}/api/calculate`, {
@@ -129,6 +145,27 @@ export default function App() {
 
   function inputStyle() {
     return { padding: 8, borderRadius: 6, border: '1px solid #ccc', width: '100%' }
+  }
+
+  // Dynamic handlers
+  function addFirstYearPayment() {
+    setFirstYearPayments(arr => [...arr, { amount: '', month: '', type: 'regular' }])
+  }
+  function removeFirstYearPayment(idx) {
+    setFirstYearPayments(arr => arr.filter((_, i) => i !== idx))
+  }
+  function updateFirstYearPayment(idx, key, value) {
+    setFirstYearPayments(arr => arr.map((p, i) => i === idx ? { ...p, [key]: value } : p))
+  }
+
+  function addSubsequentYear() {
+    setSubsequentYears(arr => [...arr, { totalNominal: '', frequency: 'annually' }])
+  }
+  function removeSubsequentYear(idx) {
+    setSubsequentYears(arr => arr.filter((_, i) => i !== idx))
+  }
+  function updateSubsequentYear(idx, key, value) {
+    setSubsequentYears(arr => arr.map((y, i) => i === idx ? { ...y, [key]: value } : y))
   }
 
   return (
@@ -159,7 +196,7 @@ export default function App() {
 
       <section style={{ marginTop: 24 }}>
         <h2>Try Your Own Payload</h2>
-        <form onSubmit={runCustomCalculation} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, maxWidth: 900 }}>
+        <form onSubmit={runCustomCalculation} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, maxWidth: 1000 }}>
           <div>
             <label>Mode</label>
             <select value={mode} onChange={e => setMode(e.target.value)} style={inputStyle()}>
@@ -229,6 +266,86 @@ export default function App() {
               <input type="checkbox" checked={inputs.splitFirstYearPayments} onChange={e => setInputs(s => ({ ...s, splitFirstYearPayments: e.target.checked }))} />
               {' '}Split First Year Payments?
             </label>
+          </div>
+
+          {/* First Year Payments Builder */}
+          {inputs.splitFirstYearPayments && (
+            <div style={{ gridColumn: '1 / span 2', border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0 }}>First Year Payments</h3>
+                <button type="button" onClick={addFirstYearPayment} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
+                  + Add Payment
+                </button>
+              </div>
+              {firstYearPayments.length === 0 ? (
+                <p style={{ color: '#666', marginTop: 8 }}>No first-year payments defined.</p>
+              ) : (
+                <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8 }}>
+                  {firstYearPayments.map((p, idx) => (
+                    <React.Fragment key={idx}>
+                      <div>
+                        <label>Amount (EGP)</label>
+                        <input type="number" value={p.amount} onChange={e => updateFirstYearPayment(idx, 'amount', e.target.value)} style={inputStyle()} />
+                      </div>
+                      <div>
+                        <label>Month (1-12)</label>
+                        <input type="number" min="1" max="12" value={p.month} onChange={e => updateFirstYearPayment(idx, 'month', e.target.value)} style={inputStyle()} />
+                      </div>
+                      <div>
+                        <label>Type</label>
+                        <select value={p.type} onChange={e => updateFirstYearPayment(idx, 'type', e.target.value)} style={inputStyle()}>
+                          <option value="dp">dp</option>
+                          <option value="regular">regular</option>
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'end' }}>
+                        <button type="button" onClick={() => removeFirstYearPayment(idx)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
+                          Remove
+                        </button>
+                      </div>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Subsequent Years Builder */}
+          <div style={{ gridColumn: '1 / span 2', border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>Subsequent Custom Years</h3>
+              <button type="button" onClick={addSubsequentYear} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
+                + Add Year
+              </button>
+            </div>
+            {subsequentYears.length === 0 ? (
+              <p style={{ color: '#666', marginTop: 8 }}>No subsequent custom years defined.</p>
+            ) : (
+              <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
+                {subsequentYears.map((y, idx) => (
+                  <React.Fragment key={idx}>
+                    <div>
+                      <label>Total Nominal (EGP)</label>
+                      <input type="number" value={y.totalNominal} onChange={e => updateSubsequentYear(idx, 'totalNominal', e.target.value)} style={inputStyle()} />
+                    </div>
+                    <div>
+                      <label>Frequency</label>
+                      <select value={y.frequency} onChange={e => updateSubsequentYear(idx, 'frequency', e.target.value)} style={inputStyle()}>
+                        <option value="monthly">monthly</option>
+                        <option value="quarterly">quarterly</option>
+                        <option value="bi-annually">bi-annually</option>
+                        <option value="annually">annually</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'end' }}>
+                      <button type="button" onClick={() => removeSubsequentYear(idx)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
+                        Remove
+                      </button>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={{ gridColumn: '1 / span 2', display: 'flex', gap: 8 }}>
