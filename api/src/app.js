@@ -18,6 +18,7 @@ import unitsRoutes from './unitsRoutes.js'
 import salesPeopleRoutes from './salesPeopleRoutes.js'
 import commissionPoliciesRoutes from './commissionPoliciesRoutes.js'
 import commissionsRoutes from './commissionsRoutes.js'
+import ocrRoutes from './ocrRoutes.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -37,6 +38,7 @@ app.use('/api/units', unitsRoutes)
 app.use('/api/sales', salesPeopleRoutes)
 app.use('/api/commission-policies', commissionPoliciesRoutes)
 app.use('/api/commissions', commissionsRoutes)
+app.use('/api/ocr', ocrRoutes)
 
 // Health endpoint (now protected by middleware below)
 app.get('/api/health', (req, res) => {

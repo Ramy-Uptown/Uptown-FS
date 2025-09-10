@@ -1,0 +1,4 @@
+# Keep logo folder in Git; drop your real logo as:
+# - client/public/logo/logo.svg (preferred)
+# - client/public/logo/logo.png
+# - client/public/logo/logo.jpg

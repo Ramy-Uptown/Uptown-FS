@@ -18,6 +18,25 @@ Quick start
    - API health: http://localhost:3000/api/health
    - API message: http://localhost:3000/api/message
 
+Phase 8: Egyptian ID OCR Module
+- Purpose: Upload a photo of an Egyptian ID and automatically extract key fields to prefill the deal form.
+- Flow:
+  1) In Create Deal page, select an ID image and click "Extract from ID".
+  2) The system uses a local OCR engine (Tesseract) first and automatically falls back to Google Cloud Vision (if GCV_API_KEY is set) only if local OCR fails to yield usable data.
+  3) You can review/edit "Name", "National ID", and "Address", then click "Apply to Form" to populate the calculator's Client Information section.
+- API:
+  - POST /api/ocr/egypt-id (authenticated)
+    Form-Data: image=<file>
+    Response: { ok: true, engine: "google_vision" | "tesseract", rawText: string, fields: { name, nationalId, address } }
+
+Configuration
+- Local OCR (primary): tesseract.js (no system Tesseract required).
+- Cloud OCR (fallback): Google Cloud Vision via API key.
+  - Set env var GCV_API_KEY in the api service (e.g., in docker-compose.yml or your environment).
+
+Security
+- The OCR endpoint is authenticated the same as other /api routes.
+
 Calculation API
 - Endpoint: POST http://localhost:3000/api/calculate
 - Body:
@@ -114,6 +133,19 @@ Run tests (API)
   cd api && npm run test
 - Integration tests for the HTTP endpoint using supertest:
   cd api && npm run test:integration
+
+Branding (Logo and App Title)
+- Default logo path (committed): client/public/logo.svg (served at /logo.svg)
+- Drop your own company logo into GitHub here and it will appear automatically:
+  client/public/logo/
+  Supported filenames (in order): logo.svg, logo.png, logo.jpg
+  The app will auto-detect the first available at runtime in this folder.
+- Alternate legacy path also supported:
+  client/public/branding/ (same filenames as above)
+- Optional override:
+  Set VITE_COMPANY_LOGO_URL for a custom absolute/relative URL.
+- App title override:
+  Set VITE_APP_TITLE to customize the header title.
 
 Development notes
 - Code changes in client/ and api/ are live-reloaded inside containers.

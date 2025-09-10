@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { fetchWithAuth } from './lib/apiClient.js'
+import BrandHeader from './lib/BrandHeader.jsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 const LS_KEY = 'uptown_calc_form_state_v2'
@@ -8,7 +9,7 @@ const LS_KEY = 'uptown_calc_form_state_v2'
 const styles = {
   page: {
     fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-    background: '#f7f9fb',
+    background: '#f7f6f3',
     minHeight: '100vh',
     color: '#222'
   },
@@ -19,52 +20,52 @@ const styles = {
   },
   header: {
     background: '#fff',
-    border: '1px solid #e6eaf0',
+    border: '1px solid #ead9bd',
     borderRadius: 12,
     padding: 20,
     marginBottom: 16,
-    boxShadow: '0 2px 6px rgba(21, 24, 28, 0.04)'
+    boxShadow: '0 2px 6px rgba(169, 126, 52, 0.08)'
   },
-  h1: { margin: 0, fontSize: 22, fontWeight: 700 },
+  h1: { margin: 0, fontSize: 22, fontWeight: 700, color: '#A97E34' },
   sub: { color: '#6b7280', marginTop: 6, fontSize: 13 },
   section: {
     background: '#fff',
-    border: '1px solid #e6eaf0',
+    border: '1px solid #ead9bd',
     borderRadius: 12,
     padding: 20,
     marginTop: 16,
-    boxShadow: '0 2px 6px rgba(21, 24, 28, 0.04)'
+    boxShadow: '0 2px 6px rgba(169, 126, 52, 0.06)'
   },
-  sectionTitle: { margin: '0 0 12px 0', fontSize: 18, fontWeight: 600 },
+  sectionTitle: { margin: '0 0 12px 0', fontSize: 18, fontWeight: 700, color: '#A97E34' },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   blockFull: { gridColumn: '1 / span 2' },
-  label: { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 },
+  label: { display: 'block', fontSize: 12, fontWeight: 600, color: '#4b5563', marginBottom: 6 },
   input: (err) => ({
     padding: '10px 12px',
     borderRadius: 10,
-    border: `1px solid ${err ? '#e11d48' : '#dfe5ee'}`,
+    border: `1px solid ${err ? '#e11d48' : '#ead9bd'}`,
     outline: 'none',
     width: '100%',
     fontSize: 14,
-    background: '#fbfdff'
+    background: '#fbfaf7'
   }),
   select: (err) => ({
     padding: '10px 12px',
     borderRadius: 10,
-    border: `1px solid ${err ? '#e11d48' : '#dfe5ee'}`,
+    border: `1px solid ${err ? '#e11d48' : '#ead9bd'}`,
     outline: 'none',
     width: '100%',
     fontSize: 14,
-    background: '#fbfdff'
+    background: '#fbfaf7'
   }),
   textarea: (err) => ({
     padding: '10px 12px',
     borderRadius: 10,
-    border: `1px solid ${err ? '#e11d48' : '#dfe5ee'}`,
+    border: `1px solid ${err ? '#e11d48' : '#ead9bd'}`,
     outline: 'none',
     width: '100%',
     fontSize: 14,
-    background: '#fbfdff',
+    background: '#fbfaf7',
     minHeight: 80,
     resize: 'vertical'
   }),
@@ -75,7 +76,7 @@ const styles = {
     gap: 8,
     padding: '10px 14px',
     borderRadius: 10,
-    border: '1px solid #d1d9e6',
+    border: '1px solid #ead9bd',
     background: '#fff',
     color: '#111827',
     cursor: 'pointer'
@@ -83,8 +84,8 @@ const styles = {
   btnPrimary: {
     padding: '10px 14px',
     borderRadius: 10,
-    border: '1px solid #1f6feb',
-    background: '#1f6feb',
+    border: '1px solid #A97E34',
+    background: '#A97E34',
     color: '#fff',
     cursor: 'pointer',
     fontWeight: 600
@@ -92,13 +93,13 @@ const styles = {
   tableWrap: {
     maxWidth: 1200,
     overflow: 'auto',
-    border: '1px solid #e6eaf0',
+    border: '1px solid #ead9bd',
     borderRadius: 12
   },
   table: { width: '100%', borderCollapse: 'collapse' },
-  th: { textAlign: 'left', padding: 12, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' },
-  td: { padding: 12, borderBottom: '1px solid #f2f5fa', fontSize: 14 },
-  tFootCell: { padding: 12, fontWeight: 700, background: '#fbfdff' },
+  th: { textAlign: 'left', padding: 12, borderBottom: '1px solid #ead9bd', fontSize: 13, color: '#5b4630', background: '#f6efe3' },
+  td: { padding: 12, borderBottom: '1px solid #f2e8d6', fontSize: 14 },
+  tFootCell: { padding: 12, fontWeight: 700, background: '#fbfaf7' },
   error: { color: '#e11d48' }
 }
 
@@ -244,7 +245,7 @@ export default function App(props) {
     localStorage.setItem(LS_KEY, JSON.stringify(snapshot))
   }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes])
 
-  // Expose an imperative snapshot getter for embedding contexts
+  // Expose imperative APIs for embedding contexts
   useEffect(() => {
     const getSnapshot = () => {
       const base = {
@@ -269,10 +270,21 @@ export default function App(props) {
       }
       return out
     }
+    const applyClientInfo = (partial) => {
+      if (!partial || typeof partial !== 'object') return
+      setClientInfo(s => ({
+        ...s,
+        ...partial
+      }))
+    }
     window.__uptown_calc_getSnapshot = getSnapshot
+    window.__uptown_calc_applyClientInfo = applyClientInfo
     return () => {
       if (window.__uptown_calc_getSnapshot === getSnapshot) {
         delete window.__uptown_calc_getSnapshot
+      }
+      if (window.__uptown_calc_applyClientInfo === applyClientInfo) {
+        delete window.__uptown_calc_applyClientInfo
       }
     }
   }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes, genResult, preview])
@@ -652,14 +664,10 @@ export default function App(props) {
     <div style={styles.page}>
       <div style={styles.container}>
         {!embedded && (
-          <header style={{ ...styles.header, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h1 style={styles.h1}>Uptown Evaluator — Payment Plan</h1>
-              <p style={styles.sub}>Create, preview, and export professional payment schedules.</p>
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
+          <div style={{ marginBottom: 16 }}>
+            <BrandHeader
+              title={import.meta.env.VITE_APP_TITLE || 'Uptown Financial System — Calculator'}
+              onLogout={async () => {
                 try {
                   const rt = localStorage.getItem('refresh_token')
                   if (rt) {
@@ -676,11 +684,8 @@ export default function App(props) {
                   window.location.href = '/login'
                 }
               }}
-              style={styles.btn}
-            >
-              Logout
-            </button>
-          </header>
+            />
+          </div>
         )}
 
         <section style={styles.section}>
