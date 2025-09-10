@@ -196,7 +196,19 @@ router.post('/', authMiddleware, async (req, res) => {
       [title.trim(), isFinite(amt) ? amt : 0, det, unitType || null, salesRepId || null, policyId || null, 'draft', req.user.id]
     )
     const deal = result.rows[0]
-    await logHistory(deal.id, req.user.id, 'create', null)
+    const note = {
+      event: 'deal_created',
+      by: { id: req.user.id, role: req.user.role },
+      fields: {
+        title: deal.title,
+        amount: Number(deal.amount || 0),
+        unit_type: deal.unit_type || null,
+        sales_rep_id: deal.sales_rep_id || null,
+        policy_id: deal.policy_id || null
+      },
+      createdAt: new Date().toISOString()
+    }
+    await logHistory(deal.id, req.user.id, 'create', JSON.stringify(note))
     return res.json({ ok: true, deal })
   } catch (e) {
     console.error('POST /api/deals error', e)
@@ -229,7 +241,21 @@ router.patch('/:id', authMiddleware, async (req, res) => {
       [newTitle, newAmount, newDetails, newUnitType, newSalesRepId, newPolicyId, id]
     )
     const updated = upd.rows[0]
-    await logHistory(id, req.user.id, 'modify', null)
+    const changed = {}
+    if (deal.title !== updated.title) changed.title = { from: deal.title, to: updated.title }
+    if (Number(deal.amount) !== Number(updated.amount)) changed.amount = { from: Number(deal.amount), to: Number(updated.amount) }
+    if ((deal.unit_type || null) !== (updated.unit_type || null)) changed.unit_type = { from: deal.unit_type || null, to: updated.unit_type || null }
+    if ((deal.sales_rep_id || null) !== (updated.sales_rep_id || null)) changed.sales_rep_id = { from: deal.sales_rep_id || null, to: updated.sales_rep_id || null }
+    if ((deal.policy_id || null) !== (updated.policy_id || null)) changed.policy_id = { from: deal.policy_id || null, to: updated.policy_id || null }
+    const detailsChanged = JSON.stringify(deal.details || {}) !== JSON.stringify(updated.details || {})
+    const note = {
+      event: 'deal_modified',
+      by: { id: req.user.id, role: req.user.role },
+      changed,
+      detailsChanged,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'modify', JSON.stringify(note))
     return res.json({ ok: true, deal: updated })
   } catch (e) {
     console.error('PATCH /api/deals/:id error', e)
@@ -250,7 +276,14 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
     if (deal.status !== 'draft') return res.status(400).json({ error: { message: 'Deal must be draft to submit' } })
 
     const upd = await pool.query('UPDATE deals SET status=$1 WHERE id=$2 RETURNING *', ['pending_approval', id])
-    await logHistory(id, req.user.id, 'submit', null)
+    const note = {
+      event: 'deal_submitted',
+      by: { id: req.user.id, role: req.user.role },
+      from: deal.status,
+      to: 'pending_approval',
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'submit', JSON.stringify(note))
     return res.json({ ok: true, deal: upd.rows[0] })
   } catch (e) {
     console.error('POST /api/deals/:id/submit error', e)
@@ -271,7 +304,14 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
     if (deal.status !== 'pending_approval') return res.status(400).json({ error: { message: 'Deal must be pending approval' } })
 
     const upd = await pool.query('UPDATE deals SET status=$1 WHERE id=$2 RETURNING *', ['approved', id])
-    await logHistory(id, req.user.id, 'approve', null)
+    const approveNote = {
+      event: 'deal_approved',
+      by: { id: req.user.id, role: req.user.role },
+      from: deal.status,
+      to: 'approved',
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'approve', JSON.stringify(approveNote))
 
     // Auto-calc commission if sales rep assigned
     const approvedDeal = upd.rows[0]
@@ -358,7 +398,15 @@ router.post('/:id/reject', authMiddleware, async (req, res) => {
     if (deal.status !== 'pending_approval') return res.status(400).json({ error: { message: 'Deal must be pending approval' } })
 
     const upd = await pool.query('UPDATE deals SET status=$1 WHERE id=$2 RETURNING *', ['rejected', id])
-    await logHistory(id, req.user.id, 'reject', typeof reason === 'string' ? reason : null)
+    const rejectNote = {
+      event: 'deal_rejected',
+      by: { id: req.user.id, role: req.user.role },
+      from: deal.status,
+      to: 'rejected',
+      reason: typeof reason === 'string' ? reason : null,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'reject', JSON.stringify(rejectNote))
     return res.json({ ok: true, deal: upd.rows[0] })
   } catch (e) {
     console.error('POST /api/deals/:id/reject error', e)

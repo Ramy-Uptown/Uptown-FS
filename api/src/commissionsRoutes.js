@@ -73,6 +73,20 @@ router.post('/calc-and-save', authMiddleware, adminOnly, async (req, res) => {
       [deal.id, sales.id, policy.id, amount, { ...details, deal_amount: deal.amount }]
     )
 
+    // Structured audit log in deal_history
+    const noteObj = {
+      event: 'manual_commission',
+      policy: { id: policy.id, name: policy.name || null, active: !!policy.active },
+      amounts: { deal: Number(deal.amount || 0), commission: Number(amount || 0) },
+      calc: details,
+      triggeredBy: { id: req.user.id, role: req.user.role },
+      triggeredAt: new Date().toISOString()
+    }
+    await pool.query(
+      'INSERT INTO deal_history (deal_id, user_id, action, notes) VALUES ($1, $2, $3, $4)',
+      [deal.id, req.user.id, 'commission_calculated', JSON.stringify(noteObj)]
+    )
+
     return res.json({ ok: true, commission: ins.rows[0], deal, sales, policy })
   } catch (e) {
     console.error('POST /api/commissions/calc-and-save error', e)
