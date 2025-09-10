@@ -914,15 +914,17 @@ export default function App(props) {
           <div style={styles.grid2}>
             <div>
               <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
-              <input style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
+              <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
             </div>
             <div>
               <label style={styles.label}>Nationality (<span style={styles.arInline}>[[الجنسية]]</span>)</label>
-              <input style={styles.input()} value={clientInfo.nationality} onChange={e => setClientInfo(s => ({ ...s, nationality: e.target.value }))} />
+              <input dir="auto" style={styles.input()} value={clientInfo.nationality} onChange={e => setClientInfo(s => ({ ...s, nationality: e.target.value }))_code} new/</>
+ />
             </div>
             <div>
               <label style={styles.label}>National ID / Passport No. (<span style={styles.arInline}>[[رقم قومي/ رقم جواز]]</span>)</label>
-              <input style={styles.input()} value={clientInfo.id_or_passport} onChange={e => setClientInfo(s => ({ ...s, id_or_passport: e.target.value }))} />
+              <input dir="auto" style={styles.input()} value={clientInfo.id_or_passport} onChange={e => setClientInfo(s => ({ ...s, id_or_passport: e.target.value }))_code} new/</>
+ />
             </div>
             <div>
               <label style={styles.label}>ID/Passport Issue Date (<span style={styles.arInline}>[[تاريخ الاصدار]]</span>)</label>
@@ -930,7 +932,8 @@ export default function App(props) {
             </div>
             <div style={styles.blockFull}>
               <label style={styles.label}>Address (<span style={styles.arInline}>[[العنوان]]</span>)</label>
-              <textarea style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))} />
+              <textarea dir="auto" style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))_code} new/</>
+ />
             </div>
             <div>
               <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
@@ -1017,15 +1020,16 @@ export default function App(props) {
             </div>
             <div>
               <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
+              <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
             </div>
             <div>
               <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
+              <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))_code} new/</>
+ />
             </div>
             <div>
               <label style={styles.label}>Unit Description</label>
-              <input style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
+              <input dir="auto" style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
             </div>
             <div>
               <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
@@ -1041,15 +1045,16 @@ export default function App(props) {
             </div>
             <div>
               <label style={styles.label}>Block / Sector (<span style={styles.arInline}>[[قطاع]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.block_sector} onChange={e => setUnitInfo(s => ({ ...s, block_sector: e.target.value }))} />
+              <input dir="auto" style={styles.input()} value={unitInfo.block_sector} onChange={e => setUnitInfo(s => ({ ...s, block_sector: e.target.value }))_code} new/</>
+ />
             </div>
             <div>
               <label style={styles.label}>Zone / Neighborhood (<span style={styles.arInline}>[[مجاورة]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.zone} onChange={e => setUnitInfo(s => ({ ...s, zone: e.target.value }))} />
+              <input dir="auto" style={styles.input()} value={unitInfo.zone} onChange={e => setUnitInfo(s => ({ ...s, zone: e.target.value }))} />
             </div>
             <div>
               <label style={styles.label}>Garden Details (<span style={styles.arInline}>[[مساحة الحديقة]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.garden_details} onChange={e => setUnitInfo(s => ({ ...s, garden_details: e.target.value }))} placeholder='مثال: "و حديقة بمساحة ٥٠ م٢"' />
+              <input dir="auto" style={styles.input()} value={unitInfo.garden_details} onChange={e => setUnitInfo(s => ({ ...s, garden_details: e.target.value }))} placeholder='مثال: "و حديقة بمساحة ٥٠ م٢"' />
             </div>
           </div>
         </section>
@@ -1080,7 +1085,7 @@ l>
             </div>
             <div>
               <label style={styles.label}>Delivery Period (<span style={styles.arInline}>[[مدة التسليم]]</span>)</label>
-              <input style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
+              <input dir="auto" style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
             </div>
           </div>
         </section>
@@ -1089,7 +1094,7 @@ l>
           <h2 style={styles.sectionTitle}>Custom Text Notes</h2>
           <div>
             <label style={styles.label}>Down Payment Explanation (<span style={styles.arInline}>[[بيان الباقي من دفعة التعاقد]]</span>)</label>
-            <textarea style={styles.textarea()} value={customNotes.dp_explanation} onChange={e => setCustomNotes(s => ({ ...s, dp_explanation: e.target.value }))} placeholder='مثال: "يسدد الباقي على شيكين"' />
+            <textarea dir="auto" style={styles.textarea()} value={customNotes.dp_explanation} onChange={e => setCustomNotes(s => ({ ...s, dp_explanation: e.target.value }))} placeholder='مثال: "يسدد الباقي على شيكين"' />
           </div>
           <div style={{ marginTop: 12 }}>
             <label style={styles.label}>Power of Attorney Claus (<[span style={styles.arInline}>[[بيان التوكيل</]]span</>)la_codebenewl</>
