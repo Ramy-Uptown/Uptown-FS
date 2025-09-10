@@ -1,5 +1,5 @@
 // Bilingual number-to-words converter
-// - English uses the "number-to-words" library.
+// - English uses the "number-to-words" library with currency-style cents handling ("and XX/100").
 // - Arabic uses a converter based on your provided Google Apps Script logic (adapted to Node).
 //   You can still override it via setArabicConverter() if you want to plug another version.
 
@@ -192,7 +192,7 @@ export function setArabicConverter(fn) {
 
 /**
  * Convert a number to its written words representation in the requested language.
- * - English uses number-to-words (integers; decimals are rounded).
+ * - English uses number-to-words and renders cents as "and XX/100".
  * - Arabic uses the integrated Arabic currency-aware converter (defaults to EGP units).
  * @param {number|string} number
  * @param {'en'|'ar'|string} language
@@ -207,13 +207,20 @@ export function convertToWords(number, language = 'en') {
     return arabicConverter(n)
   }
 
-  // English: use number-to-words. It supports integers; round decimals.
-  const rounded = Math.round(n)
+  // English: integer words with cents as "and XX/100"
+  const negative = n < 0
+  const abs = Math.abs(n)
+  const integer = Math.floor(abs + 1e-9)
+  const cents = Math.round((abs - integer) * 100)
+  let words = ''
   try {
-    return converter.toWords(rounded)
+    words = converter.toWords(integer)
   } catch {
-    return String(rounded)
+    words = String(integer)
   }
+  const centsPart = cents > 0 ? ` and ${String(cents).padStart(2, '0')}/100` : ''
+  const result = (negative ? 'minus ' : '') + words + centsPart
+  return result
 }
 
 export default convertToWords

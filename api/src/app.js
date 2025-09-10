@@ -6,6 +6,7 @@ import {
   Frequencies,
   getPaymentMonths
 } from '../services/calculationService.js'
+import convertToWords from '../utils/converter.js'
 
 const app = express()
 
@@ -108,87 +109,6 @@ function validateInputs(inputs) {
   return errors
 }
 
-// --- Helpers for written amounts (simple, covers up to billions) ---
-const EN_UNDER_20 = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen']
-const EN_TENS = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety']
-function numberToWordsEn(n) {
-  n = Math.round(Number(n) || 0)
-  if (n < 0) return 'minus ' + numberToWordsEn(-n)
-  if (n < 20) return EN_UNDER_20[n]
-  if (n < 100) {
-    const t = Math.floor(n/10), r = n%10
-    return EN_TENS[t] + (r ? '-' + EN_UNDER_20[r] : '')
-  }
-  if (n < 1000) {
-    const h = Math.floor(n/100), r = n%100
-    return EN_UNDER_20[h] + ' hundred' + (r ? ' ' + numberToWordsEn(r) : '')
-  }
-  if (n < 1_000_000) {
-    const th = Math.floor(n/1000), r = n%1000
-    return numberToWordsEn(th) + ' thousand' + (r ? ' ' + numberToWordsEn(r) : '')
-  }
-  if (n < 1_000_000_000) {
-    const m = Math.floor(n/1_000_000), r = n%1_000_000
-    return numberToWordsEn(m) + ' million' + (r ? ' ' + numberToWordsEn(r) : '')
-  }
-  const b = Math.floor(n/1_000_000_000), r = n%1_000_000_000
-  return numberToWordsEn(b) + ' billion' + (r ? ' ' + numberToWordsEn(r) : '')
-}
-
-// Very simplified Arabic number words (integer part); grammatical accuracy is limited
-const AR_UNDER_20 = ['صفر','واحد','اثنان','ثلاثة','أربعة','خمسة','ستة','سبعة','ثمانية','تسعة','عشرة','أحد عشر','اثنا عشر','ثلاثة عشر','أربعة عشر','خمسة عشر','ستة عشر','سبعة عشر','ثمانية عشر','تسعة عشر']
-const AR_TENS = ['','', 'عشرون','ثلاثون','أربعون','خمسون','ستون','سبعون','ثمانون','تسعون']
-function numberToWordsAr(n) {
-  n = Math.round(Number(n) || 0)
-  if (n < 0) return 'سالب ' + numberToWordsAr(-n)
-  if (n < 20) return AR_UNDER_20[n]
-  if (n < 100) {
-    const t = Math.floor(n/10), r = n%10
-    if (r === 0) return AR_TENS[t]
-    if (r === 1) return 'واحد و' + AR_TENS[t]
-    if (r === 2) return 'اثنان و' + AR_TENS[t]
-    return AR_UNDER_20[r] + ' و' + AR_TENS[t]
-  }
-  if (n < 1000) {
-    const h = Math.floor(n/100), r = n%100
-    const hundreds = ['','مائة','مائتان','ثلاثمائة','أربعمائة','خمسمائة','ستمائة','سبعمائة','ثمانمائة','تسعمائة'][h]
-    return hundreds + (r ? ' و' + numberToWordsAr(r) : '')
-  }
-  if (n < 1_000_000) {
-    const th = Math.floor(n/1000), r = n%1000
-    let thousands = ''
-    if (th === 1) thousands = 'ألف'
-    else if (th === 2) thousands = 'ألفان'
-    else if (th <= 10) thousands = numberToWordsAr(th) + ' آلاف'
-    else thousands = numberToWordsAr(th) + ' ألف'
-    return thousands + (r ? ' و' + numberToWordsAr(r) : '')
-  }
-  if (n < 1_000_000_000) {
-    const m = Math.floor(n/1_000_000), r = n%1_000_000
-    let millions = ''
-    if (m === 1) millions = 'مليون'
-    else if (m === 2) millions = 'مليونان'
-    else if (m <= 10) millions = numberToWordsAr(m) + ' ملايين'
-    else millions = numberToWordsAr(m) + ' مليون'
-    return millions + (r ? ' و' + numberToWordsAr(r) : '')
-  }
-  const b = Math.floor(n/1_000_000_000), r = n%1_000_000_000
-  let billions = ''
-  if (b === 1) billions = 'مليار'
-  else if (b === 2) billions = 'ملياران'
-  else if (b <= 10) billions = numberToWordsAr(b) + ' مليارات'
-  else billions = numberToWordsAr(b) + ' مليار'
-  return billions + (r ? ' و' + numberToWordsAr(r) : '')
-}
-
-function toWrittenAmount(amount, lang) {
-  const integer = Math.round(Number(amount) || 0)
-  if (lang === 'ar' || lang?.toLowerCase().startsWith('arab')) {
-    return numberToWordsAr(integer) + ' جنيه'
-  }
-  return numberToWordsEn(integer) + ' pounds'
-}
-
 /**
  * POST /api/calculate
  * Body: { mode, stdPlan, inputs }
@@ -271,7 +191,7 @@ app.post('/api/generate-plan', (req, res) => {
         label,
         month: Number(month) || 0,
         amount: amt,
-        writtenAmount: toWrittenAmount(amt, lang)
+        writtenAmount: convertToWords(amt, lang)
       })
     }
 
