@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { fetchWithAuth } from './lib/apiClient.js'
+import BrandHeader from './lib/BrandHeader.jsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 const LS_KEY = 'uptown_calc_form_state_v2'
@@ -83,8 +84,8 @@ const styles = {
   btnPrimary: {
     padding: '10px 14px',
     borderRadius: 10,
-    border: '1px solid #1f6feb',
-    background: '#1f6feb',
+    border: '1px solid #A97E34',
+    background: '#A97E34',
     color: '#fff',
     cursor: 'pointer',
     fontWeight: 600
@@ -663,14 +664,10 @@ export default function App(props) {
     <div style={styles.page}>
       <div style={styles.container}>
         {!embedded && (
-          <header style={{ ...styles.header, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h1 style={styles.h1}>Uptown Evaluator — Payment Plan</h1>
-              <p style={styles.sub}>Create, preview, and export professional payment schedules.</p>
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
+          <div style={{ marginBottom: 16 }}>
+            <BrandHeader
+              title={import.meta.env.VITE_APP_TITLE || 'Uptown Financial System — Calculator'}
+              onLogout={async () => {
                 try {
                   const rt = localStorage.getItem('refresh_token')
                   if (rt) {
@@ -687,11 +684,8 @@ export default function App(props) {
                   window.location.href = '/login'
                 }
               }}
-              style={styles.btn}
-            >
-              Logout
-            </button>
-          </header>
+            />
+          </div>
         )}
 
         <section style={styles.section}>
