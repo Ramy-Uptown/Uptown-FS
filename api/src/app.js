@@ -12,6 +12,7 @@ import {
 } from '../services/calculationService.js'
 import convertToWords from '../utils/converter.js'
 import { createRequire } from 'module'
+import authRoutes from './authRoutes.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -23,6 +24,9 @@ app.use(cors({
   credentials: true
 }))
 app.use(express.json())
+
+// Auth routes
+app.use('/api/auth', authRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({

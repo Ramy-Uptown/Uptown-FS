@@ -583,9 +583,18 @@ export default function App() {
   return (
     <div style={styles.page}>
       <div style={styles.container}>
-        <header style={styles.header}>
-          <h1 style={styles.h1}>Uptown Evaluator — Payment Plan</h1>
-          <p style={styles.sub}>Create, preview, and export professional payment schedules.</p>
+        <header style={{ ...styles.header, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 style={styles.h1}>Uptown Evaluator — Payment Plan</h1>
+            <p style={styles.sub}>Create, preview, and export professional payment schedules.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_user'); window.location.href = '/login' }}
+            style={styles.btn}
+          >
+            Logout
+          </button>
         </header>
 
         <section style={styles.section}>
