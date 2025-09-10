@@ -490,6 +490,71 @@ export default function App() {
     URL.revokeObjectURL(url)
   }
 
+  // Generate Checks Sheet (formatted for check printing)
+  function generateChecksSheetXLSX() {
+    if (!genResult?.schedule?.length) return
+
+    const title = 'Checks Sheet'
+    const buyer = clientInfo.buyer_name || ''
+    const unit = unitInfo.unit_code || unitInfo.unit_number || ''
+    const curr = currency || ''
+
+    const headerRows = [
+      [title],
+      [`Buyer: ${buyer}    Unit: ${unit}    Currency: ${curr}`],
+      [], // spacer
+      ['#', 'Cheque No.', 'Date', 'Pay To', 'Amount', 'Amount in Words', 'Notes']
+    ]
+
+    const bodyRows = genResult.schedule.map((row, i) => {
+      const amount = Number(row.amount || 0)
+      const amountStr = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      return [
+        i + 1,         // #
+        '',            // Cheque No. (to be filled manually)
+        '',            // Date (to be filled manually)
+        buyer,         // Pay To
+        amountStr,     // Amount
+        row.writtenAmount || '', // Amount in Words
+        `${row.label} (Month ${row.month})` // Notes
+      ]
+    })
+
+    const aoa = [...headerRows, ...bodyRows]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+
+    // Set column widths suitable for checks
+    ws['!cols'] = [
+      { wch: 5 },   // #
+      { wch: 14 },  // Cheque No.
+      { wch: 14 },  // Date
+      { wch: 28 },  // Pay To
+      { wch: 16 },  // Amount
+      { wch: 60 },  // Amount in Words
+      { wch: 30 },  // Notes
+    ]
+
+    // Merge title and metadata lines across all columns
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, // A1:G1
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }, // A2:G2
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Checks')
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+    a.download = `checks_sheet_${ts}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   // Computed summaries (from preview)
   const summaries = useMemo(() => {
     if (!preview) return null
@@ -885,6 +950,9 @@ export default function App() {
               </button>
               <button type="button" onClick={exportScheduleXLSX} disabled={!schedule.length} style={styles.btn}>
                 Export to Excel (.xlsx)
+              </button>
+              <button type="button" onClick={generateChecksSheetXLSX} disabled={!schedule.length} style={styles.btn}>
+                Generate Checks Sheet (.xlsx)
               </button>
               <button type="button" onClick={exportScheduleCSV} disabled={!schedule.length} style={styles.btn}>
                 Export to CSV
