@@ -244,7 +244,7 @@ export default function App(props) {
     localStorage.setItem(LS_KEY, JSON.stringify(snapshot))
   }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes])
 
-  // Expose an imperative snapshot getter for embedding contexts
+  // Expose imperative APIs for embedding contexts
   useEffect(() => {
     const getSnapshot = () => {
       const base = {
@@ -269,10 +269,21 @@ export default function App(props) {
       }
       return out
     }
+    const applyClientInfo = (partial) => {
+      if (!partial || typeof partial !== 'object') return
+      setClientInfo(s => ({
+        ...s,
+        ...partial
+      }))
+    }
     window.__uptown_calc_getSnapshot = getSnapshot
+    window.__uptown_calc_applyClientInfo = applyClientInfo
     return () => {
       if (window.__uptown_calc_getSnapshot === getSnapshot) {
         delete window.__uptown_calc_getSnapshot
+      }
+      if (window.__uptown_calc_applyClientInfo === applyClientInfo) {
+        delete window.__uptown_calc_applyClientInfo
       }
     }
   }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes, genResult, preview])

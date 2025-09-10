@@ -7,6 +7,14 @@ export default function CreateDeal() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  // OCR state
+  const [ocrFile, setOcrFile] = useState(null)
+  const [ocrLoading, setOcrLoading] = useState(false)
+  const [ocrError, setOcrError] = useState('')
+  const [ocrResult, setOcrResult] = useState(null)
+  const [reviewFields, setReviewFields] = useState({ name: '', nationalId: '', address: '' })
+
   const navigate = useNavigate()
 
   async function buildPayloadFromSnapshot() {
@@ -77,6 +85,54 @@ export default function CreateDeal() {
     }
   }
 
+  async function runOCR() {
+    try {
+      setOcrError('')
+      setOcrResult(null)
+      if (!ocrFile) {
+        setOcrError('Please select an ID image first.')
+        return
+      }
+      setOcrLoading(true)
+      const form = new FormData()
+      form.append('image', ocrFile)
+      const resp = await fetchWithAuth(`${API_URL}/api/ocr/egypt-id`, {
+        method: 'POST',
+        body: form
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'OCR failed')
+      setOcrResult(data)
+      const fields = data?.fields || {}
+      setReviewFields({
+        name: String(fields.name || ''),
+        nationalId: String(fields.nationalId || ''),
+        address: String(fields.address || '')
+      })
+    } catch (e) {
+      setOcrError(e.message || String(e))
+    } finally {
+      setOcrLoading(false)
+    }
+  }
+
+  function applyToForm() {
+    const applyFn = window.__uptown_calc_applyClientInfo
+    if (typeof applyFn !== 'function') {
+      setOcrError('Form not ready to accept data. Please try again.')
+      return
+    }
+    const updates = {}
+    if (reviewFields.name) updates.buyer_name = reviewFields.name
+    if (reviewFields.nationalId) updates.id_or_passport = reviewFields.nationalId
+    if (reviewFields.address) updates.address = reviewFields.address
+    // If national ID present, assume Egyptian nationality
+    if (reviewFields.nationalId && !/\D/.test(reviewFields.nationalId)) {
+      updates.nationality = 'Egyptian'
+    }
+    applyFn(updates)
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
@@ -87,6 +143,69 @@ export default function CreateDeal() {
         </div>
       </div>
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+
+      {/* Egyptian ID OCR Module */}
+      <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Scan Egyptian National ID</h3>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={e => setOcrFile(e.target.files?.[0] || null)}
+          />
+          <button onClick={runOCR} disabled={ocrLoading} style={btnPrimary}>
+            {ocrLoading ? 'Processing…' : 'Extract from ID'}
+          </button>
+          {ocrResult?.engine ? (
+            <small style={{ color: '#64748b' }}>
+              Engine: {ocrResult.engine === 'google_vision' ? 'Google Vision (cloud)' : 'Tesseract (local)'}
+            </small>
+          ) : null}
+        </div>
+        {ocrError ? <p style={{ color: '#e11d48' }}>{ocrError}</p> : null}
+
+        {ocrResult && (
+          <div style={{ marginTop: 12 }}>
+            <p style={{ margin: 0, color: '#374151' }}>Review and edit the extracted fields before applying:</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Name</label>
+                <input
+                  value={reviewFields.name}
+                  onChange={e => setReviewFields(s => ({ ...s, name: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>National ID</label>
+                <input
+                  value={reviewFields.nationalId}
+                  onChange={e => setReviewFields(s => ({ ...s, nationalId: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ gridColumn: '1 / span 2' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Address</label>
+                <textarea
+                  value={reviewFields.address}
+                  onChange={e => setReviewFields(s => ({ ...s, address: e.target.value }))}
+                  style={textareaStyle}
+                />
+              </div>
+            </div>
+            <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+              <button onClick={applyToForm} style={btnPrimaryAlt}>Apply to Form</button>
+              <details>
+                <summary style={{ cursor: 'pointer', color: '#64748b' }}>Show OCR Text</summary>
+                <pre style={{ whiteSpace: 'pre-wrap', background: '#f6f8fa', padding: 8, borderRadius: 8, border: '1px solid #eef2f7' }}>
+{ocrResult?.rawText || ''}
+                </pre>
+              </details>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
         <CalculatorApp embedded />
       </div>
@@ -94,5 +213,7 @@ export default function CreateDeal() {
   )
 }
 
+const inputStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
+const textareaStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff', minHeight: 70, resize: 'vertical' }
 const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #1f6feb', background: '#1f6feb', color: '#fff', fontWeight: 600 }
 const btnPrimaryAlt = { padding: '10px 14px', borderRadius: 10, border: '1px solid #0d9488', background: '#0d9488', color: '#fff', fontWeight: 600 }

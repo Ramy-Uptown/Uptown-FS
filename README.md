@@ -18,6 +18,25 @@ Quick start
    - API health: http://localhost:3000/api/health
    - API message: http://localhost:3000/api/message
 
+Phase 8: Egyptian ID OCR Module
+- Purpose: Upload a photo of an Egyptian ID and automatically extract key fields to prefill the deal form.
+- Flow:
+  1) In Create Deal page, select an ID image and click "Extract from ID".
+  2) The system uses a cloud OCR first (Google Vision if GCV_API_KEY is set) and automatically falls back to a local OCR engine (Tesseract) if unavailable.
+  3) You can review/edit "Name", "National ID", and "Address", then click "Apply to Form" to populate the calculator's Client Information section.
+- API:
+  - POST /api/ocr/egypt-id (authenticated)
+    Form-Data: image=<file>
+    Response: { ok: true, engine: "google_vision" | "tesseract", rawText: string, fields: { name, nationalId, address } }
+
+Configuration
+- Cloud OCR (primary): Google Cloud Vision via API key.
+  - Set env var GCV_API_KEY in the api service (e.g., in docker-compose.yml or your environment).
+- Local OCR (fallback): tesseract.js (no system Tesseract required).
+
+Security
+- The OCR endpoint is authenticated the same as other /api routes.
+
 Calculation API
 - Endpoint: POST http://localhost:3000/api/calculate
 - Body:
