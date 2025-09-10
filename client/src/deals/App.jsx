@@ -8,7 +8,9 @@ import BrandHeader from '../lib/BrandHeader.jsx'
 
 const BRAND = {
   primary: '#A97E34',
-  primaryDark: '#8B672C'
+  primaryDark: '#8B672C',
+  tintBg: '#f6efe3',
+  tintBorder: '#ead9bd'
 }
 
 function RoleAwareNav() {
@@ -20,8 +22,8 @@ function RoleAwareNav() {
     borderRadius: 8,
     textDecoration: 'none',
     color: loc.pathname.startsWith(path) ? '#fff' : '#1f2937',
-    background: loc.pathname.startsWith(path) ? BRAND.primary : '#f1f5f9',
-    border: `1px solid ${loc.pathname.startsWith(path) ? BRAND.primaryDark : '#d1d9e6'}`
+    background: loc.pathname.startsWith(path) ? BRAND.primary : BRAND.tintBg,
+    border: `1px solid ${loc.pathname.startsWith(path) ? BRAND.primaryDark : BRAND.tintBorder}`
   })
 
   return (

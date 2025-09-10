@@ -7,7 +7,7 @@ const BRAND = {
 
 export default function BrandHeader({ title, onLogout }) {
   const appTitle = title || (import.meta.env.VITE_APP_TITLE || 'Uptown Financial System')
-  const logoUrl = import.meta.env.VITE_COMPANY_LOGO_URL || ''
+  const logoUrl = import.meta.env.VITE_COMPANY_LOGO_URL || '/logo.svg'
 
   return (
     <div style={{ background: BRAND.primary, color: '#fff', borderBottom: `4px solid ${BRAND.primaryDark}` }}>

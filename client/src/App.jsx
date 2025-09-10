@@ -9,7 +9,7 @@ const LS_KEY = 'uptown_calc_form_state_v2'
 const styles = {
   page: {
     fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-    background: '#f7f9fb',
+    background: '#f7f6f3',
     minHeight: '100vh',
     color: '#222'
   },
@@ -20,52 +20,52 @@ const styles = {
   },
   header: {
     background: '#fff',
-    border: '1px solid #e6eaf0',
+    border: '1px solid #ead9bd',
     borderRadius: 12,
     padding: 20,
     marginBottom: 16,
-    boxShadow: '0 2px 6px rgba(21, 24, 28, 0.04)'
+    boxShadow: '0 2px 6px rgba(169, 126, 52, 0.08)'
   },
-  h1: { margin: 0, fontSize: 22, fontWeight: 700 },
+  h1: { margin: 0, fontSize: 22, fontWeight: 700, color: '#A97E34' },
   sub: { color: '#6b7280', marginTop: 6, fontSize: 13 },
   section: {
     background: '#fff',
-    border: '1px solid #e6eaf0',
+    border: '1px solid #ead9bd',
     borderRadius: 12,
     padding: 20,
     marginTop: 16,
-    boxShadow: '0 2px 6px rgba(21, 24, 28, 0.04)'
+    boxShadow: '0 2px 6px rgba(169, 126, 52, 0.06)'
   },
-  sectionTitle: { margin: '0 0 12px 0', fontSize: 18, fontWeight: 600 },
+  sectionTitle: { margin: '0 0 12px 0', fontSize: 18, fontWeight: 700, color: '#A97E34' },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   blockFull: { gridColumn: '1 / span 2' },
-  label: { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 },
+  label: { display: 'block', fontSize: 12, fontWeight: 600, color: '#4b5563', marginBottom: 6 },
   input: (err) => ({
     padding: '10px 12px',
     borderRadius: 10,
-    border: `1px solid ${err ? '#e11d48' : '#dfe5ee'}`,
+    border: `1px solid ${err ? '#e11d48' : '#ead9bd'}`,
     outline: 'none',
     width: '100%',
     fontSize: 14,
-    background: '#fbfdff'
+    background: '#fbfaf7'
   }),
   select: (err) => ({
     padding: '10px 12px',
     borderRadius: 10,
-    border: `1px solid ${err ? '#e11d48' : '#dfe5ee'}`,
+    border: `1px solid ${err ? '#e11d48' : '#ead9bd'}`,
     outline: 'none',
     width: '100%',
     fontSize: 14,
-    background: '#fbfdff'
+    background: '#fbfaf7'
   }),
   textarea: (err) => ({
     padding: '10px 12px',
     borderRadius: 10,
-    border: `1px solid ${err ? '#e11d48' : '#dfe5ee'}`,
+    border: `1px solid ${err ? '#e11d48' : '#ead9bd'}`,
     outline: 'none',
     width: '100%',
     fontSize: 14,
-    background: '#fbfdff',
+    background: '#fbfaf7',
     minHeight: 80,
     resize: 'vertical'
   }),
@@ -76,7 +76,7 @@ const styles = {
     gap: 8,
     padding: '10px 14px',
     borderRadius: 10,
-    border: '1px solid #d1d9e6',
+    border: '1px solid #ead9bd',
     background: '#fff',
     color: '#111827',
     cursor: 'pointer'
@@ -93,13 +93,13 @@ const styles = {
   tableWrap: {
     maxWidth: 1200,
     overflow: 'auto',
-    border: '1px solid #e6eaf0',
+    border: '1px solid #ead9bd',
     borderRadius: 12
   },
   table: { width: '100%', borderCollapse: 'collapse' },
-  th: { textAlign: 'left', padding: 12, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' },
-  td: { padding: 12, borderBottom: '1px solid #f2f5fa', fontSize: 14 },
-  tFootCell: { padding: 12, fontWeight: 700, background: '#fbfdff' },
+  th: { textAlign: 'left', padding: 12, borderBottom: '1px solid #ead9bd', fontSize: 13, color: '#5b4630', background: '#f6efe3' },
+  td: { padding: 12, borderBottom: '1px solid #f2e8d6', fontSize: 14 },
+  tFootCell: { padding: 12, fontWeight: 700, background: '#fbfaf7' },
   error: { color: '#e11d48' }
 }
 
