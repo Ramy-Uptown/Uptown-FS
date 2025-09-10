@@ -323,6 +323,10 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
           [approvedDeal.id, approvedDeal.sales_rep_id, policy.id, commissionAmount, { ...details, deal_amount: amt }]
         )
         commissionRecord = ins.rows[0]
+
+        // Audit log entry for auto commission calculation
+        const note = `auto_commission policy=${policy.id}:${policy.name || ''} amount=${commissionAmount}`
+        await logHistory(approvedDeal.id, req.user.id, 'commission_calculated', note)
       }
     }
 
