@@ -156,8 +156,11 @@ export default function App(props) {
     zone: '',
     garden_details: ''
   })
+  // Units catalog (typeahead)
   const [unitsCatalog, setUnitsCatalog] = useState([])
-  const [selectedUnitId, setSelectedUnitId] = useState('')
+  const [unitQuery, setUnitQuery] = useState('')
+  const [unitSearchLoading, setUnitSearchLoading] = useState(false)
+  const [unitDropdownOpen, setUnitDropdownOpen] = useState(false)
   const [contractInfo, setContractInfo] = useState({
     reservation_form_date: '',
     contract_date: '',
@@ -208,17 +211,32 @@ export default function App(props) {
     } catch {}
   }, [])
 
-  // Load units catalog (first 100)
+  // Typeahead: search units on query change (debounced)
   useEffect(() => {
-    async function loadUnits() {
+    let t = null
+    const run = async () => {
+      const q = unitQuery.trim()
+      if (!q) {
+        setUnitsCatalog([])
+        return
+      }
       try {
-        const resp = await fetchWithAuth(`${API_URL}/api/units?page=1&pageSize=100`)
+        setUnitSearchLoading(true)
+        const resp = await fetchWithAuth(`${API_URL}/api/units?search=${encodeURIComponent(q)}&page=1&pageSize=20`)
         const data = await resp.json()
-        if (resp.ok) setUnitsCatalog(data.units || [])
-      } catch {}
+        if (resp.ok) {
+          setUnitsCatalog(data.units || [])
+          setUnitDropdownOpen(true)
+        }
+      } catch {
+        // ignore
+      } finally {
+        setUnitSearchLoading(false)
+      }
     }
-    loadUnits()
-  }, [])
+    t = setTimeout(run, 300)
+    return () => t && clearTimeout(t)
+  }, [unitQuery])
 
   // Persist on change
   useEffect(() => {
@@ -927,35 +945,70 @@ export default function App(props) {
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Unit & Project Information</h2>
           <div style={styles.grid2}>
-            <div>
-              <label style={styles.label}>Unit Catalog</label>
-              <select
-                style={styles.select()}
-                value={selectedUnitId}
-                onChange={(e) => {
-                  const id = e.target.value
-                  setSelectedUnitId(id)
-                  const u = unitsCatalog.find(x => String(x.id) === String(id))
-                  if (u) {
-                    setStdPlan(s => ({ ...s, totalPrice: Number(u.base_price) || s.totalPrice }))
-                    setCurrency(u.currency || 'EGP')
-                    setUnitInfo(s => ({
-                      ...s,
-                      unit_type: u.unit_type || s.unit_type,
-                      unit_code: u.code || s.unit_code,
-                      description: u.description || s.description
-                    }))
-                  }
-                }}
-              >
-                <option value="">-- Select a unit --</option>
-                {unitsCatalog.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.code} — {u.description || ''} ({u.currency} {Number(u.base_price || 0).toLocaleString()})
-                  </option>
-                ))}
-              </select>
-              <small style={styles.metaText}>Choosing a unit will set the Std Total Price, currency, and description.</small>
+            <div style={{ position: 'relative' }}>
+              <label style={styles.label}>Unit Catalog (type to search)</label>
+              <input
+                style={styles.input()}
+                value={unitQuery}
+                onChange={e => { setUnitQuery(e.target.value); }}
+                onFocus={() => { if (unitsCatalog.length) setUnitDropdownOpen(true) }}
+                placeholder="Search by code or description…"
+              />
+              {unitSearchLoading ? <small style={styles.metaText}>Searching…</small> : null}
+              {unitDropdownOpen && unitsCatalog.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    background: '#fff',
+                    border: '1px solid #e6eaf0',
+                    borderRadius: 10,
+                    boxShadow: '0 6px 14px rgba(21,24,28,0.08)',
+                    marginTop: 4,
+                    zIndex: 20,
+                    maxHeight: 280,
+                    overflow: 'auto'
+                  }}
+                >
+                  {unitsCatalog.map(u => (
+                    <div
+                      key={u.id}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        // Apply selected unit to calculator
+                        setUnitDropdownOpen(false)
+                        setUnitQuery(`${u.code} — ${u.description || ''}`)
+                        setStdPlan(s => ({ ...s, totalPrice: Number(u.base_price) || s.totalPrice }))
+                        setCurrency(u.currency || 'EGP')
+                        // Heuristics: plan duration defaults (Villa -> 7 years, otherwise 5)
+                        const inferredYears = (u.unit_type || '').toLowerCase().includes('villa') ? 7 : 5
+                        setInputs(s => ({ ...s, planDurationYears: s.planDurationYears || inferredYears }))
+                        setUnitInfo(s => ({
+                          ...s,
+                          unit_type: u.unit_type || s.unit_type,
+                          unit_code: u.code || s.unit_code,
+                          description: u.description || s.description,
+                          // If you want to copy code into unit_number by default, uncomment:
+                          // unit_number: s.unit_number || u.code || ''
+                        }))
+                      }}
+                      style={{
+                        padding: '10px 12px',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #f2f5fa'
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>{u.code} — {u.description || ''}</div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>
+                        {u.unit_type || '-'} • {u.currency} {Number(u.base_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <small style={styles.metaText}>Selecting a unit will set Std Total Price, currency, unit type, code, and description. Defaults plan duration to 5 years (7 years for Villas).</small>
             </div>
             <div>
               <label style={styles.label}>Unit Type (<<نوع الوحدة>>)</label>
