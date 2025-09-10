@@ -190,24 +190,47 @@ export function setArabicConverter(fn) {
 
 // ==================== Public API ====================
 
+// English currency names map (plural form by default)
+const EN_CURRENCY_NAMES = {
+  EGP: 'Egyptian Pounds',
+  USD: 'US Dollars',
+  SAR: 'Saudi Riyals',
+  EUR: 'Euros',
+  AED: 'UAE Dirhams',
+  KWD: 'Kuwaiti Dinars',
+}
+
+function normalizeEnglishCurrencyName(currencyOption) {
+  if (!currencyOption) return ''
+  if (typeof currencyOption === 'string') {
+    const code = currencyOption.trim().toUpperCase()
+    if (EN_CURRENCY_NAMES[code]) return EN_CURRENCY_NAMES[code]
+    // If it's a descriptive name already, return as-is
+    return currencyOption.trim()
+  }
+  return ''
+}
+
 /**
  * Convert a number to its written words representation in the requested language.
- * - English uses number-to-words and renders cents as "and XX/100".
+ * - English uses number-to-words and renders cents as "and XX/100", appending currency name if provided.
  * - Arabic uses the integrated Arabic currency-aware converter (defaults to EGP units).
  * @param {number|string} number
  * @param {'en'|'ar'|string} language
+ * @param {{ currency?: string }} [options] options.currency can be a code (EGP, USD, SAR, EUR, AED, KWD) or a full name
  * @returns {string}
  */
-export function convertToWords(number, language = 'en') {
+export function convertToWords(number, language = 'en', options = {}) {
   const lang = (language || 'en').toLowerCase()
   const n = Number(number)
   if (!isFinite(n)) return ''
 
   if (lang === 'ar' || lang.startsWith('arab')) {
+    // Arabic already embeds currency labels internally (configurable via setArabicCurrency)
     return arabicConverter(n)
   }
 
-  // English: integer words with cents as "and XX/100"
+  // English: integer words with cents as "and XX/100", and optional currency label appended
   const negative = n < 0
   const abs = Math.abs(n)
   const integer = Math.floor(abs + 1e-9)
@@ -219,7 +242,9 @@ export function convertToWords(number, language = 'en') {
     words = String(integer)
   }
   const centsPart = cents > 0 ? ` and ${String(cents).padStart(2, '0')}/100` : ''
-  const result = (negative ? 'minus ' : '') + words + centsPart
+  const currencyName = normalizeEnglishCurrencyName(options.currency)
+  const currencyPart = currencyName ? ` ${currencyName}` : ''
+  const result = (negative ? 'minus ' : '') + words + centsPart + currencyPart
   return result
 }
 

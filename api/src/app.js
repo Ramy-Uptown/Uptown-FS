@@ -162,12 +162,14 @@ app.post('/api/calculate', (req, res) => {
 
 /**
  * POST /api/generate-plan
- * Body: { mode, stdPlan, inputs, languageForWrittenAmounts }
+ * Body: { mode, stdPlan, inputs, language, currency? }
+ * - language: 'en' or 'ar'
+ * - currency: optional. For English, can be code (EGP, USD, SAR, EUR, AED, KWD) or full name (e.g., "Egyptian Pounds")
  * Returns: { ok: true, schedule: [{label, month, amount, writtenAmount}], totals, meta }
  */
 app.post('/api/generate-plan', (req, res) => {
   try {
-    const { mode, stdPlan, inputs, languageForWrittenAmounts } = req.body || {}
+    const { mode, stdPlan, inputs, language, currency, languageForWrittenAmounts } = req.body || {}
     if (!mode || !allowedModes.has(mode)) {
       return bad(res, 400, 'Invalid or missing mode', { allowedModes: [...allowedModes] })
     }
@@ -179,7 +181,9 @@ app.post('/api/generate-plan', (req, res) => {
       return bad(res, 422, 'Invalid inputs', inputErrors)
     }
 
-    const lang = (languageForWrittenAmounts || 'English').toLowerCase().startsWith('ar') ? 'ar' : 'en'
+    // Backward compatibility: support legacy languageForWrittenAmounts
+    const langInput = language || languageForWrittenAmounts || 'en'
+    const lang = String(langInput).toLowerCase().startsWith('ar') ? 'ar' : 'en'
 
     const result = calculateByMode(mode, stdPlan, inputs)
 
@@ -191,7 +195,7 @@ app.post('/api/generate-plan', (req, res) => {
         label,
         month: Number(month) || 0,
         amount: amt,
-        writtenAmount: convertToWords(amt, lang)
+        writtenAmount: convertToWords(amt, lang, { currency })
       })
     }
 
