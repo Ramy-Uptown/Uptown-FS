@@ -100,6 +100,108 @@ export default function DealDetail() {
   const schedule = deal?.details?.calculator?.generatedPlan?.schedule || []
   const totals = deal?.details?.calculator?.generatedPlan?.totals || null
 
+  async function generateDocFromSaved(documentType) {
+    try {
+      const snap = deal?.details?.calculator
+      if (!snap) return alert('No saved calculator details found.')
+      const body = {
+        documentType,
+        language: snap.language,
+        currency: snap.currency,
+        mode: snap.mode,
+        stdPlan: snap.stdPlan,
+        inputs: snap.inputs,
+        generatedPlan: snap.generatedPlan
+      }
+      const resp = await fetchWithAuth(`${API_URL}/api/generate-document`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      if (!resp.ok) {
+        let errMsg = 'Failed to generate document'
+        try {
+          const j = await resp.json()
+          errMsg = j?.error?.message || errMsg
+        } catch {}
+        return alert(errMsg)
+      }
+      const blob = await resp.blob()
+      const cd = resp.headers.get('Content-Disposition') || ''
+      const match = /filename\*=UTF-8''([^;]+)|filename=\\"?([^\\";]+)\\"?/i.exec(cd)
+      let filename = ''
+      if (match) filename = decodeURIComponent(match[1] || match[2] || '')
+      if (!filename) {
+        const ts = new Date().toISOString().replace(/[:.]/g, '-')
+        filename = `${documentType}_${ts}.pdf`
+      }
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      alert(e.message || String(e))
+    }
+  }
+
+  function printSchedule() {
+    const win = window.open('', 'printwin')
+    if (!win) return
+    const rows = schedule.map((r, i) => `
+      <tr>
+        <td style="padding:6px;border:1px solid #e5e7eb;">${i + 1}</td>
+        <td style="padding:6px;border:1px solid #e5e7eb;">${r.month}</td>
+        <td style="padding:6px;border:1px solid #e5e7eb;">${r.label}</td>
+        <td style="padding:6px;border:1px solid #e5e7eb;text-align:right;">${Number(r.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td style="padding:6px;border:1px solid #e5e7eb;">${r.writtenAmount || ''}</td>
+      </tr>
+    `).join('')
+    const totalHtml = totals ? `
+      <tfoot>
+        <tr>
+          <td colspan="3" style="padding:8px;border:1px solid #e5e7eb;text-align:right;font-weight:700;">Total</td>
+          <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;font-weight:700;">
+            ${Number(totals.totalNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </td>
+          <td style="padding:8px;border:1px solid #e5e7eb;"></td>
+        </tr>
+      </tfoot>
+    ` : ''
+    win.document.write(`
+      <html>
+      <head>
+        <title>Deal #${deal?.id} — Payment Schedule</title>
+        <meta charset="utf-8"/>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 16px; color: #111827; }
+          h1 { font-size: 18px; margin: 0 0 10px 0; }
+          table { width: 100%; border-collapse: collapse; }
+          thead th { background: #f3f4f6; text-align: left; padding: 8px; border: 1px solid #e5e7eb; }
+        </style>
+      </head>
+      <body>
+        <h1>Deal #${deal?.id} — ${deal?.title || ''}</h1>
+        <p><strong>Status:</strong> ${deal?.status || ''} &nbsp; <strong>Unit Type:</strong> ${deal?.unit_type || '-'}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Month</th><th>Label</th><th>Amount</th><th>Written Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+          ${totalHtml}
+        </table>
+        <script>window.onload = function(){ window.print(); }</script>
+      </body>
+      </html>
+    `)
+    win.document.close()
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -173,14 +275,21 @@ export default function DealDetail() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {canEdit && !editCalc && <button onClick={() => setEditCalc(true)} style={btn}>Edit in Calculator</button>}
         {canSubmit && <button onClick={async () => {
+          const savedPlan = deal?.details?.calculator?.generatedPlan
+          if (!savedPlan || !Array.isArray(savedPlan.schedule) || savedPlan.schedule.length === 0) {
+            return alert('Please generate and save a payment plan before submitting.')
+          }
           const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/submit`, { method: 'POST' })
           const data = await resp.json()
           if (!resp.ok) return alert(data?.error?.message || 'Submit failed')
           await load()
         }} style={btnPrimary}>Submit for Approval</button>}
+        <button onClick={printSchedule} style={btn}>Print Schedule</button>
+        <button onClick={() => generateDocFromSaved('pricing_form')} style={btn}>Generate Pricing Form (PDF)</button>
+        <button onClick={() => generateDocFromSaved('contract')} style={btn}>Generate Contract (PDF)</button>
       </div>
 
       <h3>Audit Trail</h3>
