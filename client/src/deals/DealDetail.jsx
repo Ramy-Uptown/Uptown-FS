@@ -213,9 +213,30 @@ export default function DealDetail() {
     const unit = snap?.unitInfo?.unit_code || snap?.unitInfo?.unit_number || ''
     const curr = snap?.currency || ''
 
+    // Contract metadata
+    const ci = snap?.contractInfo || {}
+    const notes = snap?.customNotes || {}
+    const fmt = (d) => d ? new Date(d).toLocaleDateString() : ''
+    const money = (v) => {
+      const n = Number(v || 0)
+      return isFinite(n) ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
+    }
+
+    const metaLines = [
+      `Buyer: ${buyer}    Unit: ${unit}    Currency: ${curr}`,
+      `Contract Date: ${fmt(ci.contract_date)}    Reservation Form Date: ${fmt(ci.reservation_form_date)}`,
+      `Reservation Payment: ${money(ci.reservation_payment_amount)} on ${fmt(ci.reservation_payment_date)}`,
+      `Maintenance Fee: ${money(ci.maintenance_fee)}    Delivery Period: ${ci.delivery_period || ''}`,
+    ]
+
+    const extraNotes = []
+    if (notes.dp_explanation) extraNotes.push(`DP Notes: ${notes.dp_explanation}`)
+    if (notes.poa_clause) extraNotes.push(`POA: ${notes.poa_clause}`)
+
     const headerRows = [
       ['Checks Sheet'],
-      [`Buyer: ${buyer}    Unit: ${unit}    Currency: ${curr}`],
+      ...metaLines.map(line => [line]),
+      ...(extraNotes.length ? extraNotes.map(line => [line]) : []),
       [],
       ['#', 'Cheque No.', 'Date', 'Pay To', 'Amount', 'Amount in Words', 'Notes']
     ]
@@ -244,10 +265,14 @@ export default function DealDetail() {
       { wch: 60 },
       { wch: 30 },
     ]
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
-    ]
+
+    // Merge all header/meta lines across A..G
+    const mergeCount = 1 /* title */ + metaLines.length + extraNotes.length
+    const merges = []
+    for (let r = 0; r < mergeCount; r++) {
+      merges.push({ s: { r, c: 0 }, e: { r, c: 6 } })
+    }
+    ws['!merges'] = merges
 
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Checks')
