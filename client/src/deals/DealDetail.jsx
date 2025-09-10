@@ -42,6 +42,7 @@ export default function DealDetail() {
   const [salesError, setSalesError] = useState('')
   const [policies, setPolicies] = useState([])
   const [policiesError, setPoliciesError] = useState('')
+  const [expandedNotes, setExpandedNotes] = useState({})
   useEffect(() => {
     async function loadAux() {
       try {
@@ -480,7 +481,42 @@ export default function DealDetail() {
                 <td style={td}>{idx + 1}</td>
                 <td style={td}>{h.action}</td>
                 <td style={td}>{h.user_email || h.user_id}</td>
-                <td style={td}>{h.notes || ''}</td>
+                <td style={td}>
+                  {(() => {
+                    const raw = h.notes || ''
+                    let parsed = null
+                    try {
+                      if (typeof raw === 'string' && raw.trim().startsWith('{')) {
+                        parsed = JSON.parse(raw)
+                      }
+                    } catch {}
+                    if (!parsed) return raw
+                    const isAuto = parsed.event === 'auto_commission'
+                    const sum = isAuto
+                      ? `Auto commission — Policy: ${parsed?.policy?.name || parsed?.policy?.id || ''}, Amount: ${Number(parsed?.amounts?.commission || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                      : 'Details'
+                    const open = !!expandedNotes[h.id]
+                    return (
+                      <div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <span>{sum}</span>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedNotes(s => ({ ...s, [h.id]: !s[h.id] }))}
+                            style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }}
+                          >
+                            {open ? 'Hide' : 'Show'} JSON
+                          </button>
+                        </div>
+                        {open && (
+                          <pre style={{ background: '#f6f8fa', padding: 8, borderRadius: 6, border: '1px solid #eef2f7', marginTop: 6, maxWidth: 640, overflow: 'auto' }}>
+{JSON.stringify(parsed, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </td>
                 <td style={td}>{h.created_at ? new Date(h.created_at).toLocaleString() : ''}</td>
               </tr>
             ))}
