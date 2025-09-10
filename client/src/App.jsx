@@ -1,20 +1,106 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-const LS_KEY = 'uptown_calc_form_state_v1'
+const LS_KEY = 'uptown_calc_form_state_v2'
+
+const styles = {
+  page: {
+    fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+    background: '#f7f9fb',
+    minHeight: '100vh',
+    color: '#222'
+  },
+  container: {
+    maxWidth: 1200,
+    margin: '0 auto',
+    padding: '24px 20px 48px'
+  },
+  header: {
+    background: '#fff',
+    border: '1px solid #e6eaf0',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+    boxShadow: '0 2px 6px rgba(21, 24, 28, 0.04)'
+  },
+  h1: { margin: 0, fontSize: 22, fontWeight: 700 },
+  sub: { color: '#6b7280', marginTop: 6, fontSize: 13 },
+  section: {
+    background: '#fff',
+    border: '1px solid #e6eaf0',
+    borderRadius: 12,
+    padding: 20,
+    marginTop: 16,
+    boxShadow: '0 2px 6px rgba(21, 24, 28, 0.04)'
+  },
+  sectionTitle: { margin: '0 0 12px 0', fontSize: 18, fontWeight: 600 },
+  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
+  blockFull: { gridColumn: '1 / span 2' },
+  label: { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 },
+  input: (err) => ({
+    padding: '10px 12px',
+    borderRadius: 10,
+    border: `1px solid ${err ? '#e11d48' : '#dfe5ee'}`,
+    outline: 'none',
+    width: '100%',
+    fontSize: 14,
+    background: '#fbfdff'
+  }),
+  select: (err) => ({
+    padding: '10px 12px',
+    borderRadius: 10,
+    border: `1px solid ${err ? '#e11d48' : '#dfe5ee'}`,
+    outline: 'none',
+    width: '100%',
+    fontSize: 14,
+    background: '#fbfdff'
+  }),
+  metaText: { color: '#6b7280', fontSize: 12, marginTop: 4 },
+  btn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '10px 14px',
+    borderRadius: 10,
+    border: '1px solid #d1d9e6',
+    background: '#fff',
+    color: '#111827',
+    cursor: 'pointer'
+  },
+  btnPrimary: {
+    padding: '10px 14px',
+    borderRadius: 10,
+    border: '1px solid #1f6feb',
+    background: '#1f6feb',
+    color: '#fff',
+    cursor: 'pointer',
+    fontWeight: 600
+  },
+  tableWrap: {
+    maxWidth: 1200,
+    overflow: 'auto',
+    border: '1px solid #e6eaf0',
+    borderRadius: 12
+  },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  th: { textAlign: 'left', padding: 12, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' },
+  td: { padding: 12, borderBottom: '1px solid #f2f5fa', fontSize: 14 },
+  tFootCell: { padding: 12, fontWeight: 700, background: '#fbfdff' },
+  error: { color: '#e11d48' }
+}
 
 export default function App() {
   const [message, setMessage] = useState('Loading...')
   const [health, setHealth] = useState(null)
-  const [calcResult, setCalcResult] = useState(null)
-  const [calcLoading, setCalcLoading] = useState(false)
-  const [calcError, setCalcError] = useState('')
 
   // Inline validation state
   const [errors, setErrors] = useState({})
 
   // Custom form state
   const [mode, setMode] = useState('calculateForTargetPV')
+  const [language, setLanguage] = useState('en')
+  const [currency, setCurrency] = useState('EGP')
   const [stdPlan, setStdPlan] = useState({
     totalPrice: 1000000,
     financialDiscountRate: 12,
@@ -40,6 +126,11 @@ export default function App() {
   const [previewError, setPreviewError] = useState('')
   const debounceTimer = useRef(null)
 
+  // Generate-plan result
+  const [genLoading, setGenLoading] = useState(false)
+  const [genError, setGenError] = useState('')
+  const [genResult, setGenResult] = useState(null)
+
   // Load persisted state
   useEffect(() => {
     try {
@@ -48,6 +139,8 @@ export default function App() {
         const saved = JSON.parse(raw)
         if (saved) {
           if (saved.mode) setMode(saved.mode)
+          if (saved.language) setLanguage(saved.language)
+          if (saved.currency) setCurrency(saved.currency)
           if (saved.stdPlan) setStdPlan(saved.stdPlan)
           if (saved.inputs) setInputs(saved.inputs)
           if (Array.isArray(saved.firstYearPayments)) setFirstYearPayments(saved.firstYearPayments)
@@ -59,9 +152,9 @@ export default function App() {
 
   // Persist on change
   useEffect(() => {
-    const snapshot = { mode, stdPlan, inputs, firstYearPayments, subsequentYears }
+    const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears }
     localStorage.setItem(LS_KEY, JSON.stringify(snapshot))
-  }, [mode, stdPlan, inputs, firstYearPayments, subsequentYears])
+  }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears])
 
   // Initial health check
   useEffect(() => {
@@ -185,31 +278,19 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, stdPlan, inputs, firstYearPayments, subsequentYears])
 
-  async function runSampleCalculation() {
-    setCalcLoading(true)
-    setCalcError('')
-    setCalcResult(null)
+  async function runGeneratePlan(e) {
+    e.preventDefault()
+    const { valid, payload } = validateForm()
+    if (!valid) {
+      setGenError('Please fix validation errors before generating the plan.')
+      return
+    }
+    setGenLoading(true)
+    setGenError('')
+    setGenResult(null)
     try {
-      const body = {
-        mode: 'calculateForTargetPV',
-        stdPlan: {
-          totalPrice: 1000000,
-          financialDiscountRate: 12,
-          calculatedPV: 850000
-        },
-        inputs: {
-          dpType: 'amount',
-          downPaymentValue: 100000,
-          planDurationYears: 5,
-          installmentFrequency: 'monthly',
-          additionalHandoverPayment: 0,
-          handoverYear: 2,
-          splitFirstYearPayments: false,
-          firstYearPayments: [],
-          subsequentYears: []
-        }
-      }
-      const resp = await fetch(`${API_URL}/api/calculate`, {
+      const body = { ...payload, language, currency }
+      const resp = await fetch(`${API_URL}/api/generate-plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -218,65 +299,71 @@ export default function App() {
       if (!resp.ok) {
         throw new Error(data?.error?.message || 'Request failed')
       }
-      setCalcResult(data)
+      setGenResult(data)
     } catch (e) {
-      setCalcError(e.message || String(e))
+      setGenError(e.message || String(e))
     } finally {
-      setCalcLoading(false)
+      setGenLoading(false)
     }
   }
 
-  async function runCustomCalculation(e) {
-    e.preventDefault()
-    const { valid, payload } = validateForm()
-    if (!valid) {
-      setCalcError('Please fix validation errors before submitting.')
-      return
-    }
-    setCalcLoading(true)
-    setCalcError('')
-    setCalcResult(null)
-    try {
-      const resp = await fetch(`${API_URL}/api/calculate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      const data = await resp.json()
-      if (!resp.ok) {
-        throw new Error(data?.error?.message || 'Request failed')
-      }
-      setCalcResult(data)
-    } catch (e) {
-      setCalcError(e.message || String(e))
-    } finally {
-      setCalcLoading(false)
-    }
+  function exportScheduleCSV() {
+    if (!genResult?.schedule?.length) return
+    const rows = [
+      ['#', 'Month', 'Label', 'Amount', 'Written Amount'],
+      ...genResult.schedule.map((row, i) => ([
+        i + 1,
+        row.month,
+        row.label,
+        Number(row.amount || 0).toFixed(2),
+        row.writtenAmount
+      ]))
+    ]
+    const csv = rows.map(r => r.map(cell => {
+      const s = String(cell ?? '')
+      if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+      return s
+    }).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+    a.download = `payment_schedule_${ts}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
-  function inputStyle(hasError) {
-    return { padding: 8, borderRadius: 6, border: `1px solid ${hasError ? '#c00' : '#ccc'}`, width: '100%' }
-  }
-
-  // Dynamic handlers
-  function addFirstYearPayment() {
-    setFirstYearPayments(arr => [...arr, { amount: '', month: '', type: 'regular' }])
-  }
-  function removeFirstYearPayment(idx) {
-    setFirstYearPayments(arr => arr.filter((_, i) => i !== idx))
-  }
-  function updateFirstYearPayment(idx, key, value) {
-    setFirstYearPayments(arr => arr.map((p, i) => i === idx ? { ...p, [key]: value } : p))
-  }
-
-  function addSubsequentYear() {
-    setSubsequentYears(arr => [...arr, { totalNominal: '', frequency: 'annually' }])
-  }
-  function removeSubsequentYear(idx) {
-    setSubsequentYears(arr => arr.filter((_, i) => i !== idx))
-  }
-  function updateSubsequentYear(idx, key, value) {
-    setSubsequentYears(arr => arr.map((y, i) => i === idx ? { ...y, [key]: value } : y))
+  function exportScheduleXLSX() {
+    if (!genResult?.schedule?.length) return
+    const aoa = [
+      ['#', 'Month', 'Label', 'Amount', 'Written Amount'],
+      ...genResult.schedule.map((row, i) => ([
+        i + 1,
+        row.month,
+        row.label,
+        Number(row.amount || 0).toFixed(2),
+        row.writtenAmount
+      ]))
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    // Column widths for readability
+    ws['!cols'] = [{ wch: 6 }, { wch: 10 }, { wch: 28 }, { wch: 16 }, { wch: 50 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Schedule')
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+    a.download = `payment_schedule_${ts}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   // Computed summaries (from preview)
@@ -298,154 +385,204 @@ export default function App() {
     }
   }, [preview])
 
+  const schedule = genResult?.schedule || []
+  const totals = genResult?.totals || null
+
   return (
-    <div style={{ fontFamily: 'system-ui, Arial, sans-serif', lineHeight: 1.4, padding: 24 }}>
-      <h1>Vite + React + Express</h1>
-      <p style={{ color: '#666' }}>
-        Client is running in Docker on port 5173. Server on port 3000.
-      </p>
+    <div style={styles.page}>
+      <div style={styles.container}>
+        <header style={styles.header}>
+          <h1 style={styles.h1}>Uptown Evaluator — Payment Plan</h1>
+          <p style={styles.sub}>Create, preview, and export professional payment schedules.</p>
+        </header>
 
-      <section style={{ marginTop: 16 }}>
-        <h2>API Connectivity</h2>
-        <pre style={{ background: '#f6f8fa', padding: 12, borderRadius: 8, overflow: 'auto' }}>
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>API Connectivity</h2>
+          <pre style={{ background: '#f6f8fa', padding: 12, borderRadius: 8, overflow: 'auto', border: '1px solid #eef2f7' }}>
 {JSON.stringify(health, null, 2)}
-        </pre>
-        <p><strong>Message from API:</strong> {message}</p>
-      </section>
+          </pre>
+          <p style={{ ...styles.metaText }}><strong>Message from API:</strong> {message}</p>
+        </section>
 
-      <section style={{ marginTop: 24 }}>
-        <h2>Calculation API Demo</h2>
-        <button
-          onClick={runSampleCalculation}
-          disabled={calcLoading}
-          style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
-        >
-          {calcLoading ? 'Running...' : 'Run Sample Calculation'}
-        </button>
-      </section>
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Inputs</h2>
+          <form onSubmit={runGeneratePlan} style={{ ...styles.grid2 }}>
+            <div>
+              <label style={styles.label}>Language for Written Amounts</label>
+              <select value={language} onChange={e => setLanguage(e.target.value)} style={styles.select()}>
+                <option value="en">English</option>
+                <option value="ar">Arabic</option>
+              </select>
+            </div>
 
-      <section style={{ marginTop: 24 }}>
-        <h2>Try Your Own Payload</h2>
-        <form onSubmit={runCustomCalculation} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, maxWidth: 1000 }}>
-          <div>
-            <label>Mode</label>
-            <select value={mode} onChange={e => setMode(e.target.value)} style={inputStyle()}>
-              <option value="evaluateCustomPrice">evaluateCustomPrice</option>
-              <option value="calculateForTargetPV">calculateForTargetPV</option>
-              <option value="customYearlyThenEqual_useStdPrice">customYearlyThenEqual_useStdPrice</option>
-              <option value="customYearlyThenEqual_targetPV">customYearlyThenEqual_targetPV</option>
-            </select>
-          </div>
+            <div>
+              <label style={styles.label}>Currency (English only)</label>
+              <select value={currency} onChange={e => setCurrency(e.target.value)} style={styles.select()}>
+                <option value="EGP">EGP (Egyptian Pounds)</option>
+                <option value="USD">USD (US Dollars)</option>
+                <option value="SAR">SAR (Saudi Riyals)</option>
+                <option value="EUR">EUR (Euros)</option>
+                <option value="AED">AED (UAE Dirhams)</option>
+                <option value="KWD">KWD (Kuwaiti Dinars)</option>
+              </select>
+            </div>
 
-          <div>
-            <label>Installment Frequency</label>
-            <select value={inputs.installmentFrequency} onChange={e => setInputs(s => ({ ...s, installmentFrequency: e.target.value }))} style={inputStyle(errors.installmentFrequency)}>
-              <option value="monthly">monthly</option>
-              <option value="quarterly">quarterly</option>
-              <option value="bi-annually">bi-annually</option>
-              <option value="annually">annually</option>
-            </select>
-            {errors.installmentFrequency && <small style={{ color: '#c00' }}>{errors.installmentFrequency}</small>}
-          </div>
+            <div>
+              <label style={styles.label}>Mode</label>
+              <select value={mode} onChange={e => setMode(e.target.value)} style={styles.select()}>
+                <option value="evaluateCustomPrice">evaluateCustomPrice</option>
+                <option value="calculateForTargetPV">calculateForTargetPV</option>
+                <option value="customYearlyThenEqual_useStdPrice">customYearlyThenEqual_useStdPrice</option>
+                <option value="customYearlyThenEqual_targetPV">customYearlyThenEqual_targetPV</option>
+              </select>
+            </div>
 
-          <div>
-            <label>Std Total Price</label>
-            <input type="number" value={stdPlan.totalPrice} onChange={e => setStdPlan(s => ({ ...s, totalPrice: e.target.value }))} style={inputStyle(errors.std_totalPrice)} />
-            {errors.std_totalPrice && <small style={{ color: '#c00' }}>{errors.std_totalPrice}</small>}
-          </div>
-          <div>
-            <label>Std Financial Rate (%)</label>
-            <input type="number" value={stdPlan.financialDiscountRate} onChange={e => setStdPlan(s => ({ ...s, financialDiscountRate: e.target.value }))} style={inputStyle(errors.std_financialDiscountRate)} />
-            {errors.std_financialDiscountRate && <small style={{ color: '#c00' }}>{errors.std_financialDiscountRate}</small>}
-          </div>
-          <div>
-            <label>Std Calculated PV</label>
-            <input type="number" value={stdPlan.calculatedPV} onChange={e => setStdPlan(s => ({ ...s, calculatedPV: e.target.value }))} style={inputStyle(errors.std_calculatedPV)} />
-            {errors.std_calculatedPV && <small style={{ color: '#c00' }}>{errors.std_calculatedPV}</small>}
-          </div>
+            <div>
+              <label style={styles.label}>Installment Frequency</label>
+              <select value={inputs.installmentFrequency} onChange={e => setInputs(s => ({ ...s, installmentFrequency: e.target.value }))} style={styles.select(errors.installmentFrequency)}>
+                <option value="monthly">monthly</option>
+                <option value="quarterly">quarterly</option>
+                <option value="bi-annually">bi-annually</option>
+                <option value="annually">annually</option>
+              </select>
+              {errors.installmentFrequency && <small style={styles.error}>{errors.installmentFrequency}</small>}
+            </div>
 
-          <div>
-            <label>Sales Discount (%)</label>
-            <input type="number" value={inputs.salesDiscountPercent} onChange={e => setInputs(s => ({ ...s, salesDiscountPercent: e.target.value }))} style={inputStyle()} />
-          </div>
+            <div>
+              <label style={styles.label}>Std Total Price</label>
+              <input type="number" value={stdPlan.totalPrice} onChange={e => setStdPlan(s => ({ ...s, totalPrice: e.target.value }))} style={styles.input(errors.std_totalPrice)} />
+              {errors.std_totalPrice && <small style={styles.error}>{errors.std_totalPrice}</small>}
+            </div>
+            <div>
+              <label style={styles.label}>Std Financial Rate (%)</label>
+              <input type="number" value={stdPlan.financialDiscountRate} onChange={e => setStdPlan(s => ({ ...s, financialDiscountRate: e.target.value }))} style={styles.input(errors.std_financialDiscountRate)} />
+              {errors.std_financialDiscountRate && <small style={styles.error}>{errors.std_financialDiscountRate}</small>}
+            </div>
+            <div>
+              <label style={styles.label}>Std Calculated PV</label>
+              <input type="number" value={stdPlan.calculatedPV} onChange={e => setStdPlan(s => ({ ...s, calculatedPV: e.target.value }))} style={styles.input(errors.std_calculatedPV)} />
+              {errors.std_calculatedPV && <small style={styles.error}>{errors.std_calculatedPV}</small>}
+            </div>
 
-          <div>
-            <label>DP Type</label>
-            <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={inputStyle(errors.dpType)}>
-              <option value="amount">amount</option>
-              <option value="percentage">percentage</option>
-            </select>
-            {errors.dpType && <small style={{ color: '#c00' }}>{errors.dpType}</small>}
-          </div>
-          <div>
-            <label>Down Payment Value</label>
-            <input type="number" value={inputs.downPaymentValue} onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))} style={inputStyle(errors.downPaymentValue)} />
-            {errors.downPaymentValue && <small style={{ color: '#c00' }}>{errors.downPaymentValue}</small>}
-          </div>
+            <div>
+              <label style={styles.label}>Sales Discount (%)</label>
+              <input type="number" value={inputs.salesDiscountPercent} onChange={e => setInputs(s => ({ ...s, salesDiscountPercent: e.target.value }))} style={styles.input()} />
+            </div>
 
-          <div>
-            <label>Plan Duration (years)</label>
-            <input type="number" value={inputs.planDurationYears} onChange={e => setInputs(s => ({ ...s, planDurationYears: e.target.value }))} style={inputStyle(errors.planDurationYears)} />
-            {errors.planDurationYears && <small style={{ color: '#c00' }}>{errors.planDurationYears}</small>}
-          </div>
+            <div>
+              <label style={styles.label}>DP Type</label>
+              <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={styles.select(errors.dpType)}>
+                <option value="amount">amount</option>
+                <option value="percentage">percentage</option>
+              </select>
+              {errors.dpType && <small style={styles.error}>{errors.dpType}</small>}
+            </div>
+            <div>
+              <label style={styles.label}>Down Payment Value</label>
+              <input type="number" value={inputs.downPaymentValue} onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))} style={styles.input(errors.downPaymentValue)} />
+              {errors.downPaymentValue && <small style={styles.error}>{errors.downPaymentValue}</small>}
+            </div>
 
-          <div>
-            <label>Handover Year</label>
-            <input type="number" value={inputs.handoverYear} onChange={e => setInputs(s => ({ ...s, handoverYear: e.target.value }))} style={inputStyle(errors.handoverYear)} />
-            {errors.handoverYear && <small style={{ color: '#c00' }}>{errors.handoverYear}</small>}
-          </div>
-          <div>
-            <label>Additional Handover Payment</label>
-            <input type="number" value={inputs.additionalHandoverPayment} onChange={e => setInputs(s => ({ ...s, additionalHandoverPayment: e.target.value }))} style={inputStyle(errors.additionalHandoverPayment)} />
-            {errors.additionalHandoverPayment && <small style={{ color: '#c00' }}>{errors.additionalHandoverPayment}</small>}
-          </div>
+            <div>
+              <label style={styles.label}>Plan Duration (years)</label>
+              <input type="number" value={inputs.planDurationYears} onChange={e => setInputs(s => ({ ...s, planDurationYears: e.target.value }))} style={styles.input(errors.planDurationYears)} />
+              {errors.planDurationYears && <small style={styles.error}>{errors.planDurationYears}</small>}
+            </div>
 
-          <div style={{ gridColumn: '1 / span 2' }}>
-            <label>
-              <input type="checkbox" checked={inputs.splitFirstYearPayments} onChange={e => setInputs(s => ({ ...s, splitFirstYearPayments: e.target.checked }))} />
-              {' '}Split First Year Payments?
-            </label>
-          </div>
+            <div>
+              <label style={styles.label}>Handover Year</label>
+              <input type="number" value={inputs.handoverYear} onChange={e => setInputs(s => ({ ...s, handoverYear: e.target.value }))} style={styles.input(errors.handoverYear)} />
+              {errors.handoverYear && <small style={styles.error}>{errors.handoverYear}</small>}
+            </div>
+            <div>
+              <label style={styles.label}>Additional Handover Payment</label>
+              <input type="number" value={inputs.additionalHandoverPayment} onChange={e => setInputs(s => ({ ...s, additionalHandoverPayment: e.target.value }))} style={styles.input(errors.additionalHandoverPayment)} />
+              {errors.additionalHandoverPayment && <small style={styles.error}>{errors.additionalHandoverPayment}</small>}
+            </div>
 
-          {/* First Year Payments Builder */}
-          {inputs.splitFirstYearPayments && (
-            <div style={{ gridColumn: '1 / span 2', border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0 }}>First Year Payments</h3>
-                <button type="button" onClick={addFirstYearPayment} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
-                  + Add Payment
-                </button>
+            <div style={styles.blockFull}>
+              <label style={{ ...styles.label, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" checked={inputs.splitFirstYearPayments} onChange={e => setInputs(s => ({ ...s, splitFirstYearPayments: e.target.checked }))} />
+                Split First Year Payments?
+              </label>
+            </div>
+
+            {/* First Year Payments Builder */}
+            {inputs.splitFirstYearPayments && (
+              <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>First Year Payments</h3>
+                  <button type="button" onClick={addFirstYearPayment} style={styles.btn}>+ Add Payment</button>
+                </div>
+                {firstYearPayments.length === 0 ? (
+                  <p style={styles.metaText}>No first-year payments defined.</p>
+                ) : (
+                  <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8 }}>
+                    {firstYearPayments.map((p, idx) => {
+                      const errAmt = errors[`fyp_amount_${idx}`]
+                      const errMonth = errors[`fyp_month_${idx}`]
+                      return (
+                        <React.Fragment key={idx}>
+                          <div>
+                            <label style={styles.label}>Amount</label>
+                            <input type="number" value={p.amount} onChange={e => updateFirstYearPayment(idx, 'amount', e.target.value)} style={styles.input(errAmt)} />
+                            {errAmt && <small style={styles.error}>{errAmt}</small>}
+                          </div>
+                          <div>
+                            <label style={styles.label}>Month (1-12)</label>
+                            <input type="number" min="1" max="12" value={p.month} onChange={e => updateFirstYearPayment(idx, 'month', e.target.value)} style={styles.input(errMonth)} />
+                            {errMonth && <small style={styles.error}>{errMonth}</small>}
+                          </div>
+                          <div>
+                            <label style={styles.label}>Type</label>
+                            <select value={p.type} onChange={e => updateFirstYearPayment(idx, 'type', e.target.value)} style={styles.select()}>
+                              <option value="dp">dp</option>
+                              <option value="regular">regular</option>
+                            </select>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'end' }}>
+                            <button type="button" onClick={() => removeFirstYearPayment(idx)} style={styles.btn}>Remove</button>
+                          </div>
+                        </React.Fragment>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-              {firstYearPayments.length === 0 ? (
-                <p style={{ color: '#666', marginTop: 8 }}>No first-year payments defined.</p>
+            )}
+
+            {/* Subsequent Years Builder */}
+            <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Subsequent Custom Years</h3>
+                <button type="button" onClick={addSubsequentYear} style={styles.btn}>+ Add Year</button>
+              </div>
+              {subsequentYears.length === 0 ? (
+                <p style={styles.metaText}>No subsequent custom years defined.</p>
               ) : (
-                <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8 }}>
-                  {firstYearPayments.map((p, idx) => {
-                    const errAmt = errors[`fyp_amount_${idx}`]
-                    const errMonth = errors[`fyp_month_${idx}`]
+                <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
+                  {subsequentYears.map((y, idx) => {
+                    const errTot = errors[`sub_total_${idx}`]
+                    const errFreq = errors[`sub_freq_${idx}`]
                     return (
                       <React.Fragment key={idx}>
                         <div>
-                          <label>Amount (EGP)</label>
-                          <input type="number" value={p.amount} onChange={e => updateFirstYearPayment(idx, 'amount', e.target.value)} style={inputStyle(errAmt)} />
-                          {errAmt && <small style={{ color: '#c00' }}>{errAmt}</small>}
+                          <label style={styles.label}>Total Nominal</label>
+                          <input type="number" value={y.totalNominal} onChange={e => updateSubsequentYear(idx, 'totalNominal', e.target.value)} style={styles.input(errTot)} />
+                          {errTot && <small style={styles.error}>{errTot}</small>}
                         </div>
                         <div>
-                          <label>Month (1-12)</label>
-                          <input type="number" min="1" max="12" value={p.month} onChange={e => updateFirstYearPayment(idx, 'month', e.target.value)} style={inputStyle(errMonth)} />
-                          {errMonth && <small style={{ color: '#c00' }}>{errMonth}</small>}
-                        </div>
-                        <div>
-                          <label>Type</label>
-                          <select value={p.type} onChange={e => updateFirstYearPayment(idx, 'type', e.target.value)} style={inputStyle()}>
-                            <option value="dp">dp</option>
-                            <option value="regular">regular</option>
+                          <label style={styles.label}>Frequency</label>
+                          <select value={y.frequency} onChange={e => updateSubsequentYear(idx, 'frequency', e.target.value)} style={styles.select(errFreq)}>
+                            <option value="monthly">monthly</option>
+                            <option value="quarterly">quarterly</option>
+                            <option value="bi-annually">bi-annually</option>
+                            <option value="annually">annually</option>
                           </select>
+                          {errFreq && <small style={styles.error}>{errFreq}</small>}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'end' }}>
-                          <button type="button" onClick={() => removeFirstYearPayment(idx)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
-                            Remove
-                          </button>
+                          <button type="button" onClick={() => removeSubsequentYear(idx)} style={styles.btn}>Remove</button>
                         </div>
                       </React.Fragment>
                     )
@@ -453,461 +590,91 @@ export default function App() {
                 </div>
               )}
             </div>
-          )}
 
-          {/* Subsequent Years Builder */}
-          <div style={{ gridColumn: '1 / span 2', border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>Subsequent Custom Years</h3>
-              <button type="button" onClick={addSubsequentYear} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
-                + Add Year
-              </button>
-            </div>
-            {subsequentYears.length === 0 ? (
-              <p style={{ color: '#666', marginTop: 8 }}>No subsequent custom years defined.</p>
-            ) : (
-              <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
-                {subsequentYears.map((y, idx) => {
-                  const errTot = errors[`sub_total_${idx}`]
-                  const errFreq = errors[`sub_freq_${idx}`]
-                  return (
-                    <React.Fragment key={idx}>
-                      <div>
-                        <label>Total Nominal (EGP)</label>
-                        <input type="number" value={y.totalNominal} onChange={e => updateSubsequentYear(idx, 'totalNominal', e.target.value)} style={inputStyle(errTot)} />
-                        {errTot && <small style={{ color: '#c00' }}>{errTot}</small>}
-                      </div>
-                      <div>
-                        <label>Frequency</label>
-                        <select value={y.frequency} onChange={e => updateSubsequentYear(idx, 'frequency', e.target.value)} style={inputStyle(errFreq)}>
-                          <option value="monthly">monthly</option>
-                          <option value="quarterly">quarterly</option>
-                          <option value="bi-annually">bi-annually</option>
-                          <option value="annually">annually</option>
-                        </select>
-                        {errFreq && <small style={{ color: '#c00' }}>{errFreq}</small>}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'end' }}>
-                        <button type="button" onClick={() => removeSubsequentYear(idx)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
-                          Remove
-                        </button>
-                      </div>
-                    </React.Fragment>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          <div style={{ gridColumn: '1 / span 2', display: 'flex', gap: 8 }}>
-            <button
-              type="submit"
-              disabled={calcLoading}
-              style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
-            >
-              {calcLoading ? 'Running...' : 'Run Custom Calculation'}
-            </button>
-          </div>
-        </form>
-
-        {/* Live Computed Summaries */}
-        <div style={{ marginTop: 16, border: '1px solid #eee', borderRadius: 8, padding: 12, maxWidth: 1000 }}>
-          <h3 style={{ marginTop: 0 }}>Live Preview</h3>
-          {previewError ? <p style={{ color: '#c00' }}>{previewError}</p> : null}
-          {summaries ? (
-            <ul style={{ margin: 0, paddingLeft: 16 }}>
-              <li>Total Nominal Price: {Number(summaries.totalNominalPrice || 0).toLocaleString()}</li>
-              <li>Equal Installments: {summaries.numEqualInstallments}</li>
-              <li>Installment Amount: {Number(summaries.equalInstallmentAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
-              <li>Calculated PV: {Number(summaries.calculatedPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
-              <li>Effective Start Years (for installments): {summaries.effectiveStartYears}</li>
-            </ul>
-          ) : (
-            !previewError && <p style={{ color: '#666' }}>Adjust form inputs to see live preview.</p>
-          )}
-        </div>
-
-        {calcError ? (
-          <p style={{ color: '#c00', marginTop: 8 }}>{calcError}</p>
-        ) : null}
-        {calcResult ? (
-          <pre style={{ background: '#f6f8fa', padding: 12, borderRadius: 8, overflow: 'auto', marginTop: 12 }}>
-{JSON.stringify(calcResult, null, 2)}
-          </pre>
-        ) : null}
-      </section>
-    </div>
-  )
-}
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-
-export default function App() {
-  const [message, setMessage] = useState('Loading...')
-  const [health, setHealth] = useState(null)
-  const [calcResult, setCalcResult] = useState(null)
-  const [calcLoading, setCalcLoading] = useState(false)
-  const [calcError, setCalcError] = useState('')
-
-  // Custom form state
-  const [mode, setMode] = useState('calculateForTargetPV')
-  const [stdPlan, setStdPlan] = useState({
-    totalPrice: 1000000,
-    financialDiscountRate: 12,
-    calculatedPV: 850000
-  })
-  const [inputs, setInputs] = useState({
-    salesDiscountPercent: 1.5,
-    dpType: 'amount',
-    downPaymentValue: 100000,
-    planDurationYears: 5,
-    installmentFrequency: 'monthly',
-    additionalHandoverPayment: 0,
-    handoverYear: 2,
-    splitFirstYearPayments: false
-  })
-
-  // Dynamic arrays
-  const [firstYearPayments, setFirstYearPayments] = useState([
-    // { amount: 50000, month: 1, type: 'dp' },
-    // { amount: 25000, month: 6, type: 'regular' }
-  ])
-  const [subsequentYears, setSubsequentYears] = useState([
-    // { totalNominal: 120000, frequency: 'quarterly' }
-  ])
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const [healthRes, msgRes] = await Promise.all([
-          fetch(`${API_URL}/api/health`).then(r => r.json()),
-          fetch(`${API_URL}/api/message`).then(r => r.json())
-        ])
-        setHealth(healthRes)
-        setMessage(msgRes.message)
-      } catch (err) {
-        setMessage('Failed to reach API. Is Docker running?')
-      }
-    }
-    load()
-  }, [])
-
-  async function runSampleCalculation() {
-    setCalcLoading(true)
-    setCalcError('')
-    setCalcResult(null)
-    try {
-      const body = {
-        mode: 'calculateForTargetPV',
-        stdPlan: {
-          totalPrice: 1000000,
-          financialDiscountRate: 12,
-          calculatedPV: 850000
-        },
-        inputs: {
-          dpType: 'amount',
-          downPaymentValue: 100000,
-          planDurationYears: 5,
-          installmentFrequency: 'monthly',
-          additionalHandoverPayment: 0,
-          handoverYear: 2,
-          splitFirstYearPayments: false,
-          firstYearPayments: [],
-          subsequentYears: []
-        }
-      }
-      const resp = await fetch(`${API_URL}/api/calculate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-      const data = await resp.json()
-      if (!resp.ok) {
-        throw new Error(data?.error?.message || 'Request failed')
-      }
-      setCalcResult(data)
-    } catch (e) {
-      setCalcError(e.message || String(e))
-    } finally {
-      setCalcLoading(false)
-    }
-  }
-
-  async function runCustomCalculation(e) {
-    e.preventDefault()
-    setCalcLoading(true)
-    setCalcError('')
-    setCalcResult(null)
-    try {
-      const body = {
-        mode,
-        stdPlan: {
-          totalPrice: Number(stdPlan.totalPrice),
-          financialDiscountRate: Number(stdPlan.financialDiscountRate),
-          calculatedPV: Number(stdPlan.calculatedPV)
-        },
-        inputs: {
-          salesDiscountPercent: Number(inputs.salesDiscountPercent),
-          dpType: inputs.dpType,
-          downPaymentValue: Number(inputs.downPaymentValue),
-          planDurationYears: Number(inputs.planDurationYears),
-          installmentFrequency: inputs.installmentFrequency,
-          additionalHandoverPayment: Number(inputs.additionalHandoverPayment),
-          handoverYear: Number(inputs.handoverYear),
-          splitFirstYearPayments: !!inputs.splitFirstYearPayments,
-          firstYearPayments: firstYearPayments.map(p => ({
-            amount: Number(p.amount) || 0,
-            month: Number(p.month) || 0,
-            type: p.type || 'regular'
-          })),
-          subsequentYears: subsequentYears.map(y => ({
-            totalNominal: Number(y.totalNominal) || 0,
-            frequency: y.frequency || 'annually'
-          }))
-        }
-      }
-      const resp = await fetch(`${API_URL}/api/calculate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-      const data = await resp.json()
-      if (!resp.ok) {
-        throw new Error(data?.error?.message || 'Request failed')
-      }
-      setCalcResult(data)
-    } catch (e) {
-      setCalcError(e.message || String(e))
-    } finally {
-      setCalcLoading(false)
-    }
-  }
-
-  function inputStyle() {
-    return { padding: 8, borderRadius: 6, border: '1px solid #ccc', width: '100%' }
-  }
-
-  // Dynamic handlers
-  function addFirstYearPayment() {
-    setFirstYearPayments(arr => [...arr, { amount: '', month: '', type: 'regular' }])
-  }
-  function removeFirstYearPayment(idx) {
-    setFirstYearPayments(arr => arr.filter((_, i) => i !== idx))
-  }
-  function updateFirstYearPayment(idx, key, value) {
-    setFirstYearPayments(arr => arr.map((p, i) => i === idx ? { ...p, [key]: value } : p))
-  }
-
-  function addSubsequentYear() {
-    setSubsequentYears(arr => [...arr, { totalNominal: '', frequency: 'annually' }])
-  }
-  function removeSubsequentYear(idx) {
-    setSubsequentYears(arr => arr.filter((_, i) => i !== idx))
-  }
-  function updateSubsequentYear(idx, key, value) {
-    setSubsequentYears(arr => arr.map((y, i) => i === idx ? { ...y, [key]: value } : y))
-  }
-
-  return (
-    <div style={{ fontFamily: 'system-ui, Arial, sans-serif', lineHeight: 1.4, padding: 24 }}>
-      <h1>Vite + React + Express</h1>
-      <p style={{ color: '#666' }}>
-        Client is running in Docker on port 5173. Server on port 3000.
-      </p>
-
-      <section style={{ marginTop: 16 }}>
-        <h2>API Connectivity</h2>
-        <pre style={{ background: '#f6f8fa', padding: 12, borderRadius: 8, overflow: 'auto' }}>
-{JSON.stringify(health, null, 2)}
-        </pre>
-        <p><strong>Message from API:</strong> {message}</p>
-      </section>
-
-      <section style={{ marginTop: 24 }}>
-        <h2>Calculation API Demo</h2>
-        <button
-          onClick={runSampleCalculation}
-          disabled={calcLoading}
-          style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
-        >
-          {calcLoading ? 'Running...' : 'Run Sample Calculation'}
-        </button>
-      </section>
-
-      <section style={{ marginTop: 24 }}>
-        <h2>Try Your Own Payload</h2>
-        <form onSubmit={runCustomCalculation} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, maxWidth: 1000 }}>
-          <div>
-            <label>Mode</label>
-            <select value={mode} onChange={e => setMode(e.target.value)} style={inputStyle()}>
-              <option value="evaluateCustomPrice">evaluateCustomPrice</option>
-              <option value="calculateForTargetPV">calculateForTargetPV</option>
-              <option value="customYearlyThenEqual_useStdPrice">customYearlyThenEqual_useStdPrice</option>
-              <option value="customYearlyThenEqual_targetPV">customYearlyThenEqual_targetPV</option>
-            </select>
-          </div>
-
-          <div>
-            <label>Installment Frequency</label>
-            <select value={inputs.installmentFrequency} onChange={e => setInputs(s => ({ ...s, installmentFrequency: e.target.value }))} style={inputStyle()}>
-              <option value="monthly">monthly</option>
-              <option value="quarterly">quarterly</option>
-              <option value="bi-annually">bi-annually</option>
-              <option value="annually">annually</option>
-            </select>
-          </div>
-
-          <div>
-            <label>Std Total Price</label>
-            <input type="number" value={stdPlan.totalPrice} onChange={e => setStdPlan(s => ({ ...s, totalPrice: e.target.value }))} style={inputStyle()} />
-          </div>
-          <div>
-            <label>Std Financial Rate (%)</label>
-            <input type="number" value={stdPlan.financialDiscountRate} onChange={e => setStdPlan(s => ({ ...s, financialDiscountRate: e.target.value }))} style={inputStyle()} />
-          </div>
-          <div>
-            <label>Std Calculated PV</label>
-            <input type="number" value={stdPlan.calculatedPV} onChange={e => setStdPlan(s => ({ ...s, calculatedPV: e.target.value }))} style={inputStyle()} />
-          </div>
-
-          <div>
-            <label>Sales Discount (%)</label>
-            <input type="number" value={inputs.salesDiscountPercent} onChange={e => setInputs(s => ({ ...s, salesDiscountPercent: e.target.value }))} style={inputStyle()} />
-          </div>
-
-          <div>
-            <label>DP Type</label>
-            <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={inputStyle()}>
-              <option value="amount">amount</option>
-              <option value="percentage">percentage</option>
-            </select>
-          </div>
-          <div>
-            <label>Down Payment Value</label>
-            <input type="number" value={inputs.downPaymentValue} onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))} style={inputStyle()} />
-          </div>
-
-          <div>
-            <label>Plan Duration (years)</label>
-            <input type="number" value={inputs.planDurationYears} onChange={e => setInputs(s => ({ ...s, planDurationYears: e.target.value }))} style={inputStyle()} />
-          </div>
-
-          <div>
-            <label>Handover Year</label>
-            <input type="number" value={inputs.handoverYear} onChange={e => setInputs(s => ({ ...s, handoverYear: e.target.value }))} style={inputStyle()} />
-          </div>
-          <div>
-            <label>Additional Handover Payment</label>
-            <input type="number" value={inputs.additionalHandoverPayment} onChange={e => setInputs(s => ({ ...s, additionalHandoverPayment: e.target.value }))} style={inputStyle()} />
-          </div>
-
-          <div style={{ gridColumn: '1 / span 2' }}>
-            <label>
-              <input type="checkbox" checked={inputs.splitFirstYearPayments} onChange={e => setInputs(s => ({ ...s, splitFirstYearPayments: e.target.checked }))} />
-              {' '}Split First Year Payments?
-            </label>
-          </div>
-
-          {/* First Year Payments Builder */}
-          {inputs.splitFirstYearPayments && (
-            <div style={{ gridColumn: '1 / span 2', border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0 }}>First Year Payments</h3>
-                <button type="button" onClick={addFirstYearPayment} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
-                  + Add Payment
-                </button>
-              </div>
-              {firstYearPayments.length === 0 ? (
-                <p style={{ color: '#666', marginTop: 8 }}>No first-year payments defined.</p>
+            {/* Live Preview */}
+            <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Live Preview (Calculation)</h3>
+              {previewError ? <p style={styles.error}>{previewError}</p> : null}
+              {summaries ? (
+                <ul style={{ margin: 0, paddingLeft: 16 }}>
+                  <li>Total Nominal Price: {Number(summaries.totalNominalPrice || 0).toLocaleString()}</li>
+                  <li>Equal Installments: {summaries.numEqualInstallments}</li>
+                  <li>Installment Amount: {Number(summaries.equalInstallmentAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
+                  <li>Calculated PV: {Number(summaries.calculatedPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
+                  <li>Effective Start Years (for installments): {summaries.effectiveStartYears}</li>
+                </ul>
               ) : (
-                <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8 }}>
-                  {firstYearPayments.map((p, idx) => (
-                    <React.Fragment key={idx}>
-                      <div>
-                        <label>Amount (EGP)</label>
-                        <input type="number" value={p.amount} onChange={e => updateFirstYearPayment(idx, 'amount', e.target.value)} style={inputStyle()} />
-                      </div>
-                      <div>
-                        <label>Month (1-12)</label>
-                        <input type="number" min="1" max="12" value={p.month} onChange={e => updateFirstYearPayment(idx, 'month', e.target.value)} style={inputStyle()} />
-                      </div>
-                      <div>
-                        <label>Type</label>
-                        <select value={p.type} onChange={e => updateFirstYearPayment(idx, 'type', e.target.value)} style={inputStyle()}>
-                          <option value="dp">dp</option>
-                          <option value="regular">regular</option>
-                        </select>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'end' }}>
-                        <button type="button" onClick={() => removeFirstYearPayment(idx)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
-                          Remove
-                        </button>
-                      </div>
-                    </React.Fragment>
-                  ))}
-                </div>
+                !previewError && <p style={styles.metaText}>Adjust form inputs to see live preview.</p>
               )}
             </div>
-          )}
 
-          {/* Subsequent Years Builder */}
-          <div style={{ gridColumn: '1 / span 2', border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>Subsequent Custom Years</h3>
-              <button type="button" onClick={addSubsequentYear} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
-                + Add Year
+            <div style={{ ...styles.blockFull, display: 'flex', gap: 10 }}>
+              <button type="submit" disabled={genLoading} style={{ ...styles.btnPrimary, opacity: genLoading ? 0.7 : 1 }}>
+                {genLoading ? 'Calculating...' : 'Calculate (Generate Plan)'}
               </button>
             </div>
-            {subsequentYears.length === 0 ? (
-              <p style={{ color: '#666', marginTop: 8 }}>No subsequent custom years defined.</p>
-            ) : (
-              <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
-                {subsequentYears.map((y, idx) => (
-                  <React.Fragment key={idx}>
-                    <div>
-                      <label>Total Nominal (EGP)</label>
-                      <input type="number" value={y.totalNominal} onChange={e => updateSubsequentYear(idx, 'totalNominal', e.target.value)} style={inputStyle()} />
-                    </div>
-                    <div>
-                      <label>Frequency</label>
-                      <select value={y.frequency} onChange={e => updateSubsequentYear(idx, 'frequency', e.target.value)} style={inputStyle()}>
-                        <option value="monthly">monthly</option>
-                        <option value="quarterly">quarterly</option>
-                        <option value="bi-annually">bi-annually</option>
-                        <option value="annually">annually</option>
-                      </select>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'end' }}>
-                      <button type="button" onClick={() => removeSubsequentYear(idx)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
-                        Remove
-                      </button>
-                    </div>
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
-          </div>
+          </form>
+        </section>
 
-          <div style={{ gridColumn: '1 / span 2', display: 'flex', gap: 8 }}>
-            <button
-              type="submit"
-              disabled={calcLoading}
-              style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
-            >
-              {calcLoading ? 'Running...' : 'Run Custom Calculation'}
-            </button>
+        {/* Results Table */}
+        <section style={styles.section}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={styles.sectionTitle}>Payment Schedule</h2>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={exportScheduleXLSX} disabled={!schedule.length} style={styles.btn}>
+                Export to Excel (.xlsx)
+              </button>
+              <button type="button" onClick={exportScheduleCSV} disabled={!schedule.length} style={styles.btn}>
+                Export to CSV
+              </button>
+            </div>
           </div>
-        </form>
-
-        {calcError ? (
-          <p style={{ color: '#c00', marginTop: 8 }}>{calcError}</p>
-        ) : null}
-        {calcResult ? (
-          <pre style={{ background: '#f6f8fa', padding: 12, borderRadius: 8, overflow: 'auto', marginTop: 12 }}>
-{JSON.stringify(calcResult, null, 2)}
-          </pre>
-        ) : null}
-      </section>
+          {genError ? <p style={styles.error}>{genError}</p> : null}
+          {schedule.length === 0 ? (
+            <p style={styles.metaText}>No schedule yet. Fill the form and click "Calculate (Generate Plan)".</p>
+          ) : (
+            <div style={styles.tableWrap}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>#</th>
+                    <th style={styles.th}>Month</th>
+                    <th style={styles.th}>Label</th>
+                    <th style={{ ...styles.th, textAlign: 'right' }}>Amount</th>
+                    <th style={{ ...styles.th, textAlign: language === 'ar' ? 'right' : 'left' }}>Written Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schedule.map((row, idx) => (
+                    <tr key={idx}>
+                      <td style={styles.td}>{idx + 1}</td>
+                      <td style={styles.td}>{row.month}</td>
+                      <td style={styles.td}>{row.label}</td>
+                      <td style={{ ...styles.td, textAlign: 'right' }}>
+                        {Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ ...styles.td, direction: language === 'ar' ? 'rtl' : 'ltr', textAlign: language === 'ar' ? 'right' : 'left' }}>
+                        {row.writtenAmount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                {totals && (
+                  <tfoot>
+                    <tr>
+                      <td colSpan="3" style={{ ...styles.tFootCell, textAlign: 'right' }}>Total</td>
+                      <td style={{ ...styles.tFootCell, textAlign: 'right' }}>
+                        {Number(totals.totalNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td style={styles.tFootCell}></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   )
 }

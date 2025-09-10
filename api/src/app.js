@@ -3,8 +3,10 @@ import cors from 'cors'
 import {
   calculateByMode,
   CalculationModes,
-  Frequencies
+  Frequencies,
+  getPaymentMonths
 } from '../services/calculationService.js'
+import convertToWords from '../utils/converter.js'
 
 const app = express()
 
@@ -155,6 +157,99 @@ app.post('/api/calculate', (req, res) => {
   } catch (err) {
     console.error('POST /api/calculate error:', err)
     return bad(res, 500, 'Internal error during calculation')
+  }
+})
+
+/**
+ * POST /api/generate-plan
+ * Body: { mode, stdPlan, inputs, language, currency? }
+ * - language: 'en' or 'ar'
+ * - currency: optional. For English, can be code (EGP, USD, SAR, EUR, AED, KWD) or full name (e.g., "Egyptian Pounds")
+ * Returns: { ok: true, schedule: [{label, month, amount, writtenAmount}], totals, meta }
+ */
+app.post('/api/generate-plan', (req, res) => {
+  try {
+    const { mode, stdPlan, inputs, language, currency, languageForWrittenAmounts } = req.body || {}
+    if (!mode || !allowedModes.has(mode)) {
+      return bad(res, 400, 'Invalid or missing mode', { allowedModes: [...allowedModes] })
+    }
+    if (!isObject(stdPlan) || !isObject(inputs)) {
+      return bad(res, 400, 'Missing stdPlan or inputs')
+    }
+    const inputErrors = validateInputs(inputs)
+    if (inputErrors.length > 0) {
+      return bad(res, 422, 'Invalid inputs', inputErrors)
+    }
+
+    // Backward compatibility: support legacy languageForWrittenAmounts
+    const langInput = language || languageForWrittenAmounts || 'en'
+    const lang = String(langInput).toLowerCase().startsWith('ar') ? 'ar' : 'en'
+
+    const result = calculateByMode(mode, stdPlan, inputs)
+
+    const schedule = []
+    const pushEntry = (label, month, amount) => {
+      const amt = Number(amount) || 0
+      if (amt <= 0) return
+      schedule.push({
+        label,
+        month: Number(month) || 0,
+        amount: amt,
+        writtenAmount: convertToWords(amt, lang, { currency })
+      })
+    }
+
+    // Down payment or split first year
+    const splitY1 = !!inputs.splitFirstYearPayments
+    if (splitY1) {
+      for (const p of (inputs.firstYearPayments || [])) {
+        pushEntry(p.type === 'dp' ? 'Down Payment (Y1 split)' : 'First Year', p.month, p.amount)
+      }
+    } else {
+      // single down payment at month 0
+      pushEntry('Down Payment', 0, result.downPaymentAmount)
+    }
+
+    // Subsequent custom years (expand totals into installments)
+    const subs = inputs.subsequentYears || []
+    subs.forEach((y, idx) => {
+      let nInYear = 0
+      switch (y.frequency) {
+        case Frequencies.Monthly: nInYear = 12; break;
+        case Frequencies.Quarterly: nInYear = 4; break;
+        case Frequencies.BiAnnually: nInYear = 2; break;
+        case Frequencies.Annually: nInYear = 1; break;
+        default: nInYear = 0;
+      }
+      const per = (Number(y.totalNominal) || 0) / (nInYear || 1)
+      // determine absolute year number
+      const startAfterYear = (splitY1 ? 1 : 0) + idx
+      const months = getPaymentMonths(nInYear, y.frequency, startAfterYear)
+      months.forEach((m, i) => pushEntry(`Year ${startAfterYear + 1} (${y.frequency})`, m, per))
+    })
+
+    // Additional handover
+    if ((Number(inputs.additionalHandoverPayment) || 0) > 0 && (Number(inputs.handoverYear) || 0) > 0) {
+      pushEntry('Handover', Number(inputs.handoverYear) * 12, inputs.additionalHandoverPayment)
+    }
+
+    // Equal installments
+    const eqMonths = result.equalInstallmentMonths || []
+    const eqAmt = Number(result.equalInstallmentAmount) || 0
+    eqMonths.forEach((m, i) => pushEntry('Equal Installment', m, eqAmt))
+
+    // Sort by month then by label for consistency
+    schedule.sort((a, b) => (a.month - b.month) || a.label.localeCompare(b.label))
+
+    const totals = {
+      count: schedule.length,
+      totalNominal: schedule.reduce((s, e) => s + e.amount, 0)
+    }
+
+    return res.json({ ok: true, schedule, totals, meta: result.meta || {} })
+  } catch (err) {
+    console.error('POST /api/generate-plan error:', err)
+    return bad(res, 500, 'Internal error during plan generation')
   }
 })
 
