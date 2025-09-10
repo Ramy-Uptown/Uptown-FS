@@ -131,6 +131,10 @@ export default function App() {
   const [genError, setGenError] = useState('')
   const [genResult, setGenResult] = useState(null)
 
+  // Document generation state
+  const [docLoading, setDocLoading] = useState(false)
+  const [docError, setDocError] = useState('')
+
   // Load persisted state
   useEffect(() => {
     try {
@@ -321,7 +325,7 @@ export default function App() {
     ]
     const csv = rows.map(r => r.map(cell => {
       const s = String(cell ?? '')
-      if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+      if (/[\",\n]/.test(s)) return `\"${s.replace(/\"/g, '\"\"')}\"`
       return s
     }).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -334,6 +338,77 @@ export default function App() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+  }
+
+  // Build document generation body (includes calculator inputs + plan if available)
+  function buildDocumentBody(documentType) {
+    const { valid, payload } = validateForm()
+    // Even if not valid, we still send what we have; but generally require valid to ensure server accepts
+    const body = {
+      documentType,
+      language,
+      currency,
+      ...payload,
+    }
+    // Attach generated plan if available so server can reuse without recalculation (optional)
+    if (genResult?.schedule?.length) {
+      body.generatedPlan = {
+        schedule: genResult.schedule,
+        totals: genResult.totals,
+        meta: genResult.meta || {}
+      }
+    }
+    return { valid, body }
+  }
+
+  async function generateDocument(documentType) {
+    const { valid, body } = buildDocumentBody(documentType)
+    if (!valid) {
+      setDocError('Please fix validation errors before generating the document.')
+      return
+    }
+    setDocLoading(true)
+    setDocError('')
+    try {
+      const resp = await fetch(`${API_URL}/api/generate-document`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      if (!resp.ok) {
+        // Try to parse JSON error
+        let errMsg = 'Failed to generate document'
+        try {
+          const j = await resp.json()
+          errMsg = j?.error?.message || errMsg
+        } catch {}
+        throw new Error(errMsg)
+      }
+      // Expect a file (pdf/docx). Get filename from Content-Disposition if available.
+      const blob = await resp.blob()
+      const cd = resp.headers.get('Content-Disposition') || ''
+      const match = /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i.exec(cd)
+      let filename = ''
+      if (match) {
+        filename = decodeURIComponent(match[1] || match[2] || '')
+      }
+      if (!filename) {
+        const ts = new Date().toISOString().replace(/[:.]/g, '-')
+        filename = `${documentType}_${ts}.pdf`
+      }
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setDocError(e.message || String(e))
+    } finally {
+      setDocLoading(false)
+    }
   }
 
   function exportScheduleXLSX() {
@@ -620,7 +695,23 @@ export default function App() {
         <section style={styles.section}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={styles.sectionTitle}>Payment Schedule</h2>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => generateDocument('pricing_form')}
+                disabled={docLoading}
+                style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
+              >
+                {docLoading ? 'Generating…' : 'Generate Pricing Form'}
+              </button>
+              <button
+                type="button"
+                onClick={() => generateDocument('contract')}
+                disabled={docLoading}
+                style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
+              >
+                {docLoading ? 'Generating…' : 'Generate Contract'}
+              </button>
               <button type="button" onClick={exportScheduleXLSX} disabled={!schedule.length} style={styles.btn}>
                 Export to Excel (.xlsx)
               </button>
@@ -630,6 +721,7 @@ export default function App() {
             </div>
           </div>
           {genError ? <p style={styles.error}>{genError}</p> : null}
+          {docError ? <p style={styles.error}>{docError}</p> : null}
           {schedule.length === 0 ? (
             <p style={styles.metaText}>No schedule yet. Fill the form and click "Calculate (Generate Plan)".</p>
           ) : (
