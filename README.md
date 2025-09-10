@@ -10,7 +10,11 @@ Stack
 - Orchestration: docker-compose.yml
 
 Quick start
-1) Build and start
+1) Create env file (first time only)
+   copy .env.example .env   # Windows PowerShell: cp .env.example .env
+   # You can edit ADMIN_EMAIL/ADMIN_PASSWORD if you like. Defaults are safe for dev.
+
+2) Build and start
    docker compose up --build
 
 2) Access
