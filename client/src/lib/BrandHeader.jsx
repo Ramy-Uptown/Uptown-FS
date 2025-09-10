@@ -7,15 +7,19 @@ const BRAND = {
 
 /**
  * BrandHeader will auto-detect a logo dropped into:
- *  - /branding/logo.svg
- *  - /branding/logo.png
- *  - /branding/logo.jpg
- * (served by Vite from client/public/branding/*)
+ *  - /logo/logo.svg (preferred)
+ *  - /logo/logo.png
+ *  - /logo/logo.jpg
+ * (served by Vite from client/public/logo/*)
+ *
+ * Backwards/alternate support:
+ *  - /branding/logo.(svg|png|jpg)
  *
  * Order of precedence:
- *  1) File present in /branding (svg -> png -> jpg)
- *  2) VITE_COMPANY_LOGO_URL (if provided)
- *  3) Default /logo.svg committed in the repo
+ *  1) File present in /logo (svg -> png -> jpg)
+ *  2) File present in /branding (svg -> png -> jpg)
+ *  3) VITE_COMPANY_LOGO_URL (if provided)
+ *  4) Default /logo.svg committed in the repo
  */
 export default function BrandHeader({ title, onLogout }) {
   const appTitle = title || (import.meta.env.VITE_APP_TITLE || 'Uptown Financial System')
@@ -25,6 +29,9 @@ export default function BrandHeader({ title, onLogout }) {
   useEffect(() => {
     let mounted = true
     const candidates = [
+      '/logo/logo.svg',
+      '/logo/logo.png',
+      '/logo/logo.jpg',
       '/branding/logo.svg',
       '/branding/logo.png',
       '/branding/logo.jpg',

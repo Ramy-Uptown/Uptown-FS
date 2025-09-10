@@ -136,10 +136,12 @@ Run tests (API)
 
 Branding (Logo and App Title)
 - Default logo path (committed): client/public/logo.svg (served at /logo.svg)
-- Drop your own logo into GitHub here and it will appear automatically:
-  client/public/branding/
+- Drop your own company logo into GitHub here and it will appear automatically:
+  client/public/logo/
   Supported filenames (in order): logo.svg, logo.png, logo.jpg
-  The app will auto-detect the first available at runtime.
+  The app will auto-detect the first available at runtime in this folder.
+- Alternate legacy path also supported:
+  client/public/branding/ (same filenames as above)
 - Optional override:
   Set VITE_COMPANY_LOGO_URL for a custom absolute/relative URL.
 - App title override:
