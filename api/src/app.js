@@ -28,7 +28,7 @@ app.use(express.json())
 // Auth routes
 app.use('/api/auth', authRoutes)
 
-// Public health endpoint
+// Health endpoint (now protected by middleware below)
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -37,10 +37,10 @@ app.get('/api/health', (req, res) => {
   })
 })
 
-// Enforce auth on all other /api routes
+// Enforce auth on all /api routes except /api/auth/*
 import { authMiddleware } from './authRoutes.js'
 app.use((req, res, next) => {
-  if (req.path.startsWith('/api/auth') || req.path === '/api/health') return next()
+  if (req.path.startsWith('/api/auth')) return next()
   if (req.path.startsWith('/api/')) return authMiddleware(req, res, next)
   return next()
 })

@@ -155,8 +155,9 @@ router.post('/request-password-reset', async (req, res) => {
       'INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)',
       [token, userId, expiresAt]
     )
-    // In a real app, send token via email. For development, return it.
-    return res.json({ ok: true, token, expiresAt })
+    // In production, send token via email. For development, log it to server console.
+    console.log('[password reset] token for', normalizedEmail, token, 'expiresAt:', expiresAt.toISOString())
+    return res.json({ ok: true })
   } catch (e) {
     console.error('POST /api/auth/request-password-reset error:', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
