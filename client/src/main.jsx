@@ -5,6 +5,7 @@ import App from './App.jsx'
 import Login from './Login.jsx'
 import DealsApp from './deals/App.jsx'
 import Users from './admin/Users.jsx'
+import Units from './admin/Units.jsx'
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('auth_token')
@@ -54,6 +55,14 @@ createRoot(document.getElementById('root')).render(
           element={
             <AdminRoute>
               <Users />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/units"
+          element={
+            <AdminRoute>
+              <Units />
             </AdminRoute>
           }
         />

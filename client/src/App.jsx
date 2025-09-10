@@ -148,6 +148,7 @@ export default function App(props) {
   const [unitInfo, setUnitInfo] = useState({
     unit_type: '',
     unit_code: '',
+    description: '',
     unit_number: '',
     floor: '',
     building_number: '',
@@ -155,6 +156,8 @@ export default function App(props) {
     zone: '',
     garden_details: ''
   })
+  const [unitsCatalog, setUnitsCatalog] = useState([])
+  const [selectedUnitId, setSelectedUnitId] = useState('')
   const [contractInfo, setContractInfo] = useState({
     reservation_form_date: '',
     contract_date: '',
@@ -203,6 +206,18 @@ export default function App(props) {
         }
       }
     } catch {}
+  }, [])
+
+  // Load units catalog (first 100)
+  useEffect(() => {
+    async function loadUnits() {
+      try {
+        const resp = await fetchWithAuth(`${API_URL}/api/units?page=1&pageSize=100`)
+        const data = await resp.json()
+        if (resp.ok) setUnitsCatalog(data.units || [])
+      } catch {}
+    }
+    loadUnits()
   }, [])
 
   // Persist on change
@@ -913,12 +928,46 @@ export default function App(props) {
           <h2 style={styles.sectionTitle}>Unit & Project Information</h2>
           <div style={styles.grid2}>
             <div>
+              <label style={styles.label}>Unit Catalog</label>
+              <select
+                style={styles.select()}
+                value={selectedUnitId}
+                onChange={(e) => {
+                  const id = e.target.value
+                  setSelectedUnitId(id)
+                  const u = unitsCatalog.find(x => String(x.id) === String(id))
+                  if (u) {
+                    setStdPlan(s => ({ ...s, totalPrice: Number(u.base_price) || s.totalPrice }))
+                    setCurrency(u.currency || 'EGP')
+                    setUnitInfo(s => ({
+                      ...s,
+                      unit_type: u.unit_type || s.unit_type,
+                      unit_code: u.code || s.unit_code,
+                      description: u.description || s.description
+                    }))
+                  }
+                }}
+              >
+                <option value="">-- Select a unit --</option>
+                {unitsCatalog.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.code} — {u.description || ''} ({u.currency} {Number(u.base_price || 0).toLocaleString()})
+                  </option>
+                ))}
+              </select>
+              <small style={styles.metaText}>Choosing a unit will set the Std Total Price, currency, and description.</small>
+            </div>
+            <div>
               <label style={styles.label}>Unit Type (<<نوع الوحدة>>)</label>
               <input style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
             </div>
             <div>
               <label style={styles.label}>Unit Code (<<كود الوحدة>>)</label>
               <input style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Unit Description</label>
+              <input style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
             </div>
             <div>
               <label style={styles.label}>Unit Number (<<وحدة رقم>>)</label>
