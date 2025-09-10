@@ -81,6 +81,18 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- Units catalog
+    CREATE TABLE IF NOT EXISTS units (
+      id SERIAL PRIMARY KEY,
+      code TEXT UNIQUE NOT NULL,
+      description TEXT,
+      unit_type TEXT,
+      base_price NUMERIC(18,2) NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'EGP',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE OR REPLACE FUNCTION trigger_set_timestamp()
     RETURNS TRIGGER AS $
     BEGIN
@@ -105,6 +117,15 @@ export async function initDb() {
       ) THEN
         CREATE TRIGGER set_timestamp_deals
         BEFORE UPDATE ON deals
+        FOR EACH ROW
+        EXECUTE PROCEDURE trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_units'
+      ) THEN
+        CREATE TRIGGER set_timestamp_units
+        BEFORE UPDATE ON units
         FOR EACH ROW
         EXECUTE PROCEDURE trigger_set_timestamp();
       END IF;

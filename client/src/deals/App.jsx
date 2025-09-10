@@ -28,7 +28,10 @@ function RoleAwareNav() {
         <Link to="/deals/approvals" style={linkStyle('/deals/approvals')}>Approvals</Link>
       )}
       {(role === 'admin') && (
-        <Link to="/admin/users" style={linkStyle('/admin/users')}>Users</Link>
+        <>
+          <Link to="/admin/users" style={linkStyle('/admin/users')}>Users</Link>
+          <Link to="/admin/units" style={linkStyle('/admin/units')}>Units</Link>
+        </>
       )}
       <Link to="/calculator" style={linkStyle('/calculator')}>Calculator</Link>
     </div>

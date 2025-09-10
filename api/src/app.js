@@ -14,6 +14,7 @@ import convertToWords from '../utils/converter.js'
 import { createRequire } from 'module'
 import authRoutes from './authRoutes.js'
 import dealsRoutes from './dealsRoutes.js'
+import unitsRoutes from './unitsRoutes.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -29,6 +30,7 @@ app.use(express.json())
 // Auth routes
 app.use('/api/auth', authRoutes)
 app.use('/api/deals', dealsRoutes)
+app.use('/api/units', unitsRoutes)
 
 // Health endpoint (now protected by middleware below)
 app.get('/api/health', (req, res) => {
