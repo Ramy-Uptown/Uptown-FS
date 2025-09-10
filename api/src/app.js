@@ -11,6 +11,10 @@ import {
   getPaymentMonths
 } from '../services/calculationService.js'
 import convertToWords from '../utils/converter.js'
+import { createRequire } from 'module'
+
+const require = createRequire(import.meta.url)
+const libre = require('libreoffice-convert')
 
 const app = express()
 
@@ -269,7 +273,7 @@ app.post('/api/generate-plan', (req, res) => {
  * - Placeholders in the .docx should use Autocrat-style delimiters: <<placeholder_name>>
  * - Service will also add *_words fields for numeric values in data using the requested language
  */
-app.post('/api/generate-document', (req, res) => {
+app.post('/api/generate-document', async (req, res) => {
   try {
     const { templateName, data, language, currency } = req.body || {}
 
@@ -320,12 +324,25 @@ app.post('/api/generate-document', (req, res) => {
       return bad(res, 400, 'Failed to render document. Check placeholders and provided data.')
     }
 
-    const buf = doc.getZip().generate({ type: 'nodebuffer' })
-    const outName = path.basename(templateName, path.extname(templateName)) + '-filled.docx'
+    const docxBuffer = doc.getZip().generate({ type: 'nodebuffer' })
+    // Convert the filled DOCX to PDF
+    let pdfBuffer
+    try {
+      pdfBuffer = await new Promise((resolve, reject) => {
+        libre.convert(docxBuffer, '.pdf', undefined, (err, done) => {
+          if (err) return reject(err)
+          resolve(done)
+        })
+      })
+    } catch (convErr) {
+      console.error('DOCX -> PDF conversion error:', convErr)
+      return bad(res, 500, 'Failed to convert DOCX to PDF')
+    }
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    const outName = path.basename(templateName, path.extname(templateName)) + '-filled.pdf'
+    res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename="${outName}"`)
-    return res.send(buf)
+    return res.send(pdfBuffer)
   } catch (err) {
     console.error('POST /api/generate-document error:', err)
     return bad(res, 500, 'Internal error during document generation')

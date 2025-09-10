@@ -15,7 +15,8 @@
     "express": "^4.19.2",
     "number-to-words": "^1.2.4",
     "docxtemplater": "^3.45.3",
-    "pizzip": "^3.1.7"
+    "pizzip": "^3.1.7",
+    "libreoffice-convert": "^1.7.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4",
