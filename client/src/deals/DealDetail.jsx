@@ -18,11 +18,10 @@ export default function DealDetail() {
   async function load() {
     try {
       setError('')
-      // Load all deals and pick one quickly (no GET /api/deals/:id endpoint)
-      const dealsResp = await fetchWithAuth(`${API_URL}/api/deals`)
-      const dealsData = await dealsResp.json()
-      if (!dealsResp.ok) throw new Error(dealsData?.error?.message || 'Failed to load deal')
-      const d = (dealsData.deals || []).find(x => String(x.id) === String(id))
+      const dealResp = await fetchWithAuth(`${API_URL}/api/deals/${id}`)
+      const dealData = await dealResp.json()
+      if (!dealResp.ok) throw new Error(dealData?.error?.message || 'Failed to load deal')
+      const d = dealData.deal
       setDeal(d || null)
       if (d) {
         setTitle(d.title || '')

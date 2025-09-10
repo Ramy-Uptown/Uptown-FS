@@ -4,12 +4,26 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import App from './App.jsx'
 import Login from './Login.jsx'
 import DealsApp from './deals/App.jsx'
+import Users from './admin/Users.jsx'
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('auth_token')
   const location = useLocation()
   if (!token) {
     return <Navigate to="/login" replace state={{ from: location }} />
+  }
+  return children
+}
+
+function AdminRoute({ children }) {
+  const token = localStorage.getItem('auth_token')
+  const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
+  const location = useLocation()
+  if (!token) {
+    return <Navigate to="/login" replace state={{ from: location }} />
+  }
+  if (user?.role !== 'admin') {
+    return <Navigate to="/deals" replace />
   }
   return children
 }
@@ -33,6 +47,14 @@ createRoot(document.getElementById('root')).render(
             <PrivateRoute>
               <DealsApp />
             </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <AdminRoute>
+              <Users />
+            </AdminRoute>
           }
         />
         <Route path="/" element={<Navigate to="/deals" replace />} />

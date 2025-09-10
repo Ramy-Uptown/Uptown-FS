@@ -15,15 +15,63 @@ async function logHistory(dealId, userId, action, notes = null) {
   )
 }
 
-// List deals (current user sees all for now; could filter by role/ownership if needed)
+// List deals with optional filtering and pagination
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const rows = await pool.query(
-      'SELECT d.*, u.email as created_by_email FROM deals d LEFT JOIN users u ON u.id = d.created_by ORDER BY d.id DESC'
-    )
-    return res.json({ ok: true, deals: rows.rows })
+    const { status, search } = req.query
+    const page = Math.max(1, parseInt(req.query.page || '1', 10))
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize || '20', 10)))
+    const offset = (page - 1) * pageSize
+
+    const where = []
+    const params = []
+    if (status && typeof status === 'string') {
+      params.push(status)
+      where.push(`d.status = ${params.length}`)
+    }
+    if (search && typeof search === 'string' && search.trim()) {
+      params.push(`%${search.trim().toLowerCase()}%`)
+      where.push(`(LOWER(d.title) LIKE ${params.length})`)
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+    const countSql = `SELECT COUNT(*)::int AS c FROM deals d ${whereSql}`
+    const countRes = await pool.query(countSql, params)
+    const total = countRes.rows[0]?.c || 0
+
+    params.push(pageSize)
+    params.push(offset)
+    const listSql = `
+      SELECT d.*, u.email as created_by_email
+      FROM deals d
+      LEFT JOIN users u ON u.id = d.created_by
+      ${whereSql}
+      ORDER BY d.id DESC
+      LIMIT ${params.length - 1} OFFSET ${params.length}
+    `
+    const rows = await pool.query(listSql, params)
+
+    return res.json({ ok: true, deals: rows.rows, pagination: { page, pageSize, total } })
   } catch (e) {
     console.error('GET /api/deals error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Get single deal by id
+router.get('/:id', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const q = await pool.query(
+      `SELECT d.*, u.email as created_by_email
+       FROM deals d LEFT JOIN users u ON u.id = d.created_by
+       WHERE d.id=$1`,
+      [id]
+    )
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+    return res.json({ ok: true, deal: q.rows[0] })
+  } catch (e) {
+    console.error('GET /api/deals/:id error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
   }
 })

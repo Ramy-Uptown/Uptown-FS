@@ -5,25 +5,70 @@ import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 export default function Dashboard() {
   const [deals, setDeals] = useState([])
   const [error, setError] = useState('')
+  const [status, setStatus] = useState('')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+
+  async function load(p = page) {
+    try {
+      setLoading(true)
+      setError('')
+      const q = new URLSearchParams()
+      if (status) q.set('status', status)
+      if (search) q.set('search', search)
+      q.set('page', String(p))
+      q.set('pageSize', String(pageSize))
+      const resp = await fetchWithAuth(`${API_URL}/api/deals?${q.toString()}`)
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load deals')
+      setDeals(data.deals || [])
+      setTotal(data.pagination?.total || 0)
+    } catch (e) {
+      setError(e.message || String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    async function load() {
-      try {
-        setError('')
-        const resp = await fetchWithAuth(`${API_URL}/api/deals`)
-        const data = await resp.json()
-        if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load deals')
-        setDeals(data.deals || [])
-      } catch (e) {
-        setError(e.message || String(e))
-      }
-    }
-    load()
-  }, [])
+    load(1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, search, pageSize])
+
+  useEffect(() => {
+    load(page)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page])
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
     <div>
       <h2 style={{ marginTop: 0 }}>All Deals</h2>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }} style={ctrl}>
+          <option value="">All statuses</option>
+          <option value="draft">draft</option>
+          <option value="pending_approval">pending_approval</option>
+          <option value="approved">approved</option>
+          <option value="rejected">rejected</option>
+        </select>
+        <input
+          placeholder="Search title…"
+          value={search}
+          onChange={e => { setSearch(e.target.value); setPage(1) }}
+          style={ctrl}
+        />
+        <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }} style={ctrl}>
+          <option value={10}>10</option>
+          <option value={20}>20</option>
+          <option value={50}>50</option>
+        </select>
+        <button onClick={() => load(1)} disabled={loading} style={btn}>Refresh</button>
+      </div>
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
       <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -52,13 +97,24 @@ export default function Dashboard() {
                 </td>
               </tr>
             ))}
-            {deals.length === 0 && (
+            {deals.length === 0 && !loading && (
               <tr>
-                <td style={td} colSpan={7}>No deals yet.</td>
+                <td style={td} colSpan={7}>No deals match your criteria.</td>
               </tr>
             )}
           </tbody>
         </table>
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+        <span style={{ color: '#64748b', fontSize: 12 }}>
+          Page {page} of {totalPages} — {total} total
+        </span>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => setPage(1)} disabled={page === 1} style={btn}>First</button>
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btn}>Prev</button>
+          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={btn}>Next</button>
+          <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={btn}>Last</button>
+        </div>
       </div>
     </div>
   )
@@ -66,3 +122,5 @@ export default function Dashboard() {
 
 const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
 const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
+const ctrl = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6' }
+const btn = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
