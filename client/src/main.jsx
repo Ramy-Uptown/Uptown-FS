@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import App from './App.jsx'
 import Login from './Login.jsx'
+import DealsApp from './deals/App.jsx'
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('auth_token')
@@ -19,13 +20,23 @@ createRoot(document.getElementById('root')).render(
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
-          path="/*"
+          path="/calculator"
           element={
             <PrivateRoute>
               <App />
             </PrivateRoute>
           }
         />
+        <Route
+          path="/deals/*"
+          element={
+            <PrivateRoute>
+              <DealsApp />
+            </PrivateRoute>
+          }
+        />
+        <Route path="/" element={<Navigate to="/deals" replace />} />
+        <Route path="*" element={<Navigate to="/deals" replace />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
