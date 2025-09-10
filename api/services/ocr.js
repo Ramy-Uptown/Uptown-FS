@@ -4,34 +4,42 @@ import fetch from 'node-fetch'
 import Tesseract from 'tesseract.js'
 
 /**
- * Attempt cloud OCR first (Google Cloud Vision via API key), then fallback to local Tesseract.
- * Supported env:
- * - GCV_API_KEY: if present, uses Google Cloud Vision "textDetection" REST API
+ * Attempt local OCR first (Tesseract). If it doesn't yield usable data,
+ * fall back to cloud OCR (Google Cloud Vision) when GCV_API_KEY is set.
+ * "Usable data" = non-empty text that parses into at least one of:
+ *  - nationalId (14-digit), name, or address.
  */
 export async function extractTextWithFallback(imagePath) {
   const errors = []
-  // 1) Try Google Cloud Vision via REST if API key is present
+
+  // 1) Try Tesseract.js local OCR first
+  try {
+    const text = await extractWithTesseract(imagePath)
+    const parsed = parseEgyptianIdText(text || '')
+    const hasUsable =
+      (text && text.trim().length > 0) &&
+      (parsed?.nationalId || (parsed?.name && parsed.name.trim()) || (parsed?.address && parsed.address.trim()))
+    if (hasUsable) {
+      return { text, engine: 'tesseract' }
+    } else {
+      errors.push({ engine: 'tesseract', error: 'No required fields parsed from local OCR' })
+    }
+  } catch (e) {
+    errors.push({ engine: 'tesseract', error: String(e?.message || e) })
+  }
+
+  // 2) Fall back to Google Cloud Vision via REST if API key is present
   const apiKey = process.env.GCV_API_KEY
   if (apiKey) {
     try {
       const text = await extractWithGoogleVision(apiKey, imagePath)
-      if (text && text.trim()) {
-        return { text, engine: 'google_vision' }
-      }
+      return { text, engine: 'google_vision' }
     } catch (e) {
       errors.push({ engine: 'google_vision', error: String(e?.message || e) })
     }
   }
 
-  // 2) Fallback to Tesseract.js local OCR
-  try {
-    const text = await extractWithTesseract(imagePath)
-    return { text, engine: 'tesseract' }
-  } catch (e) {
-    errors.push({ engine: 'tesseract', error: String(e?.message || e) })
-  }
-
-  const err = new Error('All OCR engines failed')
+  const err = new Error('All OCR engines failed or produced unusable data')
   err.details = errors
   throw err
 }
