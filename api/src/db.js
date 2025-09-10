@@ -47,6 +47,26 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS deals (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+      details JSONB DEFAULT '{}'::jsonb,
+      status TEXT NOT NULL DEFAULT 'draft', -- draft | pending_approval | approved | rejected
+      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS deal_history (
+      id SERIAL PRIMARY KEY,
+      deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+      action TEXT NOT NULL, -- create | submit | approve | reject | modify
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE OR REPLACE FUNCTION trigger_set_timestamp()
     RETURNS TRIGGER AS $
     BEGIN
@@ -62,6 +82,15 @@ export async function initDb() {
       ) THEN
         CREATE TRIGGER set_timestamp_users
         BEFORE UPDATE ON users
+        FOR EACH ROW
+        EXECUTE PROCEDURE trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_deals'
+      ) THEN
+        CREATE TRIGGER set_timestamp_deals
+        BEFORE UPDATE ON deals
         FOR EACH ROW
         EXECUTE PROCEDURE trigger_set_timestamp();
       END IF;
