@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 const LS_KEY = 'uptown_calc_form_state_v2'
@@ -335,6 +336,36 @@ export default function App() {
     URL.revokeObjectURL(url)
   }
 
+  function exportScheduleXLSX() {
+    if (!genResult?.schedule?.length) return
+    const aoa = [
+      ['#', 'Month', 'Label', 'Amount', 'Written Amount'],
+      ...genResult.schedule.map((row, i) => ([
+        i + 1,
+        row.month,
+        row.label,
+        Number(row.amount || 0).toFixed(2),
+        row.writtenAmount
+      ]))
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    // Column widths for readability
+    ws['!cols'] = [{ wch: 6 }, { wch: 10 }, { wch: 28 }, { wch: 16 }, { wch: 50 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Schedule')
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+    a.download = `payment_schedule_${ts}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   // Computed summaries (from preview)
   const summaries = useMemo(() => {
     if (!preview) return null
@@ -590,6 +621,9 @@ export default function App() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={styles.sectionTitle}>Payment Schedule</h2>
             <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={exportScheduleXLSX} disabled={!schedule.length} style={styles.btn}>
+                Export to Excel (.xlsx)
+              </button>
               <button type="button" onClick={exportScheduleCSV} disabled={!schedule.length} style={styles.btn}>
                 Export to CSV
               </button>
