@@ -28,12 +28,21 @@ app.use(express.json())
 // Auth routes
 app.use('/api/auth', authRoutes)
 
+// Public health endpoint
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     uptime: process.uptime(),
     timestamp: new Date().toISOString()
   })
+})
+
+// Enforce auth on all other /api routes
+import { authMiddleware } from './authRoutes.js'
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/auth') || req.path === '/api/health') return next()
+  if (req.path.startsWith('/api/')) return authMiddleware(req, res, next)
+  return next()
 })
 
 app.get('/api/message', (req, res) => {

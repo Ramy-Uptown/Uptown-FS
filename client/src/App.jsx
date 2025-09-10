@@ -213,9 +213,10 @@ export default function App() {
   useEffect(() => {
     async function load() {
       try {
+        const token = localStorage.getItem('auth_token') || ''
         const [healthRes, msgRes] = await Promise.all([
           fetch(`${API_URL}/api/health`).then(r => r.json()),
-          fetch(`${API_URL}/api/message`).then(r => r.json())
+          fetch(`${API_URL}/api/message`, { headers: token ? { Authorization: `Bearer ${token}` } : {} }).then(r => r.json())
         ])
         setHealth(healthRes)
         setMessage(msgRes.message)
@@ -310,11 +311,13 @@ export default function App() {
       }
       try {
         setPreviewError('')
+        const token = localStorage.getItem('auth_token') || ''
         const resp = await fetch(`${API_URL}/api/calculate`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify(payload)
-        })
+        new}</)
+      })
         const data = await resp.json()
         if (!resp.ok) {
           setPreview(null)
@@ -343,9 +346,10 @@ export default function App() {
     setGenResult(null)
     try {
       const body = { ...payload, language, currency }
+      const token = localStorage.getItem('auth_token') || ''
       const resp = await fetch(`${API_URL}/api/generate-plan`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(body)
       })
       const data = await resp.json()
@@ -419,11 +423,13 @@ export default function App() {
     setDocLoading(true)
     setDocError('')
     try {
+      const token = localStorage.getItem('auth_token') || ''
       const resp = await fetch(`${API_URL}/api/generate-document`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(body)
-      })
+    _code  new}</)
+ })
       if (!resp.ok) {
         // Try to parse JSON error
         let errMsg = 'Failed to generate document'
@@ -590,7 +596,23 @@ export default function App() {
           </div>
           <button
             type="button"
-            onClick={() => { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_user'); window.location.href = '/login' }}
+            onClick={async () => {
+              try {
+                const rt = localStorage.getItem('refresh_token')
+                if (rt) {
+                  await fetch(`${API_URL}/api/auth/logout`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken: rt })
+                  }).catch(() => {})
+                }
+              } finally {
+                localStorage.removeItem('auth_token')
+                localStorage.removeItem('refresh_token')
+                localStorage.removeItem('auth_user')
+                window.location.href = '/login'
+              }
+            }}
             style={styles.btn}
           >
             Logout

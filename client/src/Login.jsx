@@ -22,7 +22,10 @@ export default function Login() {
       if (!resp.ok) {
         throw new Error(data?.error?.message || 'Login failed')
       }
-      localStorage.setItem('auth_token', data.token)
+      const access = data.accessToken || data.token
+      if (!access) throw new Error('No access token in response')
+      localStorage.setItem('auth_token', access)
+      if (data.refreshToken) localStorage.setItem('refresh_token', data.refreshToken)
       localStorage.setItem('auth_user', JSON.stringify(data.user))
       window.location.href = '/'
     } catch (e) {

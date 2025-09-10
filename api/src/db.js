@@ -1,11 +1,14 @@
 import pg from 'pg'
+import bcrypt from 'bcryptjs'
 
 const {
   DB_HOST = 'localhost',
   DB_PORT = '5432',
   DB_USER = 'appuser',
   DB_PASSWORD = 'apppass',
-  DB_NAME = 'appdb'
+  DB_NAME = 'appdb',
+  ADMIN_EMAIL = 'admin@example.com',
+  ADMIN_PASSWORD = 'admin123456'
 } = process.env
 
 export const pool = new pg.Pool({
@@ -18,7 +21,7 @@ export const pool = new pg.Pool({
 })
 
 export async function initDb() {
-  // Create users table if it doesn't exist
+  // Schema setup
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -28,15 +31,31 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      token TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      token TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE OR REPLACE FUNCTION trigger_set_timestamp()
-    RETURNS TRIGGER AS $$
+    RETURNS TRIGGER AS $
     BEGIN
       NEW.updated_at = NOW();
       RETURN NEW;
     END;
-    $$ LANGUAGE plpgsql;
+    $ LANGUAGE plpgsql;
 
-    DO $$
+    DO $
     BEGIN
       IF NOT EXISTS (
         SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_users'
@@ -47,6 +66,19 @@ export async function initDb() {
         EXECUTE PROCEDURE trigger_set_timestamp();
       END IF;
     END;
-    $$;
+    $;
   `)
+
+  // Seed initial admin if table empty
+  const count = await pool.query('SELECT COUNT(*)::int AS c FROM users')
+  if ((count.rows[0]?.c || 0) === 0) {
+    const email = String(ADMIN_EMAIL || '').trim().toLowerCase()
+    const pass = String(ADMIN_PASSWORD || 'admin123456')
+    const hash = await bcrypt.hash(pass, 10)
+    await pool.query(
+      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3)',
+      [email || 'admin@example.com', hash, 'admin']
+    )
+    console.log(`Seeded initial admin user: ${email || 'admin@example.com'}`)
+  }
 }
