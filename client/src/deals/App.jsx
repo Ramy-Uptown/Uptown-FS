@@ -31,6 +31,9 @@ function RoleAwareNav() {
         <>
           <Link to="/admin/users" style={linkStyle('/admin/users')}>Users</Link>
           <Link to="/admin/units" style={linkStyle('/admin/units')}>Units</Link>
+          <Link to="/admin/sales" style={linkStyle('/admin/sales')}>Sales Team</Link>
+          <Link to="/admin/commission-policies" style={linkStyle('/admin/commission-policies')}>Commission Policies</Link>
+          <Link to="/admin/commissions" style={linkStyle('/admin/commissions')}>Commissions</Link>
         </>
       )}
       <Link to="/calculator" style={linkStyle('/calculator')}>Calculator</Link>

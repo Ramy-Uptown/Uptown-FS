@@ -15,6 +15,9 @@ import { createRequire } from 'module'
 import authRoutes from './authRoutes.js'
 import dealsRoutes from './dealsRoutes.js'
 import unitsRoutes from './unitsRoutes.js'
+import salesPeopleRoutes from './salesPeopleRoutes.js'
+import commissionPoliciesRoutes from './commissionPoliciesRoutes.js'
+import commissionsRoutes from './commissionsRoutes.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -31,6 +34,9 @@ app.use(express.json())
 app.use('/api/auth', authRoutes)
 app.use('/api/deals', dealsRoutes)
 app.use('/api/units', unitsRoutes)
+app.use('/api/sales', salesPeopleRoutes)
+app.use('/api/commission-policies', commissionPoliciesRoutes)
+app.use('/api/commissions', commissionsRoutes)
 
 // Health endpoint (now protected by middleware below)
 app.get('/api/health', (req, res) => {

@@ -53,13 +53,14 @@ export async function initDb() {
       amount NUMERIC(18,2) NOT NULL DEFAULT 0,
       details JSONB DEFAULT '{}'::jsonb,
       unit_type TEXT,
+      sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       status TEXT NOT NULL DEFAULT 'draft', -- draft | pending_approval | approved | rejected
       created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
-    -- Ensure unit_type exists (for older deployments)
+    -- Ensure unit_type and sales_rep_id exist (for older deployments)
     DO $
     BEGIN
       IF NOT EXISTS (
@@ -68,6 +69,13 @@ export async function initDb() {
         WHERE table_name='deals' AND column_name='unit_type'
       ) THEN
         ALTER TABLE deals ADD COLUMN unit_type TEXT;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name='deals' AND column_name='sales_rep_id'
+      ) THEN
+        ALTER TABLE deals ADD COLUMN sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
       END IF;
     END;
     $;
@@ -79,6 +87,40 @@ export async function initDb() {
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
       notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    -- Sales commissions module
+    CREATE TABLE IF NOT EXISTS sales_people (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE,
+      role TEXT DEFAULT 'sales',
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS commission_policies (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      rules JSONB NOT NULL DEFAULT '{}'::jsonb, -- flexible rules
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS deal_commissions (
+      id SERIAL PRIMARY KEY,
+      deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+      sales_person_id INTEGER NOT NULL REFERENCES sales_people(id) ON DELETE SET NULL,
+      policy_id INTEGER REFERENCES commission_policies(id) ON DELETE SET NULL,
+      amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+      details JSONB NOT NULL DEFAULT '{}'::jsonb,
+      calculated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
     -- Units catalog
@@ -126,6 +168,33 @@ export async function initDb() {
       ) THEN
         CREATE TRIGGER set_timestamp_units
         BEFORE UPDATE ON units
+        FOR EACH ROW
+        EXECUTE PROCEDURE trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_sales_people'
+      ) THEN
+        CREATE TRIGGER set_timestamp_sales_people
+        BEFORE UPDATE ON sales_people
+        FOR EACH ROW
+        EXECUTE PROCEDURE trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_commission_policies'
+      ) THEN
+        CREATE TRIGGER set_timestamp_commission_policies
+        BEFORE UPDATE ON commission_policies
+        FOR EACH ROW
+        EXECUTE PROCEDURE trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_deal_commissions'
+      ) THEN
+        CREATE TRIGGER set_timestamp_deal_commissions
+        BEFORE UPDATE ON deal_commissions
         FOR EACH ROW
         EXECUTE PROCEDURE trigger_set_timestamp();
       END IF;

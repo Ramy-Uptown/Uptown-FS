@@ -6,6 +6,9 @@ import Login from './Login.jsx'
 import DealsApp from './deals/App.jsx'
 import Users from './admin/Users.jsx'
 import Units from './admin/Units.jsx'
+import SalesTeam from './admin/SalesTeam.jsx'
+import CommissionPolicies from './admin/CommissionPolicies.jsx'
+import CommissionsReport from './admin/CommissionsReport.jsx'
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('auth_token')
@@ -63,6 +66,30 @@ createRoot(document.getElementById('root')).render(
           element={
             <AdminRoute>
               <Units />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/sales"
+          element={
+            <AdminRoute>
+              <SalesTeam />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/commission-policies"
+          element={
+            <AdminRoute>
+              <CommissionPolicies />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/commissions"
+          element={
+            <AdminRoute>
+              <CommissionsReport />
             </AdminRoute>
           }
         />

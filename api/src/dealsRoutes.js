@@ -185,15 +185,15 @@ router.get('/:id/history', authMiddleware, async (req, res) => {
 // Create a new deal (any authenticated user)
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { title, amount, details, unitType } = req.body || {}
+    const { title, amount, details, unitType, salesRepId } = req.body || {}
     if (!title || typeof title !== 'string') {
       return res.status(400).json({ error: { message: 'title is required' } })
     }
     const amt = Number(amount || 0)
     const det = isObject(details) ? details : {}
     const result = await pool.query(
-      'INSERT INTO deals (title, amount, details, unit_type, status, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [title.trim(), isFinite(amt) ? amt : 0, det, unitType || null, 'draft', req.user.id]
+      'INSERT INTO deals (title, amount, details, unit_type, sales_rep_id, status, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [title.trim(), isFinite(amt) ? amt : 0, det, unitType || null, salesRepId || null, 'draft', req.user.id]
     )
     const deal = result.rows[0]
     await logHistory(deal.id, req.user.id, 'create', null)
@@ -208,7 +208,7 @@ router.post('/', authMiddleware, async (req, res) => {
 router.patch('/:id', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
-    const { title, amount, details, unitType } = req.body || {}
+    const { title, amount, details, unitType, salesRepId } = req.body || {}
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
     const deal = q.rows[0]
@@ -221,10 +221,11 @@ router.patch('/:id', authMiddleware, async (req, res) => {
     const newAmount = amount != null && isFinite(Number(amount)) ? Number(amount) : deal.amount
     const newDetails = isObject(details) ? details : deal.details
     const newUnitType = typeof unitType === 'string' && unitType.trim() ? unitType.trim() : deal.unit_type
+    const newSalesRepId = salesRepId !== undefined ? (salesRepId || null) : deal.sales_rep_id
 
     const upd = await pool.query(
-      'UPDATE deals SET title=$1, amount=$2, details=$3, unit_type=$4 WHERE id=$5 RETURNING *',
-      [newTitle, newAmount, newDetails, newUnitType, id]
+      'UPDATE deals SET title=$1, amount=$2, details=$3, unit_type=$4, sales_rep_id=$5 WHERE id=$6 RETURNING *',
+      [newTitle, newAmount, newDetails, newUnitType, newSalesRepId, id]
     )
     const updated = upd.rows[0]
     await logHistory(id, req.user.id, 'modify', null)

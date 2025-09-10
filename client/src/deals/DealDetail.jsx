@@ -38,6 +38,22 @@ export default function DealDetail() {
   const canEdit = deal && deal.status === 'draft' && (isOwner || role === 'admin')
   const canSubmit = deal && deal.status === 'draft' && (isOwner || role === 'admin')
 
+  const [salesList, setSalesList] = useState([])
+  const [salesError, setSalesError] = useState('')
+  useEffect(() => {
+    async function loadSales() {
+      try {
+        const resp = await fetchWithAuth(`${API_URL}/api/sales?page=1&pageSize=200`)
+        const data = await resp.json()
+        if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load sales')
+        setSalesList(data.sales || [])
+      } catch (e) {
+        setSalesError(e.message || String(e))
+      }
+    }
+    loadSales()
+  }, [])
+
   async function saveCalculator() {
     try {
       const snapFn = window.__uptown_calc_getSnapshot
@@ -300,6 +316,31 @@ export default function DealDetail() {
           <p><strong>Amount:</strong> {Number(deal.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
           <p><strong>Status:</strong> {deal.status}</p>
           <p><strong>Unit Type:</strong> {deal.unit_type || '-'}</p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+            <strong>Sales Rep:</strong>
+            <select
+              disabled={!canEdit}
+              value={deal.sales_rep_id || ''}
+              onChange={async (e) => {
+                const salesRepId = e.target.value ? Number(e.target.value) : null
+                const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ salesRepId })
+                })
+                const data = await resp.json()
+                if (!resp.ok) return alert(data?.error?.message || 'Failed to assign sales rep')
+                await load()
+              }}
+              style={{ padding: 8, borderRadius: 8, border: '1px solid #d1d9e6' }}
+            >
+              <option value="">— Unassigned —</option>
+              {salesList.map(s => (
+                <option key={s.id} value={s.id}>{s.name} {s.email ? `(${s.email})` : ''}</option>
+              ))}
+            </select>
+            {salesError ? <small style={{ color: '#e11d48' }}>{salesError}</small> : null}
+          </div>
 
           <h3>Payment Schedule</h3>
           {schedule.length === 0 ? (
@@ -376,6 +417,17 @@ export default function DealDetail() {
         <button onClick={() => generateDocFromSaved('pricing_form')} style={btn}>Generate Pricing Form (PDF)</button>
         <button onClick={() => generateDocFromSaved('contract')} style={btn}>Generate Contract (PDF)</button>
         <button onClick={generateChecksSheetFromSaved} style={btn}>Generate Checks Sheet (.xlsx)</button>
+        <button onClick={async () => {
+          if (!deal.sales_rep_id) return alert('Assign a Sales Rep first.')
+          const resp = await fetchWithAuth(`${API_URL}/api/commissions/calc-and-save`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deal_id: deal.id, sales_person_id: deal.sales_rep_id })
+          })
+          const data = await resp.json()
+          if (!resp.ok) return alert(data?.error?.message || 'Failed to calculate commission')
+          alert(`Commission calculated: ${Number(data.commission.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`)
+        }} style={btn}>Calculate Commission</button>
       </div>
 
       <h3>Audit Trail</h3>
