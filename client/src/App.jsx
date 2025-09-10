@@ -56,6 +56,17 @@ const styles = {
     fontSize: 14,
     background: '#fbfdff'
   }),
+  textarea: (err) => ({
+    padding: '10px 12px',
+    borderRadius: 10,
+    border: `1px solid ${err ? '#e11d48' : '#dfe5ee'}`,
+    outline: 'none',
+    width: '100%',
+    fontSize: 14,
+    background: '#fbfdff',
+    minHeight: 80,
+    resize: 'vertical'
+  }),
   metaText: { color: '#6b7280', fontSize: 12, marginTop: 4 },
   btn: {
     display: 'inline-flex',
@@ -121,6 +132,40 @@ export default function App() {
   const [firstYearPayments, setFirstYearPayments] = useState([])
   const [subsequentYears, setSubsequentYears] = useState([])
 
+  // New Sections state
+  const [clientInfo, setClientInfo] = useState({
+    buyer_name: '',
+    nationality: '',
+    id_or_passport: '',
+    id_issue_date: '',
+    address: '',
+    phone_primary: '',
+    phone_secondary: '',
+    email: ''
+  })
+  const [unitInfo, setUnitInfo] = useState({
+    unit_type: '',
+    unit_code: '',
+    unit_number: '',
+    floor: '',
+    building_number: '',
+    block_sector: '',
+    zone: '',
+    garden_details: ''
+  })
+  const [contractInfo, setContractInfo] = useState({
+    reservation_form_date: '',
+    contract_date: '',
+    reservation_payment_amount: '',
+    reservation_payment_date: '',
+    maintenance_fee: '',
+    delivery_period: ''
+  })
+  const [customNotes, setCustomNotes] = useState({
+    dp_explanation: '',
+    poa_clause: ''
+  })
+
   // Live preview result
   const [preview, setPreview] = useState(null)
   const [previewError, setPreviewError] = useState('')
@@ -145,6 +190,10 @@ export default function App() {
           if (saved.inputs) setInputs(saved.inputs)
           if (Array.isArray(saved.firstYearPayments)) setFirstYearPayments(saved.firstYearPayments)
           if (Array.isArray(saved.subsequentYears)) setSubsequentYears(saved.subsequentYears)
+          if (saved.clientInfo) setClientInfo(saved.clientInfo)
+          if (saved.unitInfo) setUnitInfo(saved.unitInfo)
+          if (saved.contractInfo) setContractInfo(saved.contractInfo)
+          if (saved.customNotes) setCustomNotes(saved.customNotes)
         }
       }
     } catch {}
@@ -152,9 +201,9 @@ export default function App() {
 
   // Persist on change
   useEffect(() => {
-    const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears }
+    const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes }
     localStorage.setItem(LS_KEY, JSON.stringify(snapshot))
-  }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears])
+  }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes])
 
   // Initial health check
   useEffect(() => {
@@ -388,6 +437,9 @@ export default function App() {
   const schedule = genResult?.schedule || []
   const totals = genResult?.totals || null
 
+  // helpers for controlled inputs
+  const onChange = (setter) => (e) => setter(e.target.value)
+
   return (
     <div style={styles.page}>
       <div style={styles.container}>
@@ -614,6 +666,125 @@ export default function App() {
               </button>
             </div>
           </form>
+        </section>
+
+        {/* Data Entry UI — New Sections */}
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Client Information</h2>
+          <div style={styles.grid2}>
+            <div>
+              <label style={styles.label}>Buyer Name (<<اسم المشترى>>)</label>
+              <input style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Nationality (<<الجنسية>>)</label>
+              <input style={styles.input()} value={clientInfo.nationality} onChange={e => setClientInfo(s => ({ ...s, nationality: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>National ID / Passport No. (<<رقم قومي/ رقم جواز>>)</label>
+              <input style={styles.input()} value={clientInfo.id_or_passport} onChange={e => setClientInfo(s => ({ ...s, id_or_passport: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>ID/Passport Issue Date (<< تاريخ الاصدار >>)</label>
+              <input type="date" style={styles.input()} value={clientInfo.id_issue_date} onChange={e => setClientInfo(s => ({ ...s, id_issue_date: e.target.value }))} />
+            </div>
+            <div style={styles.blockFull}>
+              <label style={styles.label}>Address (<<العنوان>>)</label>
+              <textarea style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Primary Phone No. (<<رقم الهاتف>>)</label>
+              <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Secondary Phone No. (<<رقم الهاتف (2)>>)</label>
+              <input style={styles.input()} value={clientInfo.phone_secondary} onChange={e => setClientInfo(s => ({ ...s, phone_secondary: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Email Address (<<البريد الالكتروني>>)</label>
+              <input type="email" style={styles.input()} value={clientInfo.email} onChange={e => setClientInfo(s => ({ ...s, email: e.target.value }))} />
+            </div>
+          </div>
+        </section>
+
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Unit & Project Information</h2>
+          <div style={styles.grid2}>
+            <div>
+              <label style={styles.label}>Unit Type (<<نوع الوحدة>>)</label>
+              <input style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
+            </div>
+            <div>
+              <label style={styles.label}>Unit Code (<<كود الوحدة>>)</label>
+              <input style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Unit Number (<<وحدة رقم>>)</label>
+              <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Floor (<<الدور>>)</label>
+              <input style={styles.input()} value={unitInfo.floor} onChange={e => setUnitInfo(s => ({ ...s, floor: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Building Number (<<مبنى رقم>>)</label>
+              <input style={styles.input()} value={unitInfo.building_number} onChange={e => setUnitInfo(s => ({ ...s, building_number: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Block / Sector (<<قطاع>>)</label>
+              <input style={styles.input()} value={unitInfo.block_sector} onChange={e => setUnitInfo(s => ({ ...s, block_sector: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Zone / Neighborhood (<<مجاورة>>)</label>
+              <input style={styles.input()} value={unitInfo.zone} onChange={e => setUnitInfo(s => ({ ...s, zone: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Garden Details (<<مساحة الحديقة>>)</label>
+              <input style={styles.input()} value={unitInfo.garden_details} onChange={e => setUnitInfo(s => ({ ...s, garden_details: e.target.value }))} placeholder='مثال: "و حديقة بمساحة ٥٠ م٢"' />
+            </div>
+          </div>
+        </section>
+
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Contract & Financial Details</h2>
+          <div style={styles.grid2}>
+            <div>
+              <label style={styles.label}>Reservation Form Date (<<تاريخ استمارة الحجز>>)</label>
+              <input type="date" style={styles.input()} value={contractInfo.reservation_form_date} onChange={e => setContractInfo(s => ({ ...s, reservation_form_date: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Contract Date (<<تاريخ العقد>>)</label>
+              <input type="date" style={styles.input()} value={contractInfo.contract_date} onChange={e => setContractInfo(s => ({ ...s, contract_date: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Reservation Payment Amount (<<دفعة حجز بالأرقام>>)</label>
+              <input type="number" style={styles.input()} value={contractInfo.reservation_payment_amount} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_amount: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Reservation Payment Date (<<تاريخ سداد دفعة الحجز>>)</label>
+              <input type="date" style={styles.input()} value={contractInfo.reservation_payment_date} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_date: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Maintenance Fee (<<مصاريف الصيانة بالأرقام>>)</label>
+              <input type="number" style={styles.input()} value={contractInfo.maintenance_fee} onChange={e => setContractInfo(s => ({ ...s, maintenance_fee: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Delivery Period (<<مدة التسليم>>)</label>
+              <input style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
+            </div>
+          </div>
+        </section>
+
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Custom Text Notes</h2>
+          <div>
+            <label style={styles.label}>Down Payment Explanation (<<بيان الباقي من دفعة التعاقد>>)</label>
+            <textarea style={styles.textarea()} value={customNotes.dp_explanation} onChange={e => setCustomNotes(s => ({ ...s, dp_explanation: e.target.value }))} placeholder='مثال: "يسدد الباقي على شيكين"' />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <label style={styles.label}>Power of Attorney Clause (<<بيان التوكيل>>)</label>
+            <textarea style={styles.textarea()} value={customNotes.poa_clause} onChange={e => setCustomNotes(s => ({ ...s, poa_clause: e.target.value }))} placeholder='بنود قانونية خاصة إن وجدت' />
+          </div>
         </section>
 
         {/* Results Table */}

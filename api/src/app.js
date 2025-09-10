@@ -1,5 +1,9 @@
 import express from 'express'
 import cors from 'cors'
+import fs from 'fs'
+import path from 'path'
+import PizZip from 'pizzip'
+import Docxtemplater from 'docxtemplater'
 import {
   calculateByMode,
   CalculationModes,
@@ -250,6 +254,81 @@ app.post('/api/generate-plan', (req, res) => {
   } catch (err) {
     console.error('POST /api/generate-plan error:', err)
     return bad(res, 500, 'Internal error during plan generation')
+  }
+})
+
+/**
+ * POST /api/generate-document
+ * Body: {
+ *   templateName: string,              // must exist in /api/templates
+ *   data: object,                      // flat key/value map for placeholders
+ *   language?: 'en'|'ar',              // affects *_words auto-fields using convertToWords
+ *   currency?: string                  // optional currency name/code for English words
+ * }
+ * Notes:
+ * - Placeholders in the .docx should use Autocrat-style delimiters: <<placeholder_name>>
+ * - Service will also add *_words fields for numeric values in data using the requested language
+ */
+app.post('/api/generate-document', (req, res) => {
+  try {
+    const { templateName, data, language, currency } = req.body || {}
+
+    if (!templateName || typeof templateName !== 'string') {
+      return bad(res, 400, 'templateName is required and must be a string')
+    }
+    if (!isObject(data)) {
+      return bad(res, 400, 'data must be an object with key/value pairs for placeholders')
+    }
+
+    const lang = String(language || 'en').toLowerCase().startsWith('ar') ? 'ar' : 'en'
+
+    // Resolve template path safely within /api/templates
+    const templatesDir = path.join(process.cwd(), 'api', 'templates')
+    const requestedPath = path.join(templatesDir, templateName)
+    if (!requestedPath.startsWith(templatesDir)) {
+      return bad(res, 400, 'Invalid template path')
+    }
+    if (!fs.existsSync(requestedPath)) {
+      return bad(res, 404, `Template not found: ${templateName}`)
+    }
+
+    // Build rendering data:
+    // - Original keys
+    // - For numeric fields, add "<key>_words" using the convertToWords helper
+    const renderData = { ...data }
+    for (const [k, v] of Object.entries(data)) {
+      const num = Number(v)
+      if (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && isFinite(num))) {
+        renderData[`${k}_words`] = convertToWords(num, lang, { currency })
+      }
+    }
+
+    // Read, compile and render the docx
+    const content = fs.readFileSync(requestedPath, 'binary')
+    const zip = new PizZip(content)
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      delimiters: { start: '<<', end: '>>' } // Autocrat-style placeholders
+    })
+
+    doc.setData(renderData)
+    try {
+      doc.render()
+    } catch (e) {
+      console.error('Docxtemplater render error:', e)
+      return bad(res, 400, 'Failed to render document. Check placeholders and provided data.')
+    }
+
+    const buf = doc.getZip().generate({ type: 'nodebuffer' })
+    const outName = path.basename(templateName, path.extname(templateName)) + '-filled.docx'
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    res.setHeader('Content-Disposition', `attachment; filename="${outName}"`)
+    return res.send(buf)
+  } catch (err) {
+    console.error('POST /api/generate-document error:', err)
+    return bad(res, 500, 'Internal error during document generation')
   }
 })
 
