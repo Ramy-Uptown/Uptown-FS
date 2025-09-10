@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import CalculatorApp from '../App.jsx'
+import * as XLSX from 'xlsx'
 
 export default function DealDetail() {
   const { id } = useParams()
@@ -202,6 +203,65 @@ export default function DealDetail() {
     win.document.close()
   }
 
+  function generateChecksSheetFromSaved() {
+    const snap = deal?.details?.calculator
+    const plan = snap?.generatedPlan
+    if (!plan || !Array.isArray(plan.schedule) || plan.schedule.length === 0) {
+      return alert('No saved schedule found to generate checks sheet.')
+    }
+    const buyer = snap?.clientInfo?.buyer_name || ''
+    const unit = snap?.unitInfo?.unit_code || snap?.unitInfo?.unit_number || ''
+    const curr = snap?.currency || ''
+
+    const headerRows = [
+      ['Checks Sheet'],
+      [`Buyer: ${buyer}    Unit: ${unit}    Currency: ${curr}`],
+      [],
+      ['#', 'Cheque No.', 'Date', 'Pay To', 'Amount', 'Amount in Words', 'Notes']
+    ]
+    const bodyRows = (plan.schedule || []).map((row, i) => {
+      const amount = Number(row.amount || 0)
+      const amountStr = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      return [
+        i + 1,
+        '',
+        '',
+        buyer,
+        amountStr,
+        row.writtenAmount || '',
+        `${row.label} (Month ${row.month})`
+      ]
+    })
+
+    const aoa = [...headerRows, ...bodyRows]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    ws['!cols'] = [
+      { wch: 5 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 28 },
+      { wch: 16 },
+      { wch: 60 },
+      { wch: 30 },
+    ]
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Checks')
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+    a.download = `checks_sheet_${ts}.xlsx`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -290,6 +350,7 @@ export default function DealDetail() {
         <button onClick={printSchedule} style={btn}>Print Schedule</button>
         <button onClick={() => generateDocFromSaved('pricing_form')} style={btn}>Generate Pricing Form (PDF)</button>
         <button onClick={() => generateDocFromSaved('contract')} style={btn}>Generate Contract (PDF)</button>
+        <button onClick={generateChecksSheetFromSaved} style={btn}>Generate Checks Sheet (.xlsx)</button>
       </div>
 
       <h3>Audit Trail</h3>
