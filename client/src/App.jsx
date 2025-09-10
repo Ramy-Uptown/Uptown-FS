@@ -102,7 +102,8 @@ const styles = {
   error: { color: '#e11d48' }
 }
 
-export default function App() {
+export default function App(props) {
+  const embedded = !!(props && props.embedded)
   const [message, setMessage] = useState('Loading...')
   const [health, setHealth] = useState(null)
 
@@ -209,6 +210,39 @@ export default function App() {
     const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes }
     localStorage.setItem(LS_KEY, JSON.stringify(snapshot))
   }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes])
+
+  // Expose an imperative snapshot getter for embedding contexts
+  useEffect(() => {
+    const getSnapshot = () => {
+      const base = {
+        mode,
+        language,
+        currency,
+        stdPlan,
+        inputs,
+        firstYearPayments,
+        subsequentYears,
+        clientInfo,
+        unitInfo,
+        contractInfo,
+        customNotes
+      }
+      const payload = buildPayload()
+      const out = {
+        ...base,
+        payload,
+        generatedPlan: genResult || null,
+        preview
+      }
+      return out
+    }
+    window.__uptown_calc_getSnapshot = getSnapshot
+    return () => {
+      if (window.__uptown_calc_getSnapshot === getSnapshot) {
+        delete window.__uptown_calc_getSnapshot
+      }
+    }
+  }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes, genResult, preview])
 
   // Initial health check
   useEffect(() => {
@@ -459,6 +493,7 @@ export default function App() {
     } finally {
       setDocLoading(false)
     }
+  }
 
   function exportScheduleXLSX() {
     if (!genResult?.schedule?.length) return
@@ -583,35 +618,37 @@ export default function App() {
   return (
     <div style={styles.page}>
       <div style={styles.container}>
-        <header style={{ ...styles.header, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1 style={styles.h1}>Uptown Evaluator — Payment Plan</h1>
-            <p style={styles.sub}>Create, preview, and export professional payment schedules.</p>
-          </div>
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                const rt = localStorage.getItem('refresh_token')
-                if (rt) {
-                  await fetch(`${API_URL}/api/auth/logout`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ refreshToken: rt })
-                  }).catch(() => {})
+        {!embedded && (
+          <header style={{ ...styles.header, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h1 style={styles.h1}>Uptown Evaluator — Payment Plan</h1>
+              <p style={styles.sub}>Create, preview, and export professional payment schedules.</p>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const rt = localStorage.getItem('refresh_token')
+                  if (rt) {
+                    await fetch(`${API_URL}/api/auth/logout`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ refreshToken: rt })
+                    }).catch(() => {})
+                  }
+                } finally {
+                  localStorage.removeItem('auth_token')
+                  localStorage.removeItem('refresh_token')
+                  localStorage.removeItem('auth_user')
+                  window.location.href = '/login'
                 }
-              } finally {
-                localStorage.removeItem('auth_token')
-                localStorage.removeItem('refresh_token')
-                localStorage.removeItem('auth_user')
-                window.location.href = '/login'
-              }
-            }}
-            style={styles.btn}
-          >
-            Logout
-          </button>
-        </header>
+              }}
+              style={styles.btn}
+            >
+              Logout
+            </button>
+          </header>
+        )}
 
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>API Connectivity</h2>

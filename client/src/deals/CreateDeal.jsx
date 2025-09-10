@@ -1,33 +1,43 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import CalculatorApp from '../App.jsx'
 
 export default function CreateDeal() {
-  const [title, setTitle] = useState('')
-  const [amount, setAmount] = useState('')
-  const [unitType, setUnitType] = useState('')
-  const [details, setDetails] = useState('{}')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
-  async function onSubmit(e) {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
+  async function saveAsDraft() {
     try {
-      let detailsObj = {}
-      if (details && details.trim()) {
-        try {
-          detailsObj = JSON.parse(details)
-        } catch {
-          throw new Error('Details must be valid JSON')
+      setError('')
+      setLoading(true)
+      const snapFn = window.__uptown_calc_getSnapshot
+      if (typeof snapFn !== 'function') {
+        throw new Error('Calculator not ready yet. Please try again in a moment.')
+      }
+      const snap = snapFn()
+      // Build title, amount, unit type from snapshot
+      const titleParts = []
+      if (snap?.clientInfo?.buyer_name) titleParts.push(snap.clientInfo.buyer_name)
+      if (snap?.unitInfo?.unit_code || snap?.unitInfo?.unit_number) {
+        titleParts.push(snap.unitInfo.unit_code || snap.unitInfo.unit_number)
+      }
+      const title = titleParts.join(' - ') || 'New Deal'
+      const amount = Number(snap?.generatedPlan?.totals?.totalNominal ?? snap?.stdPlan?.totalPrice ?? 0)
+      const unitType = snap?.unitInfo?.unit_type || null
+
+      // Persist entire snapshot into details
+      const details = {
+        calculator: {
+          ...snap
         }
       }
+
       const resp = await fetchWithAuth(`${API_URL}/api/deals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, amount: Number(amount) || 0, unitType: unitType || null, details: detailsObj })
+        body: JSON.stringify({ title, amount, unitType, details })
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to create deal')
@@ -41,36 +51,18 @@ export default function CreateDeal() {
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>Create Deal</h2>
-      <form onSubmit={onSubmit} style={{ maxWidth: 600, display: 'grid', gap: 12 }}>
-        <div>
-          <label style={label}>Title</label>
-          <input value={title} onChange={e => setTitle(e.target.value)} style={input} required />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <h2 style={{ marginTop: 0 }}>Create Deal</h2>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={saveAsDraft} disabled={loading} style={btnPrimary}>{loading ? 'Saving…' : 'Save as Draft'}</button>
         </div>
-        <div>
-          <label style={label}>Amount</label>
-          <input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={input} />
-        </div>
-        <div>
-          <label style={label}>Unit Type</label>
-          <input value={unitType} onChange={e => setUnitType(e.target.value)} style={input} placeholder="e.g., Apartment, Villa" />
-        </div>
-        <div>
-          <label style={label}>Details (JSON)</label>
-          <textarea value={details} onChange={e => setDetails(e.target.value)} style={textarea} rows={8} />
-        </div>
-        {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
-        <div>
-          <button type="submit" disabled={loading} style={btnPrimary}>
-            {loading ? 'Creating…' : 'Create'}
-          </button>
-        </div>
-      </form>
+      </div>
+      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+      <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
+        <CalculatorApp embedded />
+      </div>
     </div>
   )
 }
 
-const label = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }
-const input = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', width: '100%' }
-const textarea = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', width: '100%', fontFamily: 'monospace' }
 const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #1f6feb', background: '#1f6feb', color: '#fff', fontWeight: 600 }

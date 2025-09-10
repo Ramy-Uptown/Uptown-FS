@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import CalculatorApp from '../App.jsx'
 
 export default function DealDetail() {
   const { id } = useParams()
@@ -8,11 +9,7 @@ export default function DealDetail() {
   const [deal, setDeal] = useState(null)
   const [history, setHistory] = useState([])
   const [error, setError] = useState('')
-  const [edit, setEdit] = useState(false)
-  const [title, setTitle] = useState('')
-  const [amount, setAmount] = useState('')
-  const [unitType, setUnitType] = useState('')
-  const [details, setDetails] = useState('{}')
+  const [editCalc, setEditCalc] = useState(false)
   const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const role = user?.role || 'user'
 
@@ -24,12 +21,6 @@ export default function DealDetail() {
       if (!dealResp.ok) throw new Error(dealData?.error?.message || 'Failed to load deal')
       const d = dealData.deal
       setDeal(d || null)
-      if (d) {
-        setTitle(d.title || '')
-        setAmount(String(d.amount ?? ''))
-        setUnitType(d.unit_type || '')
-        setDetails(JSON.stringify(d.details || {}, null, 2))
-      }
 
       const histResp = await fetchWithAuth(`${API_URL}/api/deals/${id}/history`)
       const histData = await histResp.json()
@@ -46,43 +37,68 @@ export default function DealDetail() {
   const canEdit = deal && deal.status === 'draft' && (isOwner || role === 'admin')
   const canSubmit = deal && deal.status === 'draft' && (isOwner || role === 'admin')
 
-  async function saveChanges() {
+  async function saveCalculator() {
     try {
-      let detailsObj = {}
-      if (details && details.trim()) {
-        try {
-          detailsObj = JSON.parse(details)
-        } catch {
-          throw new Error('Details must be valid JSON')
-        }
+      const snapFn = window.__uptown_calc_getSnapshot
+      if (typeof snapFn !== 'function') {
+        throw new Error('Calculator not ready yet.')
+      }
+      const snap = snapFn()
+      const titleParts = []
+      if (snap?.clientInfo?.buyer_name) titleParts.push(snap.clientInfo.buyer_name)
+      if (snap?.unitInfo?.unit_code || snap?.unitInfo?.unit_number) {
+        titleParts.push(snap.unitInfo.unit_code || snap.unitInfo.unit_number)
+      }
+      const title = titleParts.join(' - ') || (deal?.title || 'Deal')
+      const amount = Number(snap?.generatedPlan?.totals?.totalNominal ?? snap?.stdPlan?.totalPrice ?? deal?.amount ?? 0)
+      const unitType = snap?.unitInfo?.unit_type || deal?.unit_type || null
+      const details = {
+        calculator: { ...snap }
       }
       const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, amount: Number(amount) || 0, unitType, details: detailsObj })
+        body: JSON.stringify({ title, amount, unitType, details })
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to save')
-      setEdit(false)
+      setEditCalc(false)
       await load()
     } catch (e) {
       alert(e.message || String(e))
     }
   }
 
-  async function submitForApproval() {
-    try {
-      const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/submit`, { method: 'POST' })
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Submit failed')
-      await load()
-    } catch (e) {
-      alert(e.message || String(e))
+  // When starting calculator edit, hydrate the calculator from saved details (if present)
+  useEffect(() => {
+    if (editCalc) {
+      const snap = deal?.details?.calculator
+      if (snap) {
+        try {
+          const snapshot = {
+            mode: snap.mode,
+            language: snap.language,
+            currency: snap.currency,
+            stdPlan: snap.stdPlan,
+            inputs: snap.inputs,
+            firstYearPayments: snap.firstYearPayments,
+            subsequentYears: snap.subsequentYears,
+            clientInfo: snap.clientInfo,
+            unitInfo: snap.unitInfo,
+            contractInfo: snap.contractInfo,
+            customNotes: snap.customNotes
+          }
+          localStorage.setItem('uptown_calc_form_state_v2', JSON.stringify(snapshot))
+        } catch {}
+      }
     }
-  }
+  }, [editCalc, deal])
 
   if (error) return <p style={{ color: '#e11d48' }}>{error}</p>
   if (!deal) return <p>Loading…</p>
+
+  const schedule = deal?.details?.calculator?.generatedPlan?.schedule || []
+  const totals = deal?.details?.calculator?.generatedPlan?.totals || null
 
   return (
     <div>
@@ -91,45 +107,80 @@ export default function DealDetail() {
         <button onClick={() => navigate('/deals')} style={btn}>Back to Dashboard</button>
       </div>
 
-      {!edit ? (
+      {!editCalc ? (
         <div style={{ marginBottom: 16 }}>
           <p><strong>Title:</strong> {deal.title}</p>
           <p><strong>Amount:</strong> {Number(deal.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
           <p><strong>Status:</strong> {deal.status}</p>
           <p><strong>Unit Type:</strong> {deal.unit_type || '-'}</p>
-          <p><strong>Details:</strong></p>
-          <pre style={pre}>{JSON.stringify(deal.details || {}, null, 2)}</pre>
-          <p><strong>Created By:</strong> {deal.created_by_email || deal.created_by}</p>
+
+          <h3>Payment Schedule</h3>
+          {schedule.length === 0 ? (
+            <p style={{ color: '#64748b' }}>No saved schedule. Use Edit in Calculator to generate and save one.</p>
+          ) : (
+            <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={th}>#</th>
+                    <th style={th}>Month</th>
+                    <th style={th}>Label</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Amount</th>
+                    <th style={th}>Written Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schedule.map((row, idx) => (
+                    <tr key={idx}>
+                      <td style={td}>{idx + 1}</td>
+                      <td style={td}>{row.month}</td>
+                      <td style={td}>{row.label}</td>
+                      <td style={{ ...td, textAlign: 'right' }}>{Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td style={td}>{row.writtenAmount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {totals && (
+                  <tfoot>
+                    <tr>
+                      <td colSpan={3} style={{ ...td, textAlign: 'right', fontWeight: 700 }}>Total</td>
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>
+                        {Number(totals.totalNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          )}
+
+          <p style={{ marginTop: 16 }}><strong>Created By:</strong> {deal.created_by_email || deal.created_by}</p>
           <p><strong>Created At:</strong> {deal.created_at ? new Date(deal.created_at).toLocaleString() : ''}</p>
         </div>
       ) : (
-        <div style={{ marginBottom: 16, display: 'grid', gap: 12, maxWidth: 700 }}>
-          <div>
-            <label style={label}>Title</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} style={input} />
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+            <h3 style={{ margin: 0 }}>Edit in Calculator</h3>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={saveCalculator} style={btnPrimary}>Save</button>
+              <button onClick={() => setEditCalc(false)} style={btn}>Cancel</button>
+            </div>
           </div>
-          <div>
-            <label style={label}>Amount</label>
-            <input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={input} />
-          </div>
-          <div>
-            <label style={label}>Unit Type</label>
-            <input value={unitType} onChange={e => setUnitType(e.target.value)} style={input} placeholder="e.g., Apartment, Villa" />
-          </div>
-          <div>
-            <label style={label}>Details (JSON)</label>
-            <textarea value={details} onChange={e => setDetails(e.target.value)} style={textarea} rows={10} />
-          </div>
-          <div>
-            <button onClick={saveChanges} style={btnPrimary}>Save</button>
-            <button onClick={() => setEdit(false)} style={btn}>Cancel</button>
+          <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
+            <CalculatorApp embedded />
           </div>
         </div>
       )}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {canEdit && !edit && <button onClick={() => setEdit(true)} style={btn}>Edit</button>}
-        {canSubmit && <button onClick={submitForApproval} style={btnPrimary}>Submit for Approval</button>}
+        {canEdit && !editCalc && <button onClick={() => setEditCalc(true)} style={btn}>Edit in Calculator</button>}
+        {canSubmit && <button onClick={async () => {
+          const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/submit`, { method: 'POST' })
+          const data = await resp.json()
+          if (!resp.ok) return alert(data?.error?.message || 'Submit failed')
+          await load()
+        }} style={btnPrimary}>Submit for Approval</button>}
       </div>
 
       <h3>Audit Trail</h3>
@@ -166,11 +217,7 @@ export default function DealDetail() {
   )
 }
 
-const label = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }
-const input = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', width: '100%' }
-const textarea = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', width: '100%', fontFamily: 'monospace' }
 const btn = { marginLeft: 8, padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
 const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #1f6feb', background: '#1f6feb', color: '#fff', fontWeight: 600 }
-const pre = { background: '#f6f8fa', padding: 12, borderRadius: 8, overflow: 'auto', border: '1px solid #eef2f7' }
 const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
 const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
