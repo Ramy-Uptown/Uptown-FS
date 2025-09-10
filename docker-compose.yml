@@ -1,6 +1,19 @@
 version: "3.9"
 
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: app_db
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: apppass
+      POSTGRES_DB: appdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
   api:
     build:
       context: ./api
@@ -11,10 +24,18 @@ services:
       - .env
     environment:
       - NODE_ENV=development
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=appuser
+      - DB_PASSWORD=apppass
+      - DB_NAME=appdb
+      - JWT_SECRET=devsecretchange
     volumes:
       - ./api:/app
       - /app/node_modules
     command: npm run dev
+    depends_on:
+      - db
     restart: unless-stopped
 
   client:
@@ -33,3 +54,6 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+
+volumes:
+  db_data:

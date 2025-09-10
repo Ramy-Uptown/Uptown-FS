@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
+import { fetchWithAuth } from './lib/apiClient.js'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 const LS_KEY = 'uptown_calc_form_state_v2'
@@ -101,7 +102,8 @@ const styles = {
   error: { color: '#e11d48' }
 }
 
-export default function App() {
+export default function App(props) {
+  const embedded = !!(props && props.embedded)
   const [message, setMessage] = useState('Loading...')
   const [health, setHealth] = useState(null)
 
@@ -146,6 +148,7 @@ export default function App() {
   const [unitInfo, setUnitInfo] = useState({
     unit_type: '',
     unit_code: '',
+    description: '',
     unit_number: '',
     floor: '',
     building_number: '',
@@ -153,6 +156,11 @@ export default function App() {
     zone: '',
     garden_details: ''
   })
+  // Units catalog (typeahead)
+  const [unitsCatalog, setUnitsCatalog] = useState([])
+  const [unitQuery, setUnitQuery] = useState('')
+  const [unitSearchLoading, setUnitSearchLoading] = useState(false)
+  const [unitDropdownOpen, setUnitDropdownOpen] = useState(false)
   const [contractInfo, setContractInfo] = useState({
     reservation_form_date: '',
     contract_date: '',
@@ -203,19 +211,79 @@ export default function App() {
     } catch {}
   }, [])
 
+  // Typeahead: search units on query change (debounced)
+  useEffect(() => {
+    let t = null
+    const run = async () => {
+      const q = unitQuery.trim()
+      if (!q) {
+        setUnitsCatalog([])
+        return
+      }
+      try {
+        setUnitSearchLoading(true)
+        const resp = await fetchWithAuth(`${API_URL}/api/units?search=${encodeURIComponent(q)}&page=1&pageSize=20`)
+        const data = await resp.json()
+        if (resp.ok) {
+          setUnitsCatalog(data.units || [])
+          setUnitDropdownOpen(true)
+        }
+      } catch {
+        // ignore
+      } finally {
+        setUnitSearchLoading(false)
+      }
+    }
+    t = setTimeout(run, 300)
+    return () => t && clearTimeout(t)
+  }, [unitQuery])
+
   // Persist on change
   useEffect(() => {
     const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes }
     localStorage.setItem(LS_KEY, JSON.stringify(snapshot))
   }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes])
 
+  // Expose an imperative snapshot getter for embedding contexts
+  useEffect(() => {
+    const getSnapshot = () => {
+      const base = {
+        mode,
+        language,
+        currency,
+        stdPlan,
+        inputs,
+        firstYearPayments,
+        subsequentYears,
+        clientInfo,
+        unitInfo,
+        contractInfo,
+        customNotes
+      }
+      const payload = buildPayload()
+      const out = {
+        ...base,
+        payload,
+        generatedPlan: genResult || null,
+        preview
+      }
+      return out
+    }
+    window.__uptown_calc_getSnapshot = getSnapshot
+    return () => {
+      if (window.__uptown_calc_getSnapshot === getSnapshot) {
+        delete window.__uptown_calc_getSnapshot
+      }
+    }
+  }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes, genResult, preview])
+
   // Initial health check
   useEffect(() => {
     async function load() {
       try {
         const [healthRes, msgRes] = await Promise.all([
-          fetch(`${API_URL}/api/health`).then(r => r.json()),
-          fetch(`${API_URL}/api/message`).then(r => r.json())
+          fetchWithAuth(`${API_URL}/api/health`).then(r => r.json()),
+          fetchWithAuth(`${API_URL}/api/message`).then(r => r.json())
         ])
         setHealth(healthRes)
         setMessage(msgRes.message)
@@ -310,7 +378,7 @@ export default function App() {
       }
       try {
         setPreviewError('')
-        const resp = await fetch(`${API_URL}/api/calculate`, {
+        const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -343,7 +411,7 @@ export default function App() {
     setGenResult(null)
     try {
       const body = { ...payload, language, currency }
-      const resp = await fetch(`${API_URL}/api/generate-plan`, {
+      const resp = await fetchWithAuth(`${API_URL}/api/generate-plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -419,7 +487,7 @@ export default function App() {
     setDocLoading(true)
     setDocError('')
     try {
-      const resp = await fetch(`${API_URL}/api/generate-document`, {
+      const resp = await fetchWithAuth(`${API_URL}/api/generate-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -436,7 +504,7 @@ export default function App() {
       // Expect a file (pdf/docx). Get filename from Content-Disposition if available.
       const blob = await resp.blob()
       const cd = resp.headers.get('Content-Disposition') || ''
-      const match = /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i.exec(cd)
+      const match = /filename\*=UTF-8''([^;]+)|filename=\\"?([^\\";]+)\\"?/i.exec(cd)
       let filename = ''
       if (match) {
         filename = decodeURIComponent(match[1] || match[2] || '')
@@ -490,6 +558,71 @@ export default function App() {
     URL.revokeObjectURL(url)
   }
 
+  // Generate Checks Sheet (formatted for check printing)
+  function generateChecksSheetXLSX() {
+    if (!genResult?.schedule?.length) return
+
+    const title = 'Checks Sheet'
+    const buyer = clientInfo.buyer_name || ''
+    const unit = unitInfo.unit_code || unitInfo.unit_number || ''
+    const curr = currency || ''
+
+    const headerRows = [
+      [title],
+      [`Buyer: ${buyer}    Unit: ${unit}    Currency: ${curr}`],
+      [], // spacer
+      ['#', 'Cheque No.', 'Date', 'Pay To', 'Amount', 'Amount in Words', 'Notes']
+    ]
+
+    const bodyRows = genResult.schedule.map((row, i) => {
+      const amount = Number(row.amount || 0)
+      const amountStr = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      return [
+        i + 1,         // #
+        '',            // Cheque No. (to be filled manually)
+        '',            // Date (to be filled manually)
+        buyer,         // Pay To
+        amountStr,     // Amount
+        row.writtenAmount || '', // Amount in Words
+        `${row.label} (Month ${row.month})` // Notes
+      ]
+    })
+
+    const aoa = [...headerRows, ...bodyRows]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+
+    // Set column widths suitable for checks
+    ws['!cols'] = [
+      { wch: 5 },   // #
+      { wch: 14 },  // Cheque No.
+      { wch: 14 },  // Date
+      { wch: 28 },  // Pay To
+      { wch: 16 },  // Amount
+      { wch: 60 },  // Amount in Words
+      { wch: 30 },  // Notes
+    ]
+
+    // Merge title and metadata lines across all columns
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, // A1:G1
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }, // A2:G2
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Checks')
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+    a.download = `checks_sheet_${ts}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   // Computed summaries (from preview)
   const summaries = useMemo(() => {
     if (!preview) return null
@@ -518,10 +651,37 @@ export default function App() {
   return (
     <div style={styles.page}>
       <div style={styles.container}>
-        <header style={styles.header}>
-          <h1 style={styles.h1}>Uptown Evaluator — Payment Plan</h1>
-          <p style={styles.sub}>Create, preview, and export professional payment schedules.</p>
-        </header>
+        {!embedded && (
+          <header style={{ ...styles.header, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h1 style={styles.h1}>Uptown Evaluator — Payment Plan</h1>
+              <p style={styles.sub}>Create, preview, and export professional payment schedules.</p>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const rt = localStorage.getItem('refresh_token')
+                  if (rt) {
+                    await fetch(`${API_URL}/api/auth/logout`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ refreshToken: rt })
+                    }).catch(() => {})
+                  }
+                } finally {
+                  localStorage.removeItem('auth_token')
+                  localStorage.removeItem('refresh_token')
+                  localStorage.removeItem('auth_user')
+                  window.location.href = '/login'
+                }
+              }}
+              style={styles.btn}
+            >
+              Logout
+            </button>
+          </header>
+        )}
 
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>API Connectivity</h2>
@@ -785,6 +945,71 @@ export default function App() {
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Unit & Project Information</h2>
           <div style={styles.grid2}>
+            <div style={{ position: 'relative' }}>
+              <label style={styles.label}>Unit Catalog (type to search)</label>
+              <input
+                style={styles.input()}
+                value={unitQuery}
+                onChange={e => { setUnitQuery(e.target.value); }}
+                onFocus={() => { if (unitsCatalog.length) setUnitDropdownOpen(true) }}
+                placeholder="Search by code or description…"
+              />
+              {unitSearchLoading ? <small style={styles.metaText}>Searching…</small> : null}
+              {unitDropdownOpen && unitsCatalog.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    background: '#fff',
+                    border: '1px solid #e6eaf0',
+                    borderRadius: 10,
+                    boxShadow: '0 6px 14px rgba(21,24,28,0.08)',
+                    marginTop: 4,
+                    zIndex: 20,
+                    maxHeight: 280,
+                    overflow: 'auto'
+                  }}
+                >
+                  {unitsCatalog.map(u => (
+                    <div
+                      key={u.id}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        // Apply selected unit to calculator
+                        setUnitDropdownOpen(false)
+                        setUnitQuery(`${u.code} — ${u.description || ''}`)
+                        setStdPlan(s => ({ ...s, totalPrice: Number(u.base_price) || s.totalPrice }))
+                        setCurrency(u.currency || 'EGP')
+                        // Heuristics: plan duration defaults (Villa -> 7 years, otherwise 5)
+                        const inferredYears = (u.unit_type || '').toLowerCase().includes('villa') ? 7 : 5
+                        setInputs(s => ({ ...s, planDurationYears: s.planDurationYears || inferredYears }))
+                        setUnitInfo(s => ({
+                          ...s,
+                          unit_type: u.unit_type || s.unit_type,
+                          unit_code: u.code || s.unit_code,
+                          description: u.description || s.description,
+                          // If you want to copy code into unit_number by default, uncomment:
+                          // unit_number: s.unit_number || u.code || ''
+                        }))
+                      }}
+                      style={{
+                        padding: '10px 12px',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #f2f5fa'
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>{u.code} — {u.description || ''}</div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>
+                        {u.unit_type || '-'} • {u.currency} {Number(u.base_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <small style={styles.metaText}>Selecting a unit will set Std Total Price, currency, unit type, code, and description. Defaults plan duration to 5 years (7 years for Villas).</small>
+            </div>
             <div>
               <label style={styles.label}>Unit Type (<<نوع الوحدة>>)</label>
               <input style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
@@ -792,6 +1017,10 @@ export default function App() {
             <div>
               <label style={styles.label}>Unit Code (<<كود الوحدة>>)</label>
               <input style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
+            </div>
+            <div>
+              <label style={styles.label}>Unit Description</label>
+              <input style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
             </div>
             <div>
               <label style={styles.label}>Unit Number (<<وحدة رقم>>)</label>
@@ -885,6 +1114,9 @@ export default function App() {
               </button>
               <button type="button" onClick={exportScheduleXLSX} disabled={!schedule.length} style={styles.btn}>
                 Export to Excel (.xlsx)
+              </button>
+              <button type="button" onClick={generateChecksSheetXLSX} disabled={!schedule.length} style={styles.btn}>
+                Generate Checks Sheet (.xlsx)
               </button>
               <button type="button" onClick={exportScheduleCSV} disabled={!schedule.length} style={styles.btn}>
                 Export to CSV
