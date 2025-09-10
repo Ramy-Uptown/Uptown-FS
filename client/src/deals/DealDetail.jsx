@@ -11,6 +11,7 @@ export default function DealDetail() {
   const [edit, setEdit] = useState(false)
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
+  const [unitType, setUnitType] = useState('')
   const [details, setDetails] = useState('{}')
   const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const role = user?.role || 'user'
@@ -26,6 +27,7 @@ export default function DealDetail() {
       if (d) {
         setTitle(d.title || '')
         setAmount(String(d.amount ?? ''))
+        setUnitType(d.unit_type || '')
         setDetails(JSON.stringify(d.details || {}, null, 2))
       }
 
@@ -57,7 +59,7 @@ export default function DealDetail() {
       const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, amount: Number(amount) || 0, details: detailsObj })
+        body: JSON.stringify({ title, amount: Number(amount) || 0, unitType, details: detailsObj })
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to save')
@@ -94,6 +96,7 @@ export default function DealDetail() {
           <p><strong>Title:</strong> {deal.title}</p>
           <p><strong>Amount:</strong> {Number(deal.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
           <p><strong>Status:</strong> {deal.status}</p>
+          <p><strong>Unit Type:</strong> {deal.unit_type || '-'}</p>
           <p><strong>Details:</strong></p>
           <pre style={pre}>{JSON.stringify(deal.details || {}, null, 2)}</pre>
           <p><strong>Created By:</strong> {deal.created_by_email || deal.created_by}</p>
@@ -108,6 +111,10 @@ export default function DealDetail() {
           <div>
             <label style={label}>Amount</label>
             <input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={input} />
+          </div>
+          <div>
+            <label style={label}>Unit Type</label>
+            <input value={unitType} onChange={e => setUnitType(e.target.value)} style={input} placeholder="e.g., Apartment, Villa" />
           </div>
           <div>
             <label style={label}>Details (JSON)</label>

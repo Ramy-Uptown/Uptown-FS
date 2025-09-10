@@ -52,11 +52,25 @@ export async function initDb() {
       title TEXT NOT NULL,
       amount NUMERIC(18,2) NOT NULL DEFAULT 0,
       details JSONB DEFAULT '{}'::jsonb,
+      unit_type TEXT,
       status TEXT NOT NULL DEFAULT 'draft', -- draft | pending_approval | approved | rejected
       created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    -- Ensure unit_type exists (for older deployments)
+    DO $
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name='deals' AND column_name='unit_type'
+      ) THEN
+        ALTER TABLE deals ADD COLUMN unit_type TEXT;
+      END IF;
+    END;
+    $;
 
     CREATE TABLE IF NOT EXISTS deal_history (
       id SERIAL PRIMARY KEY,

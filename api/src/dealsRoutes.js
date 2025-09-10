@@ -15,16 +15,39 @@ async function logHistory(dealId, userId, action, notes = null) {
   )
 }
 
-// List deals with optional filtering and pagination
+function toNumber(v) {
+  const n = Number(v)
+  return isFinite(n) ? n : null
+}
+
+// List deals with optional filtering, pagination and sort
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const { status, search } = req.query
+    const {
+      status,
+      search,
+      creatorId,
+      creatorEmail,
+      reviewerId,
+      reviewerEmail,
+      approverId,
+      approverEmail,
+      startDate,
+      endDate,
+      minAmount,
+      maxAmount,
+      unitType,
+      sortBy,
+      sortDir
+    } = req.query
+
     const page = Math.max(1, parseInt(req.query.page || '1', 10))
     const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize || '20', 10)))
     const offset = (page - 1) * pageSize
 
     const where = []
     const params = []
+
     if (status && typeof status === 'string') {
       params.push(status)
       where.push(`d.status = ${params.length}`)
@@ -33,7 +56,71 @@ router.get('/', authMiddleware, async (req, res) => {
       params.push(`%${search.trim().toLowerCase()}%`)
       where.push(`(LOWER(d.title) LIKE ${params.length})`)
     }
+    if (creatorId && toNumber(creatorId)) {
+      params.push(toNumber(creatorId))
+      where.push(`d.created_by = ${params.length}`)
+    }
+    if (creatorEmail && typeof creatorEmail === 'string' && creatorEmail.trim()) {
+      params.push(creatorEmail.trim().toLowerCase())
+      where.push(`EXISTS (SELECT 1 FROM users cu WHERE cu.id=d.created_by AND LOWER(cu.email) = ${params.length})`)
+    }
+    if (reviewerId && toNumber(reviewerId)) {
+      params.push(toNumber(reviewerId))
+      where.push(`EXISTS (SELECT 1 FROM deal_history h WHERE h.deal_id=d.id AND h.action='submit' AND h.user_id=${params.length})`)
+    }
+    if (reviewerEmail && typeof reviewerEmail === 'string' && reviewerEmail.trim()) {
+      params.push(reviewerEmail.trim().toLowerCase())
+      where.push(`EXISTS (
+        SELECT 1 FROM deal_history h
+        JOIN users ru ON ru.id = h.user_id
+        WHERE h.deal_id=d.id AND h.action='submit' AND LOWER(ru.email) = ${params.length}
+      )`)
+    }
+    if (approverId && toNumber(approverId)) {
+      params.push(toNumber(approverId))
+      where.push(`EXISTS (SELECT 1 FROM deal_history h WHERE h.deal_id=d.id AND h.action='approve' AND h.user_id=${params.length})`)
+    }
+    if (approverEmail && typeof approverEmail === 'string' && approverEmail.trim()) {
+      params.push(approverEmail.trim().toLowerCase())
+      where.push(`EXISTS (
+        SELECT 1 FROM deal_history h
+        JOIN users au ON au.id = h.user_id
+        WHERE h.deal_id=d.id AND h.action='approve' AND LOWER(au.email) = ${params.length}
+      )`)
+    }
+    if (startDate) {
+      params.push(new Date(startDate))
+      where.push(`d.created_at >= ${params.length}`)
+    }
+    if (endDate) {
+      params.push(new Date(endDate))
+      where.push(`d.created_at <= ${params.length}`)
+    }
+    if (minAmount && toNumber(minAmount) != null) {
+      params.push(toNumber(minAmount))
+      where.push(`d.amount >= ${params.length}`)
+    }
+    if (maxAmount && toNumber(maxAmount) != null) {
+      params.push(toNumber(maxAmount))
+      where.push(`d.amount <= ${params.length}`)
+    }
+    if (unitType && typeof unitType === 'string' && unitType.trim()) {
+      params.push(unitType.trim())
+      where.push(`d.unit_type = ${params.length}`)
+    }
+
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+    const sortCols = {
+      id: 'd.id',
+      title: 'd.title',
+      amount: 'd.amount',
+      status: 'd.status',
+      created_at: 'd.created_at',
+      updated_at: 'd.updated_at'
+    }
+    const sortCol = sortCols[String(sortBy || '').toLowerCase()] || 'd.id'
+    const dir = String(sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC'
 
     const countSql = `SELECT COUNT(*)::int AS c FROM deals d ${whereSql}`
     const countRes = await pool.query(countSql, params)
@@ -46,7 +133,7 @@ router.get('/', authMiddleware, async (req, res) => {
       FROM deals d
       LEFT JOIN users u ON u.id = d.created_by
       ${whereSql}
-      ORDER BY d.id DESC
+      ORDER BY ${sortCol} ${dir}
       LIMIT ${params.length - 1} OFFSET ${params.length}
     `
     const rows = await pool.query(listSql, params)
@@ -98,15 +185,15 @@ router.get('/:id/history', authMiddleware, async (req, res) => {
 // Create a new deal (any authenticated user)
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { title, amount, details } = req.body || {}
+    const { title, amount, details, unitType } = req.body || {}
     if (!title || typeof title !== 'string') {
       return res.status(400).json({ error: { message: 'title is required' } })
     }
     const amt = Number(amount || 0)
     const det = isObject(details) ? details : {}
     const result = await pool.query(
-      'INSERT INTO deals (title, amount, details, status, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [title.trim(), isFinite(amt) ? amt : 0, det, 'draft', req.user.id]
+      'INSERT INTO deals (title, amount, details, unit_type, status, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [title.trim(), isFinite(amt) ? amt : 0, det, unitType || null, 'draft', req.user.id]
     )
     const deal = result.rows[0]
     await logHistory(deal.id, req.user.id, 'create', null)
@@ -121,7 +208,7 @@ router.post('/', authMiddleware, async (req, res) => {
 router.patch('/:id', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
-    const { title, amount, details } = req.body || {}
+    const { title, amount, details, unitType } = req.body || {}
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
     const deal = q.rows[0]
@@ -133,10 +220,11 @@ router.patch('/:id', authMiddleware, async (req, res) => {
     const newTitle = typeof title === 'string' && title.trim() ? title.trim() : deal.title
     const newAmount = amount != null && isFinite(Number(amount)) ? Number(amount) : deal.amount
     const newDetails = isObject(details) ? details : deal.details
+    const newUnitType = typeof unitType === 'string' && unitType.trim() ? unitType.trim() : deal.unit_type
 
     const upd = await pool.query(
-      'UPDATE deals SET title=$1, amount=$2, details=$3 WHERE id=$4 RETURNING *',
-      [newTitle, newAmount, newDetails, id]
+      'UPDATE deals SET title=$1, amount=$2, details=$3, unit_type=$4 WHERE id=$5 RETURNING *',
+      [newTitle, newAmount, newDetails, newUnitType, id]
     )
     const updated = upd.rows[0]
     await logHistory(id, req.user.id, 'modify', null)

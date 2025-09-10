@@ -5,6 +5,7 @@ import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 export default function CreateDeal() {
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
+  const [unitType, setUnitType] = useState('')
   const [details, setDetails] = useState('{}')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -26,7 +27,7 @@ export default function CreateDeal() {
       const resp = await fetchWithAuth(`${API_URL}/api/deals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, amount: Number(amount) || 0, details: detailsObj })
+        body: JSON.stringify({ title, amount: Number(amount) || 0, unitType: unitType || null, details: detailsObj })
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to create deal')
@@ -49,6 +50,10 @@ export default function CreateDeal() {
         <div>
           <label style={label}>Amount</label>
           <input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={input} />
+        </div>
+        <div>
+          <label style={label}>Unit Type</label>
+          <input value={unitType} onChange={e => setUnitType(e.target.value)} style={input} placeholder="e.g., Apartment, Villa" />
         </div>
         <div>
           <label style={label}>Details (JSON)</label>
