@@ -40,18 +40,24 @@ export default function DealDetail() {
 
   const [salesList, setSalesList] = useState([])
   const [salesError, setSalesError] = useState('')
+  const [policies, setPolicies] = useState([])
+  const [policiesError, setPoliciesError] = useState('')
   useEffect(() => {
-    async function loadSales() {
+    async function loadAux() {
       try {
-        const resp = await fetchWithAuth(`${API_URL}/api/sales?page=1&pageSize=200`)
-        const data = await resp.json()
-        if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load sales')
-        setSalesList(data.sales || [])
+        const [sres, pres] = await Promise.all([
+          fetchWithAuth(`${API_URL}/api/sales?page=1&pageSize=200`).then(r => r.json()),
+          fetchWithAuth(`${API_URL}/api/commission-policies?page=1&pageSize=200`).then(r => r.json())
+        ])
+        if (sres && sres.sales) setSalesList(sres.sales)
+        if (pres && pres.policies) setPolicies(pres.policies)
       } catch (e) {
-        setSalesError(e.message || String(e))
+        const msg = e.message || String(e)
+        setSalesError(msg)
+        setPoliciesError(msg)
       }
     }
-    loadSales()
+    loadAux()
   }, [])
 
   async function saveCalculator() {
@@ -340,6 +346,32 @@ export default function DealDetail() {
               ))}
             </select>
             {salesError ? <small style={{ color: '#e11d48' }}>{salesError}</small> : null}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+            <strong>Commission Policy:</strong>
+            <select
+              disabled={!canEdit}
+              value={deal.policy_id || ''}
+              onChange={async (e) => {
+                const policyId = e.target.value ? Number(e.target.value) : null
+                const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ policyId })
+                })
+                const data = await resp.json()
+                if (!resp.ok) return alert(data?.error?.message || 'Failed to set policy')
+                await load()
+              }}
+              style={{ padding: 8, borderRadius: 8, border: '1px solid #d1d9e6' }}
+            >
+              <option value="">— Use Active Policy —</option>
+              {policies.map(p => (
+                <option key={p.id} value={p.id}>{p.name} {p.active ? '' : '(inactive)'}</option>
+              ))}
+            </select>
+            {policiesError ? <small style={{ color: '#e11d48' }}>{policiesError}</small> : null}
           </div>
 
           <h3>Payment Schedule</h3>

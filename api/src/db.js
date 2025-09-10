@@ -54,6 +54,45 @@ export async function initDb() {
       details JSONB DEFAULT '{}'::jsonb,
       unit_type TEXT,
       sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      policy_id INTEGER REFERENCES commission_policies(id) ON DELETE SET NULL,
+      status TEXT NOT NULL DEFAULT 'draft', -- draft | pending_approval | approved | rejected
+      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    -- Ensure unit_type, sales_rep_id, policy_id exist (for older deployments)
+    DO $
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name='deals' AND column_name='unit_type'
+      ) THEN
+        ALTER TABLE deals ADD COLUMN unit_type TEXT;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name='deals' AND column_name='sales_rep_id'
+      ) THEN
+        ALTER TABLE deals ADD COLUMN sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name='deals' AND column_name='policy_id'
+      ) THEN
+        ALTER TABLE deals ADD COLUMN policy_id INTEGER REFERENCES commission_policies(id) ON DELETE SET NULL;
+      END IF;
+    END;
+    $;
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+      details JSONB DEFAULT '{}'::jsonb,
+      unit_type TEXT,
+      sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       status TEXT NOT NULL DEFAULT 'draft', -- draft | pending_approval | approved | rejected
       created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

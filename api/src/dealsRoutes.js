@@ -185,15 +185,15 @@ router.get('/:id/history', authMiddleware, async (req, res) => {
 // Create a new deal (any authenticated user)
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { title, amount, details, unitType, salesRepId } = req.body || {}
+    const { title, amount, details, unitType, salesRepId, policyId } = req.body || {}
     if (!title || typeof title !== 'string') {
       return res.status(400).json({ error: { message: 'title is required' } })
     }
     const amt = Number(amount || 0)
     const det = isObject(details) ? details : {}
     const result = await pool.query(
-      'INSERT INTO deals (title, amount, details, unit_type, sales_rep_id, status, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [title.trim(), isFinite(amt) ? amt : 0, det, unitType || null, salesRepId || null, 'draft', req.user.id]
+      'INSERT INTO deals (title, amount, details, unit_type, sales_rep_id, policy_id, status, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [title.trim(), isFinite(amt) ? amt : 0, det, unitType || null, salesRepId || null, policyId || null, 'draft', req.user.id]
     )
     const deal = result.rows[0]
     await logHistory(deal.id, req.user.id, 'create', null)
@@ -208,7 +208,7 @@ router.post('/', authMiddleware, async (req, res) => {
 router.patch('/:id', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
-    const { title, amount, details, unitType, salesRepId } = req.body || {}
+    const { title, amount, details, unitType, salesRepId, policyId } = req.body || {}
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
     const deal = q.rows[0]
@@ -222,10 +222,11 @@ router.patch('/:id', authMiddleware, async (req, res) => {
     const newDetails = isObject(details) ? details : deal.details
     const newUnitType = typeof unitType === 'string' && unitType.trim() ? unitType.trim() : deal.unit_type
     const newSalesRepId = salesRepId !== undefined ? (salesRepId || null) : deal.sales_rep_id
+    const newPolicyId = policyId !== undefined ? (policyId || null) : deal.policy_id
 
     const upd = await pool.query(
-      'UPDATE deals SET title=$1, amount=$2, details=$3, unit_type=$4, sales_rep_id=$5 WHERE id=$6 RETURNING *',
-      [newTitle, newAmount, newDetails, newUnitType, newSalesRepId, id]
+      'UPDATE deals SET title=$1, amount=$2, details=$3, unit_type=$4, sales_rep_id=$5, policy_id=$6 WHERE id=$7 RETURNING *',
+      [newTitle, newAmount, newDetails, newUnitType, newSalesRepId, newPolicyId, id]
     )
     const updated = upd.rows[0]
     await logHistory(id, req.user.id, 'modify', null)
@@ -271,7 +272,61 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
 
     const upd = await pool.query('UPDATE deals SET status=$1 WHERE id=$2 RETURNING *', ['approved', id])
     await logHistory(id, req.user.id, 'approve', null)
-    return res.json({ ok: true, deal: upd.rows[0] })
+
+    // Auto-calc commission if sales rep assigned
+    const approvedDeal = upd.rows[0]
+    let commissionRecord = null
+    if (approvedDeal.sales_rep_id) {
+      // fetch chosen policy or latest active
+      let policy
+      if (approvedDeal.policy_id) {
+        const p = await pool.query('SELECT * FROM commission_policies WHERE id=$1', [approvedDeal.policy_id])
+        policy = p.rows[0]
+      } else {
+        const p = await pool.query('SELECT * FROM commission_policies WHERE active=true ORDER BY id DESC LIMIT 1')
+        policy = p.rows[0]
+      }
+      if (policy) {
+        const amt = Number(approvedDeal.amount || 0)
+        const rules = policy.rules || {}
+        const calc = (amount, rules) => {
+          const a = Number(amount) || 0
+          if (a <= 0) return { amount: 0, details: { reason: 'zero_amount' } }
+          if (!rules || typeof rules !== 'object') return { amount: 0, details: { reason: 'no_rules' } }
+          if (rules.type === 'percentage') {
+            const rate = Number(rules.rate) || 0
+            return { amount: Math.max(0, a * rate / 100), details: { mode: 'percentage', rate } }
+          }
+          if (rules.type === 'tiered' && Array.isArray(rules.tiers)) {
+            let remaining = a
+            let total = 0
+            const applied = []
+            for (const t of rules.tiers) {
+              const upTo = t.upTo == null ? remaining : Math.max(0, Math.min(remaining, Number(t.upTo)))
+              const rate = Number(t.rate) || 0
+              if (upTo > 0) {
+                const part = upTo * rate / 100
+                total += part
+                applied.push({ base: upTo, rate, commission: part })
+                remaining -= upTo
+              }
+              if (remaining <= 0) break
+            }
+            return { amount: total, details: { mode: 'tiered', applied } }
+          }
+          return { amount: 0, details: { mode: 'unknown' } }
+        }
+        const { amount: commissionAmount, details } = calc(amt, rules)
+        const ins = await pool.query(
+          `INSERT INTO deal_commissions (deal_id, sales_person_id, policy_id, amount, details)
+           VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+          [approvedDeal.id, approvedDeal.sales_rep_id, policy.id, commissionAmount, { ...details, deal_amount: amt }]
+        )
+        commissionRecord = ins.rows[0]
+      }
+    }
+
+    return res.json({ ok: true, deal: approvedDeal, commission: commissionRecord })
   } catch (e) {
     console.error('POST /api/deals/:id/approve error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
