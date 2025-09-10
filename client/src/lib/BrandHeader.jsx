@@ -1,13 +1,51 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 
 const BRAND = {
   primary: '#A97E34', // corporate color
   primaryDark: '#8B672C'
 }
 
+/**
+ * BrandHeader will auto-detect a logo dropped into:
+ *  - /branding/logo.svg
+ *  - /branding/logo.png
+ *  - /branding/logo.jpg
+ * (served by Vite from client/public/branding/*)
+ *
+ * Order of precedence:
+ *  1) File present in /branding (svg -> png -> jpg)
+ *  2) VITE_COMPANY_LOGO_URL (if provided)
+ *  3) Default /logo.svg committed in the repo
+ */
 export default function BrandHeader({ title, onLogout }) {
   const appTitle = title || (import.meta.env.VITE_APP_TITLE || 'Uptown Financial System')
-  const logoUrl = import.meta.env.VITE_COMPANY_LOGO_URL || '/logo.svg'
+  const envLogo = import.meta.env.VITE_COMPANY_LOGO_URL || ''
+  const [logoUrl, setLogoUrl] = useState('/logo.svg')
+
+  useEffect(() => {
+    let mounted = true
+    const candidates = [
+      '/branding/logo.svg',
+      '/branding/logo.png',
+      '/branding/logo.jpg',
+      envLogo || '',
+      '/logo.svg'
+    ].filter(Boolean)
+
+    // Attempt to load candidates in order and pick the first that succeeds
+    const tryNext = (idx) => {
+      if (!mounted || idx >= candidates.length) return
+      const url = candidates[idx]
+      const img = new Image()
+      img.onload = () => {
+        if (mounted) setLogoUrl(url)
+      }
+      img.onerror = () => tryNext(idx + 1)
+      img.src = url
+    }
+    tryNext(0)
+    return () => { mounted = false }
+  }, [envLogo])
 
   return (
     <div style={{ background: BRAND.primary, color: '#fff', borderBottom: `4px solid ${BRAND.primaryDark}` }}>
