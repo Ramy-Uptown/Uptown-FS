@@ -11,6 +11,10 @@ import {
   getPaymentMonths
 } from '../services/calculationService.js'
 import convertToWords from '../utils/converter.js'
+import libre from 'libreoffice-convert'
+import { promisify } from 'node:util'
+
+const convertToPdf = promisify(libre.convert)
 
 const app = express()
 
@@ -269,7 +273,7 @@ app.post('/api/generate-plan', (req, res) => {
  * - Placeholders in the .docx should use Autocrat-style delimiters: <<placeholder_name>>
  * - Service will also add *_words fields for numeric values in data using the requested language
  */
-app.post('/api/generate-document', (req, res) => {
+app.post('/api/generate-document', async (req, res) => {
   try {
     const { templateName, data, language, currency } = req.body || {}
 
@@ -320,12 +324,23 @@ app.post('/api/generate-document', (req, res) => {
       return bad(res, 400, 'Failed to render document. Check placeholders and provided data.')
     }
 
-    const buf = doc.getZip().generate({ type: 'nodebuffer' })
-    const outName = path.basename(templateName, path.extname(templateName)) + '-filled.docx'
+    // Get the rendered DOCX as a buffer
+    const docxBuffer = doc.getZip().generate({ type: 'nodebuffer' })
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    // Convert DOCX buffer to PDF using LibreOffice
+    let pdfBuffer
+    try {
+      pdfBuffer = await convertToPdf(docxBuffer, '.pdf', undefined)
+    } catch (e) {
+      console.error('LibreOffice conversion error:', e)
+      return bad(res, 500, 'Failed to convert document to PDF')
+    }
+
+    const outName = path.basename(templateName, path.extname(templateName)) + '-filled.pdf'
+
+    res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename="${outName}"`)
-    return res.send(buf)
+    return res.send(pdfBuffer)
   } catch (err) {
     console.error('POST /api/generate-document error:', err)
     return bad(res, 500, 'Internal error during document generation')
