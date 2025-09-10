@@ -1,4 +1,5 @@
-y financial system project
+This is the main project file for the Uptown Financial System (uptownFS).
+financial system project
 
 ---
 
