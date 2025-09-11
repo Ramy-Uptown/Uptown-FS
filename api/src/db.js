@@ -23,6 +23,7 @@ export const pool = new pg.Pool({
 export async function initDb() {
   // Schema setup
   await pool.query(`
+    -- Users
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
@@ -32,6 +33,7 @@ export async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- Auth tokens
     CREATE TABLE IF NOT EXISTS refresh_tokens (
       token TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -47,88 +49,17 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
-    CREATE TABLE IF NOT EXISTS deals (
-      id SERIAL PRIMARY KEY,
-      title TEXT NOT NULL,
-      amount NUMERIC(18,2) NOT NULL DEFAULT 0,
-      details JSONB DEFAULT '{}'::jsonb,
-      unit_type TEXT,
-      sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      policy_id INTEGER REFERENCES commission_policies(id) ON DELETE SET NULL,
-      status TEXT NOT NULL DEFAULT 'draft', -- draft | pending_approval | approved | rejected
-      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-
-    -- Ensure unit_type, sales_rep_id, policy_id exist (for older deployments)
-    DO $
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name='deals' AND column_name='unit_type'
-      ) THEN
-        ALTER TABLE deals ADD COLUMN unit_type TEXT;
-      END IF;
-      IF NOT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name='deals' AND column_name='sales_rep_id'
-      ) THEN
-        ALTER TABLE deals ADD COLUMN sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
-      END IF;
-      IF NOT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name='deals' AND column_name='policy_id'
-      ) THEN
-        ALTER TABLE deals ADD COLUMN policy_id INTEGER REFERENCES commission_policies(id) ON DELETE SET NULL;
-      END IF;
-    END;
-    $;
-      id SERIAL PRIMARY KEY,
-      title TEXT NOT NULL,
-      amount NUMERIC(18,2) NOT NULL DEFAULT 0,
-      details JSONB DEFAULT '{}'::jsonb,
-      unit_type TEXT,
-      sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      status TEXT NOT NULL DEFAULT 'draft', -- draft | pending_approval | approved | rejected
-      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-
-    -- Ensure unit_type and sales_rep_id exist (for older deployments)
-    DO $
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name='deals' AND column_name='unit_type'
-      ) THEN
-        ALTER TABLE deals ADD COLUMN unit_type TEXT;
-      END IF;
-      IF NOT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name='deals' AND column_name='sales_rep_id'
-      ) THEN
-        ALTER TABLE deals ADD COLUMN sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
-      END IF;
-    END;
-    $;
-
-    CREATE TABLE IF NOT EXISTS deal_history (
-      id SERIAL PRIMARY KEY,
-      deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
-      action TEXT NOT NULL, -- create | submit | approve | reject | modify
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
-      notes TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-
     -- Sales commissions module
+    CREATE TABLE IF NOT EXISTS commission_policies (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      rules JSONB NOT NULL DEFAULT '{}'::jsonb, -- flexible rules
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE TABLE IF NOT EXISTS sales_people (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -140,14 +71,36 @@ export async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
-    CREATE TABLE IF NOT EXISTS commission_policies (
+    -- Deals
+    CREATE TABLE IF NOT EXISTS deals (
       id SERIAL PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT,
-      rules JSONB NOT NULL DEFAULT '{}'::jsonb, -- flexible rules
-      active BOOLEAN NOT NULL DEFAULT TRUE,
+      title TEXT NOT NULL,
+      amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+      details JSONB DEFAULT '{}'::jsonb,
+      unit_type TEXT,
+      sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      policy_id INTEGER REFERENCES commission_policies(id) ON DELETE SET NULL,
+      status TEXT NOT NULL DEFAULT 'draft', -- draft | pending_approval | approved | rejected
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    -- For older deployments ensure columns exist
+    ALTER TABLE IF EXISTS deals
+      ADD COLUMN IF NOT EXISTS unit_type TEXT;
+    ALTER TABLE IF EXISTS deals
+      ADD COLUMN IF NOT EXISTS sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+    ALTER TABLE IF EXISTS deals
+      ADD COLUMN IF NOT EXISTS policy_id INTEGER REFERENCES commission_policies(id) ON DELETE SET NULL;
+
+    CREATE TABLE IF NOT EXISTS deal_history (
+      id SERIAL PRIMARY KEY,
+      deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+      action TEXT NOT NULL, -- create | submit | approve | reject | modify
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
     CREATE TABLE IF NOT EXISTS deal_commissions (
@@ -174,6 +127,7 @@ export async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- Trigger function
     CREATE OR REPLACE FUNCTION trigger_set_timestamp()
     RETURNS TRIGGER AS $
     BEGIN
@@ -182,6 +136,7 @@ export async function initDb() {
     END;
     $ LANGUAGE plpgsql;
 
+    -- Create triggers if they don't already exist
     DO $
     BEGIN
       IF NOT EXISTS (
@@ -190,7 +145,7 @@ export async function initDb() {
         CREATE TRIGGER set_timestamp_users
         BEFORE UPDATE ON users
         FOR EACH ROW
-        EXECUTE PROCEDURE trigger_set_timestamp();
+        EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
 
       IF NOT EXISTS (
@@ -199,7 +154,7 @@ export async function initDb() {
         CREATE TRIGGER set_timestamp_deals
         BEFORE UPDATE ON deals
         FOR EACH ROW
-        EXECUTE PROCEDURE trigger_set_timestamp();
+        EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
 
       IF NOT EXISTS (
@@ -208,7 +163,7 @@ export async function initDb() {
         CREATE TRIGGER set_timestamp_units
         BEFORE UPDATE ON units
         FOR EACH ROW
-        EXECUTE PROCEDURE trigger_set_timestamp();
+        EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
 
       IF NOT EXISTS (
@@ -217,7 +172,7 @@ export async function initDb() {
         CREATE TRIGGER set_timestamp_sales_people
         BEFORE UPDATE ON sales_people
         FOR EACH ROW
-        EXECUTE PROCEDURE trigger_set_timestamp();
+        EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
 
       IF NOT EXISTS (
@@ -226,7 +181,7 @@ export async function initDb() {
         CREATE TRIGGER set_timestamp_commission_policies
         BEFORE UPDATE ON commission_policies
         FOR EACH ROW
-        EXECUTE PROCEDURE trigger_set_timestamp();
+        EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
 
       IF NOT EXISTS (
@@ -235,7 +190,7 @@ export async function initDb() {
         CREATE TRIGGER set_timestamp_deal_commissions
         BEFORE UPDATE ON deal_commissions
         FOR EACH ROW
-        EXECUTE PROCEDURE trigger_set_timestamp();
+        EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
     END;
     $;

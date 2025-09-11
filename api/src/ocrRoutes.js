@@ -7,7 +7,20 @@ import { extractTextWithFallback, parseEgyptianIdText } from '../services/ocr.js
 import { authMiddleware } from './authRoutes.js'
 
 const router = express.Router()
-const upload = multer({ dest: path.join(os.tmpdir(), 'uploads') })
+
+// Multer with size limit and basic image filter
+const upload = multer({
+  dest: path.join(os.tmpdir(), 'uploads'),
+  limits: {
+    fileSize: Number(process.env.OCR_MAX_FILE_SIZE || 5 * 1024 * 1024) // default 5MB
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept common image types
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff']
+    if (allowed.includes(file.mimetype)) return cb(null, true)
+    cb(new Error('Unsupported file type'))
+  }
+})
 
 // POST /api/ocr/egypt-id
 // Form-Data: image: <file>
