@@ -129,7 +129,7 @@ export async function initDb() {
 
     -- Trigger function
     CREATE OR REPLACE FUNCTION trigger_set_timestamp()
-    RETURNS TRIGGER AS $
+    RETURNS TRIGGER AS $$
     BEGIN
       NEW.updated_at = NOW();
       RETURN NEW;
@@ -137,7 +137,7 @@ export async function initDb() {
     $ LANGUAGE plpgsql;
 
     -- Create triggers if they don't already exist
-    DO $
+    DO $$
     BEGIN
       IF NOT EXISTS (
         SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_users'
@@ -193,7 +193,6 @@ export async function initDb() {
         EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
     END;
-    $;
   `)
 
   // Seed initial admin if table empty
