@@ -929,9 +929,8 @@ export default function App(props) {
               <input type="date" style={styles.input()} value={clientInfo.id_issue_date} onChange={e => setClientInfo(s => ({ ...s, id_issue_date: e.target.value }))} />
             </div>
             <div style={styles.blockFull}>
-              <label style={styles.label}>Addres (<<span style={styles.arInline}>[[العنوان</</span</</label>
-             <<textarea dir="auto" style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))_code} new/</>
- />
+              <label style={styles.label}>Address (<span style={styles.arInline}>[[العنوان]]</span>)</label>
+              <textarea dir="auto" style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))} />
             </div>
             <div>
               <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
@@ -1021,9 +1020,8 @@ export default function App(props) {
               <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
             </div>
             <div>
-              <label style={styles.label}>Unit Cod (<<span style={styles.arInline}>[[كود الوحدة</</span</</label>
-             <<input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))_code} new/</>
- />
+              <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
+              <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
             </div>
             <div>
               <label style={styles.label}>Unit Description</label>
