@@ -134,7 +134,7 @@ export async function initDb() {
       NEW.updated_at = NOW();
       RETURN NEW;
     END;
-    $ LANGUAGE plpgsql;
+    $$ LANGUAGE plpgsql;
 
     -- Create triggers if they don't already exist
     DO $$
@@ -193,6 +193,7 @@ export async function initDb() {
         EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
     END;
+    $$
   `)
 
   // Seed initial admin if table empty
