@@ -654,6 +654,35 @@ export default function App(props) {
     }
   }, [preview])
 
+  // --- Handlers for dynamic arrays ---
+  function addFirstYearPayment() {
+    setFirstYearPayments(s => [...s, { amount: 0, month: 1, type: 'regular' }])
+  }
+  function updateFirstYearPayment(index, field, value) {
+    setFirstYearPayments(s => {
+      const copy = [...s]
+      copy[index] = { ...copy[index], [field]: value }
+      return copy
+    })
+  }
+  function removeFirstYearPayment(index) {
+    setFirstYearPayments(s => s.filter((_, i) => i !== index))
+  }
+  function addSubsequentYear() {
+    setSubsequentYears(s => [...s, { totalNominal: 0, frequency: 'annually' }])
+  }
+  function updateSubsequentYear(index, field, value) {
+    setSubsequentYears(s => {
+      const copy = [...s]
+      copy[index] = { ...copy[index], [field]: value }
+      return copy
+    })
+  }
+  function removeSubsequentYear(index) {
+    setSubsequentYears(s => s.filter((_, i) => i !== index))
+  }
+  // --- End Handlers ---
+
   const schedule = genResult?.schedule || []
   const totals = genResult?.totals || null
 

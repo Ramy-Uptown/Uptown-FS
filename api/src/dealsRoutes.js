@@ -50,63 +50,63 @@ router.get('/', authMiddleware, async (req, res) => {
 
     if (status && typeof status === 'string') {
       params.push(status)
-      where.push(`d.status = ${params.length}`)
+      where.push(`d.status = $${params.length}`)
     }
     if (search && typeof search === 'string' && search.trim()) {
       params.push(`%${search.trim().toLowerCase()}%`)
-      where.push(`(LOWER(d.title) LIKE ${params.length})`)
+      where.push(`(LOWER(d.title) LIKE $${params.length})`)
     }
     if (creatorId && toNumber(creatorId)) {
       params.push(toNumber(creatorId))
-      where.push(`d.created_by = ${params.length}`)
+      where.push(`d.created_by = $${params.length}`)
     }
     if (creatorEmail && typeof creatorEmail === 'string' && creatorEmail.trim()) {
       params.push(creatorEmail.trim().toLowerCase())
-      where.push(`EXISTS (SELECT 1 FROM users cu WHERE cu.id=d.created_by AND LOWER(cu.email) = ${params.length})`)
+      where.push(`EXISTS (SELECT 1 FROM users cu WHERE cu.id=d.created_by AND LOWER(cu.email) = $${params.length})`)
     }
     if (reviewerId && toNumber(reviewerId)) {
       params.push(toNumber(reviewerId))
-      where.push(`EXISTS (SELECT 1 FROM deal_history h WHERE h.deal_id=d.id AND h.action='submit' AND h.user_id=${params.length})`)
+      where.push(`EXISTS (SELECT 1 FROM deal_history h WHERE h.deal_id=d.id AND h.action='submit' AND h.user_id=$${params.length})`)
     }
     if (reviewerEmail && typeof reviewerEmail === 'string' && reviewerEmail.trim()) {
       params.push(reviewerEmail.trim().toLowerCase())
       where.push(`EXISTS (
         SELECT 1 FROM deal_history h
         JOIN users ru ON ru.id = h.user_id
-        WHERE h.deal_id=d.id AND h.action='submit' AND LOWER(ru.email) = ${params.length}
+        WHERE h.deal_id=d.id AND h.action='submit' AND LOWER(ru.email) = $${params.length}
       )`)
     }
     if (approverId && toNumber(approverId)) {
       params.push(toNumber(approverId))
-      where.push(`EXISTS (SELECT 1 FROM deal_history h WHERE h.deal_id=d.id AND h.action='approve' AND h.user_id=${params.length})`)
+      where.push(`EXISTS (SELECT 1 FROM deal_history h WHERE h.deal_id=d.id AND h.action='approve' AND h.user_id=$${params.length})`)
     }
     if (approverEmail && typeof approverEmail === 'string' && approverEmail.trim()) {
       params.push(approverEmail.trim().toLowerCase())
       where.push(`EXISTS (
         SELECT 1 FROM deal_history h
         JOIN users au ON au.id = h.user_id
-        WHERE h.deal_id=d.id AND h.action='approve' AND LOWER(au.email) = ${params.length}
+        WHERE h.deal_id=d.id AND h.action='approve' AND LOWER(au.email) = $${params.length}
       )`)
     }
     if (startDate) {
       params.push(new Date(startDate))
-      where.push(`d.created_at >= ${params.length}`)
+      where.push(`d.created_at >= $${params.length}`)
     }
     if (endDate) {
       params.push(new Date(endDate))
-      where.push(`d.created_at <= ${params.length}`)
+      where.push(`d.created_at <= $${params.length}`)
     }
     if (minAmount && toNumber(minAmount) != null) {
       params.push(toNumber(minAmount))
-      where.push(`d.amount >= ${params.length}`)
+      where.push(`d.amount >= $${params.length}`)
     }
     if (maxAmount && toNumber(maxAmount) != null) {
       params.push(toNumber(maxAmount))
-      where.push(`d.amount <= ${params.length}`)
+      where.push(`d.amount <= $${params.length}`)
     }
     if (unitType && typeof unitType === 'string' && unitType.trim()) {
       params.push(unitType.trim())
-      where.push(`d.unit_type = ${params.length}`)
+      where.push(`d.unit_type = $${params.length}`)
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
@@ -134,7 +134,7 @@ router.get('/', authMiddleware, async (req, res) => {
       LEFT JOIN users u ON u.id = d.created_by
       ${whereSql}
       ORDER BY ${sortCol} ${dir}
-      LIMIT ${params.length - 1} OFFSET ${params.length}
+      LIMIT $${params.length - 1} OFFSET $${params.length}
     `
     const rows = await pool.query(listSql, params)
 
