@@ -4,6 +4,8 @@ import fs from 'fs'
 import path from 'path'
 import PizZip from 'pizzip'
 import Docxtemplater from 'docxtemplater'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import {
   calculateByMode,
   CalculationModes,
@@ -25,14 +27,34 @@ const libre = require('libreoffice-convert')
 
 const app = express()
 
+// Security headers
+app.use(helmet())
+
+// Configurable CORS origins via env (comma-separated), default to localhost Vite
+const CORS_ORIGINS = process.env.CORS_ORIGINS || 'http://localhost:5173'
+const allowedOrigins = CORS_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
 app.use(cors({
-  origin: ['http://localhost:5173'],
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true) // allow non-browser tools
+    if (allowedOrigins.includes(origin)) return callback(null, true)
+    return callback(new Error('Not allowed by CORS'))
+  },
   credentials: true
 }))
-app.use(express.json())
+
+// JSON body limit (configurable)
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '2mb' }))
+
+// Rate limit auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false
+})
 
 // Auth routes
-app.use('/api/auth', authRoutes)
+app.use('/api/auth', authLimiter, authRoutes)
 app.use('/api/deals', dealsRoutes)
 app.use('/api/units', unitsRoutes)
 app.use('/api/sales', salesPeopleRoutes)
