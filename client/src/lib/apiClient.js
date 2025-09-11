@@ -31,8 +31,8 @@ export async function fetchWithAuth(input, init = {}, retry = true) {
       localStorage.removeItem('auth_token')
       localStorage.removeItem('refresh_token')
       localStorage.removeItem('auth_user')
-      if (!location.pathname.startsWith('/login')) {
-        location.href = '/login'
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login'
       }
       throw e
     }
