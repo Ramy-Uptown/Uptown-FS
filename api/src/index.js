@@ -1,13 +1,16 @@
 import app from './app.js'
 import { initDb, pool } from './db.js'
 import { runMigrations } from './migrate.js'
+import { recordCleanup } from './runtimeMetrics.js'
 
 const PORT = process.env.PORT || 3000
 
 async function cleanupExpiredTokens() {
   try {
-    await pool.query("DELETE FROM refresh_tokens WHERE expires_at < NOW()")
-    await pool.query("DELETE FROM password_reset_tokens WHERE (expires_at < NOW()) OR used = TRUE")
+    const r1 = await pool.query("DELETE FROM refresh_tokens WHERE expires_at < NOW() RETURNING token")
+    const r2 = await pool.query("DELETE FROM password_reset_tokens WHERE (expires_at < NOW()) OR used = TRUE RETURNING token")
+    recordCleanup({ refreshTokens: r1.rowCount || 0, passwordResetTokens: r2.rowCount || 0 })
+    console.log(`Token cleanup run: deleted refresh=${r1.rowCount || 0}, reset=${r2.rowCount || 0}`)
   } catch (e) {
     console.error('Token cleanup error:', e)
   }

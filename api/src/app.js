@@ -21,6 +21,7 @@ import salesPeopleRoutes from './salesPeopleRoutes.js'
 import commissionPoliciesRoutes from './commissionPoliciesRoutes.js'
 import commissionsRoutes from './commissionsRoutes.js'
 import ocrRoutes from './ocrRoutes.js'
+import { getCleanupMetrics } from './runtimeMetrics.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -68,6 +69,16 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     uptime: process.uptime(),
     timestamp: new Date().toISOString()
+  })
+})
+
+// Lightweight metrics endpoint (admin can wire auth if desired)
+app.get('/api/metrics', (req, res) => {
+  const m = getCleanupMetrics()
+  res.json({
+    ok: true,
+    time: new Date().toISOString(),
+    cleanup: m
   })
 })
 
