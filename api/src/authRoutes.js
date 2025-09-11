@@ -33,6 +33,32 @@ function adminOnly(req, res, next) {
   next()
 }
 
+function requireRole(allowedRoles) {
+  return (req, res, next) => {
+    const userRole = req.user?.role
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({ error: { message: 'Forbidden' } })
+    }
+    next()
+  }
+}
+
+const VALID_ROLES = [
+  'user',
+  'admin',
+  'superadmin',
+  'manager',
+  'sales_manager',
+  'property_consultant',
+  'financial_manager',
+  'financial_admin',
+  'contract_manager',
+  'contract_person',
+  'chairman',
+  'vice_chairman',
+  'ceo'
+]
+
 function signAccessToken(user) {
   return jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: ACCESS_EXPIRES_IN })
 }
@@ -216,6 +242,9 @@ router.patch('/users/:id/role', authMiddleware, adminOnly, async (req, res) => {
     const { role } = req.body || {}
     const id = Number(req.params.id)
     if (!role || typeof role !== 'string') return res.status(400).json({ error: { message: 'role is required' } })
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({ error: { message: 'Invalid role specified' } })
+    }
     const result = await pool.query('UPDATE users SET role=$1 WHERE id=$2 RETURNING id, email, role', [role, id])
     if (result.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
     return res.json({ ok: true, user: result.rows[0] })
@@ -237,5 +266,5 @@ router.delete('/users/:id', authMiddleware, adminOnly, async (req, res) => {
   }
 })
 
-export { authMiddleware, adminOnly }
+export { authMiddleware, adminOnly, requireRole }
 export default router

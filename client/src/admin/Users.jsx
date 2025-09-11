@@ -41,7 +41,21 @@ export default function Users() {
     }
   }
 
-  const roleOptions = ['user', 'manager', 'admin']
+  const roleOptions = [
+    'user',
+    'admin',
+    'superadmin',
+    'manager',
+    'sales_manager',
+    'property_consultant',
+    'financial_manager',
+    'financial_admin',
+    'contract_manager',
+    'contract_person',
+    'chairman',
+    'vice_chairman',
+    'ceo'
+  ]
 
   return (
     <div style={{ padding: 20, maxWidth: 1000, margin: '0 auto' }}>

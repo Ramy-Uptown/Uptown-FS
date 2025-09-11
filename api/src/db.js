@@ -33,6 +33,24 @@ export async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- Add/update a CHECK constraint on the user roles for data integrity
+    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+    ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN (
+      'user',
+      'admin',
+      'superadmin',
+      'manager',
+      'sales_manager',
+      'property_consultant',
+      'financial_admin',
+      'financial_manager',
+      'contract_person',
+      'contract_manager',
+      'chairman',
+      'vice_chairman',
+      'ceo'
+    ));
+
     -- Auth tokens
     CREATE TABLE IF NOT EXISTS refresh_tokens (
       token TEXT PRIMARY KEY,
