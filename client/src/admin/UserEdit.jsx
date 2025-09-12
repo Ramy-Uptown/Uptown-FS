@@ -20,6 +20,13 @@ export default function UserEdit() {
   const [metaTextState, setMetaTextState] = useState('{}')
   const [pw1, setPw1] = useState('')
   const [pw2, setPw2] = useState('')
+
+  // manager assign
+  const [allUsers, setAllUsers] = useState([])
+  const [assignManagerId, setAssignManagerId] = useState('')
+  const [currentManagerId, setCurrentManagerId] = useState('')
+  const [audit, setAudit] = useState([])
+
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
 
   const roleOptions = [
@@ -38,6 +45,19 @@ export default function UserEdit() {
     'ceo'
   ]
 
+  const managers = allUsers.filter(u =>
+    u.role === 'sales_manager' ||
+    u.role === 'manager' ||
+    u.role === 'contract_manager' ||
+    u.role === 'financial_manager'
+  )
+  const currentManagerEmail = useMemo(() => {
+    const m = allUsers.find(u => u.id === Number(currentManagerId))
+    return m ? m.email : ''
+  }, [allUsers, currentManagerId])
+
+  const canAssignManager = ['property_consultant', 'financial_admin', 'contract_person'].includes(role)
+
   useEffect(() => {
     load()
   }, [uid])
@@ -45,15 +65,37 @@ export default function UserEdit() {
   async function load() {
     try {
       setError('')
-      const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${uid}`)
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load user')
-      setUser(data.user)
-      setEmail(data.user.email || '')
-      setRole(data.user.role || 'user')
-      setActive(data.user.active !== false)
-      setNotes(data.user.notes || '')
-      setMetaTextState(JSON.stringify(data.user.meta || {}, null, 2))
+      const [uResp, listResp, memResp, auditResp] = await Promise.all([
+        fetchWithAuth(`${API_URL}/api/auth/users/${uid}`),
+        fetchWithAuth(`${API_URL}/api/auth/users`),
+        fetchWithAuth(`${API_URL}/api/workflow/sales-teams/memberships?consultant_user_id=${uid}&active=true`).catch(() => null),
+        fetchWithAuth(`${API_URL}/api/auth/users/${uid}/audit`).catch(() => null)
+      ])
+      const uData = await uResp.json()
+      if (!uResp.ok) throw new Error(uData?.error?.message || 'Failed to load user')
+      setUser(uData.user)
+      setEmail(uData.user.email || '')
+      setRole(uData.user.role || 'user')
+      setActive(uData.user.active !== false)
+      setNotes(uData.user.notes || '')
+      setMetaTextState(JSON.stringify(uData.user.meta || {}, null, 2))
+
+      const listData = await listResp.json()
+      if (listResp.ok) setAllUsers(listData.users || [])
+
+      if (memResp) {
+        const memData = await memResp.json()
+        if (memResp.ok) {
+          const m = (memData.memberships || [])[0]
+          setCurrentManagerId(m ? String(m.manager_user_id) : '')
+          setAssignManagerId(m ? String(m.manager_user_id) : '')
+        }
+      }
+
+      if (auditResp) {
+        const aData = await auditResp.json()
+        if (auditResp.ok) setAudit(aData.audit || [])
+      }
     } catch (e) {
       setError(e.message || String(e))
     }
@@ -147,6 +189,54 @@ export default function UserEdit() {
     }
   }
 
+  async function assignManager() {
+    if (!assignManagerId) return alert('Select a manager')
+    setBusy(true)
+    try {
+      const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manager_user_id: Number(assignManagerId),
+          consultant_user_id: uid
+        })
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to assign manager')
+      setCurrentManagerId(assignManagerId)
+      alert('Manager assigned.')
+    } catch (e) {
+      alert(e.message || String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function clearManager() {
+    if (!currentManagerId) return alert('No current manager to clear.')
+    setBusy(true)
+    try {
+      const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manager_user_id: Number(currentManagerId),
+          consultant_user_id: uid,
+          active: false
+        })
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to clear manager')
+      setCurrentManagerId('')
+      setAssignManagerId('')
+      alert('Manager cleared.')
+    } catch (e) {
+      alert(e.message || String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const handleLogout = async () => {
     try {
       const rt = localStorage.getItem('refresh_token')
@@ -182,7 +272,7 @@ export default function UserEdit() {
   return (
     <div>
       <BrandHeader onLogout={handleLogout} />
-      <div style={{ ...pageContainer, maxWidth: 800 }}>
+      <div style={{ ...pageContainer, maxWidth: 900 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={pageTitle}>Edit User #{user.id}</h2>
           <button type="button" onClick={() => navigate('/admin/users')} style={btn}>Back</button>
@@ -226,13 +316,61 @@ export default function UserEdit() {
           </div>
         </form>
 
-        <form onSubmit={savePassword} style={{ display: 'grid', gap: 10 }}>
+        {canAssignManager && (
+          <div style={{ marginTop: 24, marginBottom: 24 }}>
+            <h3 style={{ ...pageTitle, fontSize: 18 }}>Manager Assignment</h3>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <select value={assignManagerId} onChange={e => setAssignManagerId(e.target.value)} style={ctrl}>
+                <option value="">Select manager…</option>
+                {managers.map(m => <option key={m.id} value={m.id}>{m.email} (id {m.id})</option>)}
+              </select>
+              <button type="button" onClick={assignManager} disabled={busy || !assignManagerId} style={btn}>Assign</button>
+              {currentManagerId ? <button type="button" onClick={clearManager} disabled={busy} style={btnDanger}>Clear</button> : null}
+              <span style={metaText}>{currentManagerId ? `Current: ${currentManagerEmail}` : 'No manager assigned'}</span>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={savePassword} style={{ display: 'grid', gap: 10, marginTop: 8 }}>
           <h3 style={{ ...pageTitle, fontSize: 18 }}>Set Password</h3>
           <input type="password" placeholder="New password" value={pw1} onChange={e => setPw1(e.target.value)} style={ctrl} />
           <input type="password" placeholder="Confirm new password" value={pw2} onChange={e => setPw2(e.target.value)} style={ctrl} />
           <button type="submit" disabled={busy} style={btn}>Update Password</button>
           <p style={metaText}>Note: Updating a password invalidates existing sessions.</p>
         </form>
+
+        <div style={{ marginTop: 24 }}>
+          <h3 style={{ ...pageTitle, fontSize: 18 }}>Audit History</h3>
+          <div style={tableWrap}>
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={th}>When</th>
+                  <th style={th}>Action</th>
+                  <th style={th}>By (user id)</th>
+                  <th style={th}>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {audit.map(a => (
+                  <tr key={a.id}>
+                    <td style={td}>{a.created_at ? new Date(a.created_at).toLocaleString() : ''}</td>
+                    <td style={td}>{a.action}</td>
+                    <td style={td}>{a.changed_by}</td>
+                    <td style={td}>
+                      <code style={{ fontSize: 12 }}>{a.details ? JSON.stringify(a.details) : ''}</code>
+                    </td>
+                  </tr>
+                ))}
+                {audit.length === 0 && (
+                  <tr>
+                    <td style={td} colSpan={4}><span style={metaText}>No audit items.</span></td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   )

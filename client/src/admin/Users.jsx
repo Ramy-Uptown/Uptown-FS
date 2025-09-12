@@ -12,6 +12,8 @@ export default function Users() {
   const [editingId, setEditingId] = useState(0)
   const [editEmail, setEditEmail] = useState('')
   const [statusFilter, setStatusFilter] = useState('active') // 'active' | 'inactive' | 'all'
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [searchText, setSearchText] = useState('')
   const [assignMap, setAssignMap] = useState({}) // { [userId]: managerId }
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
 
@@ -241,9 +243,23 @@ export default function Users() {
   }
 
   const filteredUsers = users.filter(u => {
-    if (statusFilter === 'all') return true
-    if (statusFilter === 'active') return u.active !== false
-    return u.active === false
+    // status
+    if (statusFilter !== 'all') {
+      const isActive = u.active !== false
+      if (statusFilter === 'active' && !isActive) return false
+      if (statusFilter === 'inactive' && isActive) return false
+    }
+    // role
+    if (roleFilter !== 'all' && u.role !== roleFilter) return false
+    // search
+    const q = searchText.trim().toLowerCase()
+    if (q) {
+      const metaStr = u.meta ? JSON.stringify(u.meta).toLowerCase() : ''
+      const notesStr = (u.notes || '').toLowerCase()
+      const emailStr = (u.email || '').toLowerCase()
+      if (![emailStr, notesStr, metaStr].some(s => s.includes(q))) return false
+    }
+    return true
   })
 
   const activeCount = users.filter(u => u.active !== false).length
@@ -273,13 +289,18 @@ export default function Users() {
           <button type="submit" disabled={creating} style={btnPrimary}>{creating ? 'Creating…' : 'Create'}</button>
         </form>
 
-        {/* Status filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        {/* Filters */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={ctrl}>
             <option value="active">Active only</option>
             <option value="inactive">Inactive only</option>
             <option value="all">All</option>
           </select>
+          <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} style={ctrl}>
+            <option value="all">All roles</option>
+            {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <input type="text" placeholder="Search email, notes, meta…" value={searchText} onChange={e => setSearchText(e.target.value)} style={{ ...ctrl, minWidth: 220 }} />
           <span style={metaText}>Active: {activeCount} • Inactive: {inactiveCount}</span>
         </div>
 
@@ -292,6 +313,8 @@ export default function Users() {
                 <th style={th}>Email</th>
                 <th style={th}>Role</th>
                 <th style={th}>Manager</th>
+                <th style={th}>Notes</th>
+                <th style={th}>Meta</th>
                 <th style={th}>Active</th>
                 <th style={th}>Created</th>
                 <th style={th}>Updated</th>
@@ -359,6 +382,16 @@ export default function Users() {
                       )}
                     </td>
                     <td style={td}>
+                      {(u.notes || '').length ? (u.notes.length > 60 ? u.notes.slice(0, 60) + '…' : u.notes) : <span style={metaText}>—</span>}
+                    </td>
+                    <td style={td}>
+                      {u.meta ? (
+                        <span style={metaText}>
+                          {Array.isArray(u.meta) ? `array (${u.meta.length})` : `keys: ${Object.keys(u.meta || {}).length}`}
+                        </span>
+                      ) : <span style={metaText}>—</span>}
+                    </td>
+                    <td style={td}>
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <input type="checkbox" checked={!!u.active} onChange={() => toggleActive(u)} disabled={busyId === u.id || isSelf} />
                         {u.active ? 'Active' : 'Inactive'}
@@ -368,13 +401,15 @@ export default function Users() {
                     <td style={td}>{u.updated_at ? new Date(u.updated_at).toLocaleString() : ''}</td>
                     <td style={td}>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {!isEditing & <<button type="button" onClick={() => startEdit(u)} disabled={busyId === u.id} style={btn}>Edit Ema</</button>}
-                       <{a href={`/admin/users/${u.id}`} style={btn}>Ed</  a>
+                        {!isEditing && <button type="button" onClick={() => startEdit(u)} disabled={busyId === u.id} style={btn}>Edit Email</button>}
+                        <a href={`/admin/users/${u.id}`} style={btn}>Edit</a>
                         {!isSelf && u.active !== false && (
-                         <obutton
+                          <button
                             type="button"
                             onClick={() => deactivateUser(u)}
-                            disabled={busyId ===   title="Deactivate user (keeps data; prevents login)"
+                            disabled={busyId === u.id}
+                            style={btnDanger}
+                            title="Deactivate user (keeps data; prevents login)"
                           >
                             Deactivate
                           </button>
