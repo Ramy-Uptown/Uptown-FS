@@ -5,6 +5,17 @@ export default function HoldsCEO() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [role, setRole] = useState('')
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('auth_user')
+      if (raw) {
+        const u = JSON.parse(raw)
+        setRole(u?.role || '')
+      }
+    } catch {}
+  }, [])
 
   async function load() {
     try {
@@ -36,9 +47,11 @@ export default function HoldsCEO() {
     }
   }
 
+  const canCEO = role === 'ceo'
+
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
-      <h2>Hold Override Approvals — CEO</h2>
+      <h2>Hold Override Approvals — {canCEO ? 'CEO' : 'Read Only'}</h2>
       <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Refresh'}</button>
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
       <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12, marginTop: 12 }}>
@@ -61,7 +74,9 @@ export default function HoldsCEO() {
                 <td style={td}>{r.payment_plan_id || ''}</td>
                 <td style={td}>{r.requested_by || ''}</td>
                 <td style={td}>{r.expires_at ? new Date(r.expires_at).toLocaleString() : ''}</td>
-                <td style={td}><button onClick={() => approve(r.id)} style={btn}>Approve Override</button></td>
+                <td style={td}>
+                  {canCEO ? <button onClick={() => approve(r.id)} style={btn}>Approve Override</button> : <span style={{ color: '#64748b' }}>View only</span>}
+                </td>
               </tr>
             ))}
             {rows.length === 0 && !loading && (
@@ -75,5 +90,5 @@ export default function HoldsCEO() {
 }
 
 const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
+const td = { padding: 10, borderBottom: '1px solid '#f2f5fa', fontSize: 14 }
 const btn = { marginLeft: 6, padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }

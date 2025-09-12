@@ -6,6 +6,17 @@ export default function HoldsFM() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [role, setRole] = useState('')
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('auth_user')
+      if (raw) {
+        const u = JSON.parse(raw)
+        setRole(u?.role || '')
+      }
+    } catch {}
+  }, [])
 
   async function load() {
     try {
@@ -38,9 +49,11 @@ export default function HoldsFM() {
     }
   }
 
+  const canFM = role === 'financial_manager'
+
   return (
     <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <h2>Holds — Financial Manager</h2>
+      <h2>Holds — {canFM ? 'Financial Manager' : 'Read Only'}</h2>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
         <select value={status} onChange={e => setStatus(e.target.value)} style={ctrl}>
           <option value="">All</option>
@@ -76,17 +89,17 @@ export default function HoldsFM() {
                 <td style={td}>{r.status}</td>
                 <td style={td}>{r.expires_at ? new Date(r.expires_at).toLocaleString() : ''}</td>
                 <td style={td}>
-                  {r.status === 'pending_approval' && (
+                  {canFM && r.status === 'pending_approval' && (
                     <button onClick={() => act(`/api/inventory/holds/${r.id}/approve`)} style={btn}>Approve</button>
                   )}
-                  {r.status === 'approved' && (
+                  {canFM && r.status === 'approved' && (
                     <>
                       <button onClick={() => act(`/api/inventory/holds/${r.id}/unblock`)} style={btn}>Unblock</button>
                       <button onClick={() => act(`/api/inventory/holds/${r.id}/extend`)} style={btn}>Extend +7d</button>
                       <button onClick={() => act(`/api/inventory/holds/${r.id}/override-request`, 'POST')} style={btn}>Request Override</button>
                     </>
                   )}
-                  {r.status === 'override_ceo_approved' && (
+                  {canFM && r.status === 'override_ceo_approved' && (
                     <button onClick={() => act(`/api/inventory/holds/${r.id}/override-unblock`)} style={btn}>Override Unblock</button>
                   )}
                 </td>
