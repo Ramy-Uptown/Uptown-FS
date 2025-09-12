@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchWithAuth } from '../lib/apiClient';
+import { fetchWithAuth } from '../lib/apiClient.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 

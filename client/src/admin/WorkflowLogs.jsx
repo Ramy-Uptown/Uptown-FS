@@ -189,6 +189,7 @@ export default function WorkflowLogs() {
 
 function Section({ title, rows, total }) {
   const list = rows || []
+  const numCols = list.length > 0 ? Object.keys(list[0]).length : 1
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -209,7 +210,7 @@ function Section({ title, rows, total }) {
               </tr>
             ))}
             {list.length === 0 && (
-              <tr><td style={td}>No records.</td></tr>
+              <tr><td style={{ ...td, textAlign: 'center' }} colSpan={numCols}>No records.</td></tr>
             )}
           </tbody>
         </table>
