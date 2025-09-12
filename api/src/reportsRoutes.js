@@ -22,8 +22,8 @@ router.get('/workflow-logs', authMiddleware, requireRole(['ceo', 'chairman', 'vi
     const dateClause = (col) => {
       const parts = []
       const params = []
-      if (start) { params.push(start.toISOString()); parts.push(`${col} >= $${params.length}`) }
-      if (end) { params.push(end.toISOString()); parts.push(`${col} <= $${params.length}`) }
+      if (start) { params.push(start.toISOString()); parts.push(`${col} >= ${params.length}`) }
+      if (end) { params.push(end.toISOString()); parts.push(`${col} <= ${params.length}`) }
       return { sql: parts.length ? ` AND ${parts.join(' AND ')}` : '', params }
     }
 
@@ -34,21 +34,28 @@ router.get('/workflow-logs', authMiddleware, requireRole(['ceo', 'chairman', 'vi
       const baseWhere = []
       const params = []
       // consultant filter
-      if (cid) { params.push(cid); baseWhere.push(`pp.created_by = $${params.length}`) }
+      if (cid) { params.push(cid); baseWhere.push(`pp.created_by = ${params.length}`) }
       // manager filter
       if (mid) {
         params.push(mid)
-        baseWhere.push(`pp.created_by IN (SELECT consultant_user_id FROM sales_team_members WHERE manager_user_id=$${params.length} AND active=TRUE)`)
+        baseWhere.push(`pp.created_by IN (SELECT consultant_user_id FROM sales_team_members WHERE manager_user_id=${params.length} AND active=TRUE)`)
       }
       const d = dateClause('pp.created_at')
       const where = (baseWhere.length ? `WHERE ${baseWhere.join(' AND ')}` : '') + d.sql
       const q = `
         SELECT pp.id, pp.deal_id, pp.status, pp.version, pp.accepted, pp.created_at, pp.updated_at,
                pp.created_by,
+               u.email AS created_by_email,
+               u.name AS created_by_name,
+               -- pick one active manager if any
+               (SELECT stm.manager_user_id FROM sales_team_members stm WHERE stm.consultant_user_id=pp.created_by AND stm.active=TRUE LIMIT 1) AS manager_user_id,
+               (SELECT um.email FROM users um WHERE um.id = (SELECT stm.manager_user_id FROM sales_team_members stm WHERE stm.consultant_user_id=pp.created_by AND stm.active=TRUE LIMIT 1)) AS manager_email,
+               (SELECT um.name FROM users um WHERE um.id = (SELECT stm.manager_user_id FROM sales_team_members stm WHERE stm.consultant_user_id=pp.created_by AND stm.active=TRUE LIMIT 1)) AS manager_name,
                COALESCE( (pp.details->>'totalNominalPrice')::numeric,
                          (pp.details->'data'->>'totalNominalPrice')::numeric,
                          0) AS total_nominal
         FROM payment_plans pp
+        LEFT JOIN users u ON u.id = pp.created_by
         ${where}
         ORDER BY pp.id DESC`
       const rows = await pool.query(q, params.concat(d.params))
@@ -63,21 +70,27 @@ router.get('/workflow-logs', authMiddleware, requireRole(['ceo', 'chairman', 'vi
       const baseWhere = []
       const params = []
       // Join to payment_plans to filter by consultant or manager
-      if (cid) { params.push(cid); baseWhere.push(`pp.created_by = $${params.length}`) }
+      if (cid) { params.push(cid); baseWhere.push(`pp.created_by = ${params.length}`) }
       if (mid) {
         params.push(mid)
-        baseWhere.push(`pp.created_by IN (SELECT consultant_user_id FROM sales_team_members WHERE manager_user_id=$${params.length} AND active=TRUE)`)
+        baseWhere.push(`pp.created_by IN (SELECT consultant_user_id FROM sales_team_members WHERE manager_user_id=${params.length} AND active=TRUE)`)
       }
       const d = dateClause('rf.created_at')
       const where = (baseWhere.length ? `WHERE ${baseWhere.join(' AND ')}` : '') + d.sql
       const q = `
         SELECT rf.id, rf.payment_plan_id, rf.status, rf.created_at, rf.updated_at,
                pp.created_by,
+               u.email AS created_by_email,
+               u.name AS created_by_name,
+               (SELECT stm.manager_user_id FROM sales_team_members stm WHERE stm.consultant_user_id=pp.created_by AND stm.active=TRUE LIMIT 1) AS manager_user_id,
+               (SELECT um.email FROM users um WHERE um.id = (SELECT stm.manager_user_id FROM sales_team_members stm WHERE stm.consultant_user_id=pp.created_by AND stm.active=TRUE LIMIT 1)) AS manager_email,
+               (SELECT um.name FROM users um WHERE um.id = (SELECT stm.manager_user_id FROM sales_team_members stm WHERE stm.consultant_user_id=pp.created_by AND stm.active=TRUE LIMIT 1)) AS manager_name,
                COALESCE( (pp.details->>'totalNominalPrice')::numeric,
                          (pp.details->'data'->>'totalNominalPrice')::numeric,
                          0) AS total_nominal
         FROM reservation_forms rf
         JOIN payment_plans pp ON pp.id = rf.payment_plan_id
+        LEFT JOIN users u ON u.id = pp.created_by
         ${where}
         ORDER BY rf.id DESC`
       const rows = await pool.query(q, params.concat(d.params))
@@ -92,22 +105,28 @@ router.get('/workflow-logs', authMiddleware, requireRole(['ceo', 'chairman', 'vi
       const baseWhere = []
       const params = []
       // Join to reservation_forms -> payment_plans
-      if (cid) { params.push(cid); baseWhere.push(`pp.created_by = $${params.length}`) }
+      if (cid) { params.push(cid); baseWhere.push(`pp.created_by = ${params.length}`) }
       if (mid) {
         params.push(mid)
-        baseWhere.push(`pp.created_by IN (SELECT consultant_user_id FROM sales_team_members WHERE manager_user_id=$${params.length} AND active=TRUE)`)
+        baseWhere.push(`pp.created_by IN (SELECT consultant_user_id FROM sales_team_members WHERE manager_user_id=${params.length} AND active=TRUE)`)
       }
       const d = dateClause('c.created_at')
       const where = (baseWhere.length ? `WHERE ${baseWhere.join(' AND ')}` : '') + d.sql
       const q = `
         SELECT c.id, c.reservation_form_id, c.status, c.created_at, c.updated_at,
                pp.created_by,
+               u.email AS created_by_email,
+               u.name AS created_by_name,
+               (SELECT stm.manager_user_id FROM sales_team_members stm WHERE stm.consultant_user_id=pp.created_by AND stm.active=TRUE LIMIT 1) AS manager_user_id,
+               (SELECT um.email FROM users um WHERE um.id = (SELECT stm.manager_user_id FROM sales_team_members stm WHERE stm.consultant_user_id=pp.created_by AND stm.active=TRUE LIMIT 1)) AS manager_email,
+               (SELECT um.name FROM users um WHERE um.id = (SELECT stm.manager_user_id FROM sales_team_members stm WHERE stm.consultant_user_id=pp.created_by AND stm.active=TRUE LIMIT 1)) AS manager_name,
                COALESCE( (pp.details->>'totalNominalPrice')::numeric,
                          (pp.details->'data'->>'totalNominalPrice')::numeric,
                          0) AS total_nominal
         FROM contracts c
         JOIN reservation_forms rf ON rf.id = c.reservation_form_id
         JOIN payment_plans pp ON pp.id = rf.payment_plan_id
+        LEFT JOIN users u ON u.id = pp.created_by
         ${where}
         ORDER BY c.id DESC`
       const rows = await pool.query(q, params.concat(d.params))

@@ -280,6 +280,40 @@ router.patch('/holds/:id/extend', authMiddleware, requireRole(['financial_manage
   }
 })
 
+// Override unblock (FM can override after CEO approvals elsewhere) if unit not reserved
+router.patch('/holds/:id/override-unblock', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const id = num(req.params.id)
+    if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+    await client.query('BEGIN')
+    const cur = await client.query('SELECT * FROM holds WHERE id=$1', [id])
+    if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Hold not found') }
+    const hold = cur.rows[0]
+    // If linked to a payment plan that already has an approved reservation, do not allow override
+    if (hold.payment_plan_id) {
+      const rf = await client.query(
+        `SELECT 1 FROM reservation_forms WHERE payment_plan_id=$1 AND status='approved' LIMIT 1`,
+        [hold.payment_plan_id]
+      )
+      if (rf.rows.length > 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Cannot override: unit is reserved') }
+    }
+    // Otherwise unblock
+    const upd = await client.query(
+      `UPDATE holds SET status='unblocked', updated_at=now() WHERE id=$1 RETURNING *`,
+      [id]
+    )
+    await client.query('UPDATE units SET available=TRUE, updated_at=now() WHERE id=$1', [hold.unit_id])
+    await client.query('COMMIT'); client.release()
+    return ok(res, { hold: upd.rows[0] })
+  } catch (e) {
+    try { await client.query('ROLLBACK') } catch {}
+    client.release()
+    console.error('PATCH /api/inventory/holds/:id/override-unblock error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
 // Notifications list (for financial manager)
 router.get('/notifications', authMiddleware, requireRole(['financial_manager', 'admin', 'superadmin']), async (req, res) => {
   try {

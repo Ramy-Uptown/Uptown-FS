@@ -40,7 +40,7 @@ export default function WorkflowLogs() {
     const wb = XLSX.utils.book_new()
 
     const makeSheet = (rows, headers) => {
-      const aoa = [headers, ...rows.map(r => headers.map(h => r[h.key]))]
+      const aoa = [headers.map(h => h.label), ...rows.map(r => headers.map(h => r[h.key]))]
       const ws = XLSX.utils.aoa_to_sheet(aoa)
       ws['!cols'] = headers.map(() => ({ wch: 16 }))
       return ws
@@ -52,7 +52,10 @@ export default function WorkflowLogs() {
       { key: 'status', label: 'Status' },
       { key: 'version', label: 'Version' },
       { key: 'accepted', label: 'Accepted' },
-      { key: 'created_by', label: 'Consultant' },
+      { key: 'created_by', label: 'Consultant ID' },
+      { key: 'created_by_email', label: 'Consultant Email' },
+      { key: 'manager_user_id', label: 'Manager ID' },
+      { key: 'manager_email', label: 'Manager Email' },
       { key: 'created_at', label: 'Created At' },
       { key: 'total_nominal', label: 'Total Nominal' }
     ]
@@ -60,7 +63,10 @@ export default function WorkflowLogs() {
       { key: 'id', label: 'ID' },
       { key: 'payment_plan_id', label: 'Offer ID' },
       { key: 'status', label: 'Status' },
-      { key: 'created_by', label: 'Consultant' },
+      { key: 'created_by', label: 'Consultant ID' },
+      { key: 'created_by_email', label: 'Consultant Email' },
+      { key: 'manager_user_id', label: 'Manager ID' },
+      { key: 'manager_email', label: 'Manager Email' },
       { key: 'created_at', label: 'Created At' },
       { key: 'total_nominal', label: 'Total Nominal' }
     ]
@@ -68,7 +74,10 @@ export default function WorkflowLogs() {
       { key: 'id', label: 'ID' },
       { key: 'reservation_form_id', label: 'Reservation ID' },
       { key: 'status', label: 'Status' },
-      { key: 'created_by', label: 'Consultant' },
+      { key: 'created_by', label: 'Consultant ID' },
+      { key: 'created_by_email', label: 'Consultant Email' },
+      { key: 'manager_user_id', label: 'Manager ID' },
+      { key: 'manager_email', label: 'Manager Email' },
       { key: 'created_at', label: 'Created At' },
       { key: 'total_nominal', label: 'Total Nominal' }
     ]
@@ -111,6 +120,39 @@ export default function WorkflowLogs() {
     URL.revokeObjectURL(url)
   }
 
+  function exportCSV() {
+    if (!data) return
+    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+
+    const makeCSV = (rows) => {
+      if (!rows || rows.length === 0) return ''
+      const headers = Object.keys(rows[0])
+      const body = rows.map(r => headers.map(h => {
+        const v = r[h]
+        const s = v == null ? '' : String(v)
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+      }).join(','))
+      return [headers.join(','), ...body].join('\n')
+    }
+
+    const sections = [
+      { name: 'offers', rows: data.offers?.rows || [] },
+      { name: 'reservations', rows: data.reservations?.rows || [] },
+      { name: 'contracts', rows: data.contracts?.rows || [] }
+    ]
+    sections.forEach(sec => {
+      if (!sec.rows.length) return
+      const csv = makeCSV(sec.rows)
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `workflow_logs_${sec.name}_${ts}.csv`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    })
+  }
+
   return (
     <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
       <h2>Workflow Logs</h2>
@@ -126,9 +168,9 @@ export default function WorkflowLogs() {
         <input type="number" placeholder="Consultant User ID" value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl} />
         <input type="number" placeholder="Sales Manager User ID" value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl} />
         <div>
-          <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Apply'}</button>
-          <button onClick={exportXLSX} disabled={!data} style={btn}>Export XLSX</button>
-        </div>
+         <<button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Appl}</</button>
+         <<button onClick={exportXLSX} disabled={!data} style={btn}>Export XL</</button>
+         <dbutton onClick={exportCSV} disabled={!data} style={btn}>Exportiv>
       </div>
 
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
