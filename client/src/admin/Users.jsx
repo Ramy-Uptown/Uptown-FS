@@ -368,14 +368,13 @@ export default function Users() {
                     <td style={td}>{u.updated_at ? new Date(u.updated_at).toLocaleString() : ''}</td>
                     <td style={td}>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {!isEditing && <button type="button" onClick={() => startEdit(u)} disabled={busyId === u.id} style={btn}>Edit Email</button>}
+                        {!isEditing & <<button type="button" onClick={() => startEdit(u)} disabled={busyId === u.id} style={btn}>Edit Ema</</button>}
+                       <{a href={`/admin/users/${u.id}`} style={btn}>Ed</  a>
                         {!isSelf && u.active !== false && (
-                          <button
+                         <obutton
                             type="button"
                             onClick={() => deactivateUser(u)}
-                            disabled={busyId === u.id}
-                            style={btnDanger}
-                            title="Deactivate user (keeps data; prevents login)"
+                            disabled={busyId ===   title="Deactivate user (keeps data; prevents login)"
                           >
                             Deactivate
                           </button>
@@ -401,19 +400,5 @@ export default function Users() {
       </div>
     </div>
   )
-} colSpan={7}>No users.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <p style={{ ...metaText, marginTop: 8 }}>
-          Notes:
-          <br />• You cannot change your own role or deactivate/delete your own account.
-          <br />• Admins cannot create, modify, or delete superadmin accounts. Superadmins can manage all.
-        </p>
-      </div>
-    </div>
-  )
-}
+
 

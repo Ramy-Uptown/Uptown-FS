@@ -5,6 +5,7 @@ import App from './App.jsx'
 import Login from './Login.jsx'
 import DealsApp from './deals/App.jsx'
 import Users from './admin/Users.jsx'
+import UserEdit from './admin/UserEdit.jsx'
 import Units from './admin/Units.jsx'
 import SalesTeam from './admin/SalesTeam.jsx'
 import CommissionPolicies from './admin/CommissionPolicies.jsx'
@@ -69,6 +70,14 @@ createRoot(document.getElementById('root')).render(
           element={
             <AdminRoute>
               <Users />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/users/:id"
+          element={
+            <AdminRoute>
+              <UserEdit />
             </AdminRoute>
           }
         />
