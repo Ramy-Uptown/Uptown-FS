@@ -105,6 +105,26 @@ const styles = {
   error: { color: '#e11d48' }
 }
 
+function DiscountHint({ role, value }) {
+  const v = Number(value) || 0
+  const noteStyle = { color: '#6b7280', fontSize: 12, marginTop: 4 }
+  if (!role) return null
+  if (role === 'property_consultant') {
+    if (v <= 2) return <div style={noteStyle}>Within sales consultant authority. Sales manager review required.</div>
+    return <div style={{ ...noteStyle, color: '#b45309' }}>Exceeds 2%. Not permitted for sales consultant.</div>
+  }
+  if (role === 'sales_manager') {
+    if (v <= 2) return <div style={noteStyle}>Within sales consultant/sales manager authority.</div>
+    return <div style={{ ...noteStyle, color: '#b45309' }}>Over 2% requires escalation to Financial Manager and CEO.</div>
+  }
+  if (role === 'financial_manager') {
+    if (v <= 2) return <div style={noteStyle}>Within 2% band.</div>
+    if (v > 2 && v <= 5) return <div style={{ ...noteStyle, color: '#b45309' }}>Selected discount requires CEO approval.</div>
+    return <div style={{ ...noteStyle, color: '#e11d48' }}>Exceeds 5%. Not permitted.</div>
+  }
+  return null
+}
+
 export default function App(props) {
   const embedded = !!(props && props.embedded)
   const [message, setMessage] = useState('Loading...')
@@ -132,6 +152,15 @@ export default function App(props) {
     handoverYear: 2,
     splitFirstYearPayments: false
   })
+
+  // Current user (for role-based hints)
+  const [authUser, setAuthUser] = useState(null)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('auth_user')
+      if (raw) setAuthUser(JSON.parse(raw))
+    } catch {}
+  }, [])
 
   // Dynamic arrays
   const [firstYearPayments, setFirstYearPayments] = useState([])
@@ -240,6 +269,36 @@ export default function App(props) {
     t = setTimeout(run, 300)
     return () => t && clearTimeout(t)
   }, [unitQuery])
+
+  // Auto-load approved standard by unit type when unit_type changes
+  useEffect(() => {
+    const t = unitInfo.unit_type && String(unitInfo.unit_type).trim()
+    if (!t) return
+    let abort = false
+    async function loadStd() {
+      try {
+        const resp = await fetchWithAuth(`${API_URL}/api/workflow/standard-pricing/approved-by-type/${encodeURIComponent(t)}`)
+        const data = await resp.json()
+        if (!resp.ok) return
+        if (abort) return
+        const sp = data.standard_pricing || {}
+        setStdPlan(s => ({
+          ...s,
+          totalPrice: Number(sp.price) || s.totalPrice,
+          financialDiscountRate: Number(sp.std_financial_rate_percent ?? s.financialDiscountRate),
+          calculatedPV: Number(sp.price) || Number(sp.calculated_pv) || s.calculatedPV
+        }))
+        setInputs(s => ({
+          ...s,
+          planDurationYears: s.planDurationYears || Number(sp.plan_duration_years) || s.planDurationYears,
+          installmentFrequency: s.installmentFrequency || sp.installment_frequency || s.installmentFrequency
+        }))
+      } catch {}
+    }
+    loadStd()
+    return () => { abort = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unitInfo.unit_type])
 
   // Persist on change
   useEffect(() => {
@@ -792,6 +851,7 @@ export default function App(props) {
             <div>
               <label style={styles.label}>Sales Discount (%)</label>
               <input type="number" value={inputs.salesDiscountPercent} onChange={e => setInputs(s => ({ ...s, salesDiscountPercent: e.target.value }))} style={styles.input()} />
+              <DiscountHint role={authUser?.role} value={inputs.salesDiscountPercent} />
             </div>
 
             <div>

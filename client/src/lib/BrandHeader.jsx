@@ -80,12 +80,28 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Units', href: '/admin/units' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'Users', href: '/admin/users' },
-          { label: 'Commission Policies', href: '/admin/commission-policies' }
+          { label: 'Commission Policies', href: '/admin/commission-policies' },
+          { label: 'Team Proposals', href: '/deals/team-proposals' },
+          { label: 'Sales Assignments', href: '/admin/sales-assignments' }
         ]
       case 'financial_admin':
-        return [...base, { label: 'Units', href: '/admin/units' }, { label: 'Standard Pricing', href: '/admin/standard-pricing' }]
+        return [
+          ...base,
+          { label: 'Units', href: '/admin/units' },
+          { label: 'Standard Pricing', href: '/admin/standard-pricing' },
+          { label: 'My Proposals', href: '/deals/my-proposals' }
+        ]
+      case 'sales_manager':
+        return [
+          ...base,
+          { label: 'Team Proposals', href: '/deals/team-proposals' },
+          { label: 'Sales Assignments', href: '/admin/sales-assignments' }
+        ]
       case 'property_consultant':
-        return base
+        return [
+          ...base,
+          { label: 'My Proposals', href: '/deals/my-proposals' }
+        ]
       case 'contract_person':
       case 'contract_manager':
         return base
