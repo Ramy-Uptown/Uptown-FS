@@ -33,6 +33,11 @@ export async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- =============================================================
+    -- == THIS IS THE FIX TO ENSURE THE 'active' COLUMN EXISTS    ==
+    -- =============================================================
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
+
     -- Add/update a CHECK constraint on the user roles for data integrity
     ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
     ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN (
