@@ -10,6 +10,9 @@ import SalesTeam from './admin/SalesTeam.jsx'
 import CommissionPolicies from './admin/CommissionPolicies.jsx'
 import CommissionsReport from './admin/CommissionsReport.jsx'
 import StandardPricing from './admin/StandardPricing.jsx'
+import HoldsFM from './admin/HoldsFM.jsx'
+import HoldsCEO from './admin/HoldsCEO.jsx'
+import WorkflowLogs from './admin/WorkflowLogs.jsx'
 
 function RoleBasedRoute({ children, allowedRoles }) {
   const token = localStorage.getItem('auth_token');
@@ -107,6 +110,30 @@ createRoot(document.getElementById('root')).render(
             <AdminRoute>
               <CommissionsReport />
             </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/holds"
+          element={
+            <RoleBasedRoute allowedRoles={['financial_manager', 'admin', 'sales_manager', 'contract_manager']}>
+              <HoldsFM />
+            </RoleBasedRoute>
+          }
+        />
+        <Route
+          path="/admin/hold-approvals"
+          element={
+            <RoleBasedRoute allowedRoles={['ceo', 'contract_manager', 'sales_manager']}>
+              <HoldsCEO />
+            </RoleBasedRoute>
+          }
+        />
+        <Route
+          path="/admin/workflow-logs"
+          element={
+            <RoleBasedRoute allowedRoles={['ceo', 'chairman', 'vicechairman', 'admin', 'superadmin', 'sales_manager', 'contract_manager']}>
+              <WorkflowLogs />
+            </RoleBasedRoute>
           }
         />
         <Route path="/" element={<Navigate to="/deals" replace />} />

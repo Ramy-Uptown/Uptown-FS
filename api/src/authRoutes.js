@@ -29,7 +29,9 @@ function authMiddleware(req, res, next) {
 }
 
 function adminOnly(req, res, next) {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: { message: 'Forbidden' } })
+  if (!['admin', 'superadmin'].includes(req.user?.role)) {
+    return res.status(403).json({ error: { message: 'Forbidden' } })
+  }
   next()
 }
 
@@ -108,14 +110,15 @@ router.post('/login', async (req, res) => {
     const { email, password } = req.body || {}
     if (!email || !password) return res.status(400).json({ error: { message: 'Email and password are required' } })
     const normalizedEmail = String(email).trim().toLowerCase()
-    const result = await pool.query('SELECT id, email, password_hash, role FROM users WHERE email=$1', [normalizedEmail])
+    const result = await pool.query('SELECT id, email, password_hash, role, active FROM users WHERE email=$1', [normalizedEmail])
     if (result.rows.length === 0) return res.status(401).json({ error: { message: 'Invalid credentials' } })
     const user = result.rows[0]
+    if (user.active === false) return res.status(403).json({ error: { message: 'Account is deactivated' } })
     const ok = await bcrypt.compare(String(password), user.password_hash)
     if (!ok) return res.status(401).json({ error: { message: 'Invalid credentials' } })
     const accessToken = signAccessToken(user)
     const refresh = await issueRefreshToken(user.id)
-    return res.json({ ok: true, user: { id: user.id, email: user.email, role: user.role }, accessToken, refreshToken: refresh.token })
+    return res.json({ ok: true, user: { id: user.id, email: user.email, role: user.role, active: user.active }, accessToken, refreshToken: refresh.token })
   } catch (e) {
     console.error('POST /api/auth/login error:', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
@@ -229,7 +232,7 @@ router.get('/me', authMiddleware, async (req, res) => {
 // User management (admin)
 router.get('/users', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, email, role, created_at, updated_at FROM users ORDER BY id ASC')
+    const result = await pool.query('SELECT id, email, role, active, created_at, updated_at FROM users ORDER BY id ASC')
     return res.json({ ok: true, users: result.rows })
   } catch (e) {
     console.error('GET /api/auth/users error:', e)
@@ -245,11 +248,104 @@ router.patch('/users/:id/role', authMiddleware, adminOnly, async (req, res) => {
     if (!VALID_ROLES.includes(role)) {
       return res.status(400).json({ error: { message: 'Invalid role specified' } })
     }
-    const result = await pool.query('UPDATE users SET role=$1 WHERE id=$2 RETURNING id, email, role', [role, id])
-    if (result.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
+    // Admins cannot assign superadmin
+    if (req.user.role === 'admin' && role === 'superadmin') {
+      return res.status(403).json({ error: { message: 'Admins cannot assign superadmin role' } })
+    }
+    // Prevent admins from changing superadmin accounts
+    const tgt = await pool.query('SELECT role FROM users WHERE id=$1', [id])
+    if (tgt.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
+    if (req.user.role === 'admin' && tgt.rows[0].role === 'superadmin') {
+      return res.status(403).json({ error: { message: 'Admins cannot modify superadmin accounts' } })
+    }
+    const result = await pool.query('UPDATE users SET role=$1 WHERE id=$2 RETURNING id, email, role, active', [role, id])
     return res.json({ ok: true, user: result.rows[0] })
   } catch (e) {
     console.error('PATCH /api/auth/users/:id/role error:', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Create user (admin or superadmin). Admin cannot create superadmin users.
+router.post('/users', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const { email, password, role = 'user' } = req.body || {}
+    if (!email || typeof email !== 'string') return res.status(400).json({ error: { message: 'Email is required' } })
+    if (!password || typeof password !== 'string' || password.length < 6) return res.status(400).json({ error: { message: 'Password must be at least 6 characters' } })
+    if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: { message: 'Invalid role specified' } })
+    if (req.user.role === 'admin' && role === 'superadmin') {
+      return res.status(403).json({ error: { message: 'Admins cannot create superadmin users' } })
+    }
+    const normalizedEmail = email.trim().toLowerCase()
+    const existing = await pool.query('SELECT 1 FROM users WHERE email=$1', [normalizedEmail])
+    if (existing.rows.length > 0) return res.status(409).json({ error: { message: 'Email already registered' } })
+    const hash = await bcrypt.hash(password, 10)
+    const insert = await pool.query(
+      'INSERT INTO users (email, password_hash, role, active) VALUES ($1, $2, $3, TRUE) RETURNING id, email, role, active',
+      [normalizedEmail, hash, role]
+    )
+    return res.json({ ok: true, user: insert.rows[0] })
+  } catch (e) {
+    console.error('POST /api/auth/users error:', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Update active flag (deactivate/reactivate); admin cannot change superadmin
+router.patch('/users/:id/active', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const { active } = req.body || {}
+    const id = Number(req.params.id)
+    if (typeof active !== 'boolean') return res.status(400).json({ error: { message: 'active must be boolean' } })
+    const tgt = await pool.query('SELECT role FROM users WHERE id=$1', [id])
+    if (tgt.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
+    if (req.user.role === 'admin' && tgt.rows[0].role === 'superadmin') {
+      return res.status(403).json({ error: { message: 'Admins cannot modify superadmin accounts' } })
+    }
+    const result = await pool.query('UPDATE users SET active=$1 WHERE id=$2 RETURNING id, email, role, active', [active, id])
+    return res.json({ ok: true, user: result.rows[0] })
+  } catch (e) {
+    console.error('PATCH /api/auth/users/:id/active error:', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Update email (optional helper)
+router.patch('/users/:id', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const { email } = req.body || {}
+    if (!email || typeof email !== 'string') return res.status(400).json({ error: { message: 'email is required' } })
+    const tgt = await pool.query('SELECT role FROM users WHERE id=$1', [id])
+    if (tgt.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
+    if (req.user.role === 'admin' && tgt.rows[0].role === 'superadmin') {
+      return res.status(403).json({ error: { message: 'Admins cannot modify superadmin accounts' } })
+    }
+    const normalizedEmail = email.trim().toLowerCase()
+    const existing = await pool.query('SELECT id FROM users WHERE email=$1 AND id<>$2', [normalizedEmail, id])
+    if (existing.rows.length > 0) return res.status(409).json({ error: { message: 'Email already in use' } })
+    const result = await pool.query('UPDATE users SET email=$1 WHERE id=$2 RETURNING id, email, role, active', [normalizedEmail, id])
+    return res.json({ ok: true, user: result.rows[0] })
+  } catch (e) {
+    console.error('PATCH /api/auth/users/:id error:', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Delete guard: admin cannot delete superadmin
+router.delete('/users/:id', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const tgt = await pool.query('SELECT role FROM users WHERE id=$1', [id])
+    if (tgt.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
+    if (req.user.role === 'admin' && tgt.rows[0].role === 'superadmin') {
+      return res.status(403).json({ error: { message: 'Admins cannot delete superadmin accounts' } })
+    }
+    const result = await pool.query('DELETE FROM users WHERE id=$1 RETURNING id', [id])
+    if (result.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
+    return res.json({ ok: true, id })
+  } catch (e) {
+    console.error('DELETE /api/auth/users/:id error:', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
   }
 })

@@ -105,6 +105,26 @@ const styles = {
   error: { color: '#e11d48' }
 }
 
+function DiscountHint({ role, value }) {
+  const v = Number(value) || 0
+  const noteStyle = { color: '#6b7280', fontSize: 12, marginTop: 4 }
+  if (!role) return null
+  if (role === 'property_consultant') {
+    if (v <= 2) return <div style={noteStyle}>Within sales consultant authority. Sales manager review required.</div>
+    return <div style={{ ...noteStyle, color: '#b45309' }}>Exceeds 2%. Not permitted for sales consultant.</div>
+  }
+  if (role === 'sales_manager') {
+    if (v <= 2) return <div style={noteStyle}>Within sales consultant/sales manager authority.</div>
+    return <div style={{ ...noteStyle, color: '#b45309' }}>Over 2% requires escalation to Financial Manager and CEO.</div>
+  }
+  if (role === 'financial_manager') {
+    if (v <= 2) return <div style={noteStyle}>Within 2% band.</div>
+    if (v > 2 && v <= 5) return <div style={{ ...noteStyle, color: '#b45309' }}>Selected discount requires CEO approval.</div>
+    return <div style={{ ...noteStyle, color: '#e11d48' }}>Exceeds 5%. Not permitted.</div>
+  }
+  return null
+}
+
 export default function App(props) {
   const embedded = !!(props && props.embedded)
   const [message, setMessage] = useState('Loading...')
@@ -132,6 +152,15 @@ export default function App(props) {
     handoverYear: 2,
     splitFirstYearPayments: false
   })
+
+  // Current user (for role-based hints)
+  const [authUser, setAuthUser] = useState(null)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('auth_user')
+      if (raw) setAuthUser(JSON.parse(raw))
+    } catch {}
+  }, [])
 
   // Dynamic arrays
   const [firstYearPayments, setFirstYearPayments] = useState([])
@@ -240,6 +269,111 @@ export default function App(props) {
     t = setTimeout(run, 300)
     return () => t && clearTimeout(t)
   }, [unitQuery])
+
+  // Auto-load approved standard by unit type when unit_type changes
+  useEffect(() => {
+    const t = unitInfo.unit_type && String(unitInfo.unit_type).trim()
+    if (!t) return
+    let abort = false
+    async function loadStd() {
+      try {
+        const resp = await fetchWithAuth(`${API_URL}/api/workflow/standard-pricing/approved-by-type/${encodeURIComponent(t)}`)
+        const data = await resp.json()
+        if (!resp.ok) return
+        if (abort) return
+        const sp = data.standard_pricing || {}
+        setStdPlan(s => ({
+          ...s,
+          totalPrice: Number(sp.price) || s.totalPrice,
+          financialDiscountRate: Number(sp.std_financial_rate_percent ?? s.financialDiscountRate),
+          calculatedPV: Number(sp.price) || Number(sp.calculated_pv) || s.calculatedPV
+        }))
+        setInputs(s => ({
+          ...s,
+          planDurationYears: s.planDurationYears || Number(sp.plan_duration_years) || s.planDurationYears,
+          installmentFrequency: s.installmentFrequency || sp.installment_frequency || s.installmentFrequency
+        }))
+      } catch {}
+    }
+    loadStd()
+    return () => { abort = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unitInfo.unit_type])
+
+function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCurrency }) {
+  const [types, setTypes] = useState([])
+  const [selectedTypeId, setSelectedTypeId] = useState('')
+  const [units, setUnits] = useState([])
+  const [loadingTypes, setLoadingTypes] = useState(false)
+  const [loadingUnits, setLoadingUnits] = useState(false)
+
+  useEffect(() => {
+    async function loadTypes() {
+      try {
+        setLoadingTypes(true)
+        const resp = await fetchWithAuth(`${API_URL}/api/inventory/types`)
+        const data = await resp.json()
+        if (resp.ok) setTypes(data.unit_types || [])
+      } finally {
+        setLoadingTypes(false)
+      }
+    }
+    loadTypes()
+  }, [])
+
+  useEffect(() => {
+    async function loadUnits() {
+      if (!selectedTypeId) { setUnits([]); return }
+      try {
+        setLoadingUnits(true)
+        const resp = await fetchWithAuth(`${API_URL}/api/inventory/units?unit_type_id=${encodeURIComponent(selectedTypeId)}`)
+        const data = await resp.json()
+        if (resp.ok) setUnits(data.units || [])
+      } finally {
+        setLoadingUnits(false)
+      }
+    }
+    loadUnits()
+  }, [selectedTypeId])
+
+  return (
+    <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
+      <div>
+        <select value={selectedTypeId} onChange={e => setSelectedTypeId(e.target.value)} style={styles.select()}>
+          <option value="">Select type…</option>
+          {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        {loadingTypes ? <small style={styles.metaText}>Loading types…</small> : null}
+      </div>
+      <div>
+        <select
+          value=""
+          onChange={e => {
+            const id = Number(e.target.value)
+            const u = units.find(x => x.id === id)
+            if (!u) return
+            setStdPlan(s => ({ ...s, totalPrice: Number(u.base_price) || s.totalPrice }))
+            setCurrency(u.currency || 'EGP')
+            setInputs(s => ({ ...s, planDurationYears: s.planDurationYears || 5 }))
+            setUnitInfo(s => ({
+              ...s,
+              unit_type: u.unit_type || s.unit_type,
+              unit_code: u.code || s.unit_code,
+              description: u.description || s.description,
+            }))
+          }}
+          style={styles.select()}
+          disabled={!selectedTypeId || loadingUnits || units.length === 0}
+        >
+          <option value="">{loadingUnits ? 'Loading…' : (units.length ? 'Select unit…' : 'No units')}</option>
+          {units.map(u => (
+            <option key={u.id} value={u.id}>{u.code} — {u.description || ''}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  )
+}
 
   // Persist on change
   useEffect(() => {
@@ -792,6 +926,7 @@ export default function App(props) {
             <div>
               <label style={styles.label}>Sales Discount (%)</label>
               <input type="number" value={inputs.salesDiscountPercent} onChange={e => setInputs(s => ({ ...s, salesDiscountPercent: e.target.value }))} style={styles.input()} />
+              <DiscountHint role={authUser?.role} value={inputs.salesDiscountPercent} />
             </div>
 
             <div>
@@ -984,70 +1119,18 @@ export default function App(props) {
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Unit & Project Information</h2>
           <div style={styles.grid2}>
-            <div style={{ position: 'relative' }}>
-              <label style={styles.label}>Unit Catalog (type to search)</label>
-              <input
-                style={styles.input()}
-                value={unitQuery}
-                onChange={e => { setUnitQuery(e.target.value); }}
-                onFocus={() => { if (unitsCatalog.length) setUnitDropdownOpen(true) }}
-                placeholder="Search by code or description…"
+            <div>
+              <label style={styles.label}>Unit Type</label>
+              <TypeAndUnitPicker
+                unitInfo={unitInfo}
+                setUnitInfo={setUnitInfo}
+                setStdPlan={setStdPlan}
+                setInputs={setInputs}
+                setCurrency={setCurrency}
               />
-              {unitSearchLoading ? <small style={styles.metaText}>Searching…</small> : null}
-              {unitDropdownOpen && unitsCatalog.length > 0 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    background: '#fff',
-                    border: '1px solid #e6eaf0',
-                    borderRadius: 10,
-                    boxShadow: '0 6px 14px rgba(21,24,28,0.08)',
-                    marginTop: 4,
-                    zIndex: 20,
-                    maxHeight: 280,
-                    overflow: 'auto'
-                  }}
-                >
-                  {unitsCatalog.map(u => (
-                    <div
-                      key={u.id}
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        // Apply selected unit to calculator
-                        setUnitDropdownOpen(false)
-                        setUnitQuery(`${u.code} — ${u.description || ''}`)
-                        setStdPlan(s => ({ ...s, totalPrice: Number(u.base_price) || s.totalPrice }))
-                        setCurrency(u.currency || 'EGP')
-                        // Heuristics: plan duration defaults (Villa -> 7 years, otherwise 5)
-                        const inferredYears = (u.unit_type || '').toLowerCase().includes('villa') ? 7 : 5
-                        setInputs(s => ({ ...s, planDurationYears: s.planDurationYears || inferredYears }))
-                        setUnitInfo(s => ({
-                          ...s,
-                          unit_type: u.unit_type || s.unit_type,
-                          unit_code: u.code || s.unit_code,
-                          description: u.description || s.description,
-                          // If you want to copy code into unit_number by default, uncomment:
-                          // unit_number: s.unit_number || u.code || ''
-                        }))
-                      }}
-                      style={{
-                        padding: '10px 12px',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid #f2f5fa'
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{u.code} — {u.description || ''}</div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>
-                        {u.unit_type || '-'} • {u.currency} {Number(u.base_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <small style={styles.metaText}>Selecting a unit will set Std Total Price, currency, unit type, code, and description. Defaults plan duration to 5 years (7 years for Villas).</small>
+              <small style={styles.metaText}>
+                Choose a type to view available inventory. Selecting a unit will set price and details automatically.
+              </small>
             </div>
             <div>
               <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
