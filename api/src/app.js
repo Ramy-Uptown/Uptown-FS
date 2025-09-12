@@ -24,6 +24,7 @@ import commissionsRoutes from './commissionsRoutes.js'
 import ocrRoutes from './ocrRoutes.js'
 import { getCleanupMetrics } from './runtimeMetrics.js'
 import workflowRoutes from './workflowRoutes.js'
+import inventoryRoutes from './inventoryRoutes.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -65,6 +66,7 @@ app.use('/api/commission-policies', commissionPoliciesRoutes)
 app.use('/api/commissions', commissionsRoutes)
 app.use('/api/ocr', ocrRoutes)
 app.use('/api/workflow', workflowRoutes)
+app.use('/api/inventory', inventoryRoutes)
 
 // Health endpoint (now protected by middleware below)
 app.get('/api/health', (req, res) => {

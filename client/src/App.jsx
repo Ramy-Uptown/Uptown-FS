@@ -300,6 +300,81 @@ export default function App(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unitInfo.unit_type])
 
+function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCurrency }) {
+  const [types, setTypes] = useState([])
+  const [selectedTypeId, setSelectedTypeId] = useState('')
+  const [units, setUnits] = useState([])
+  const [loadingTypes, setLoadingTypes] = useState(false)
+  const [loadingUnits, setLoadingUnits] = useState(false)
+
+  useEffect(() => {
+    async function loadTypes() {
+      try {
+        setLoadingTypes(true)
+        const resp = await fetchWithAuth(`${API_URL}/api/inventory/types`)
+        const data = await resp.json()
+        if (resp.ok) setTypes(data.unit_types || [])
+      } finally {
+        setLoadingTypes(false)
+      }
+    }
+    loadTypes()
+  }, [])
+
+  useEffect(() => {
+    async function loadUnits() {
+      if (!selectedTypeId) { setUnits([]); return }
+      try {
+        setLoadingUnits(true)
+        const resp = await fetchWithAuth(`${API_URL}/api/inventory/units?unit_type_id=${encodeURIComponent(selectedTypeId)}`)
+        const data = await resp.json()
+        if (resp.ok) setUnits(data.units || [])
+      } finally {
+        setLoadingUnits(false)
+      }
+    }
+    loadUnits()
+  }, [selectedTypeId])
+
+  return (
+    <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
+      <div>
+        <select value={selectedTypeId} onChange={e => setSelectedTypeId(e.target.value)} style={styles.select()}>
+          <option value="">Select type…</option>
+          {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        {loadingTypes ? <small style={styles.metaText}>Loading types…</small> : null}
+      </div>
+      <div>
+        <select
+          value=""
+          onChange={e => {
+            const id = Number(e.target.value)
+            const u = units.find(x => x.id === id)
+            if (!u) return
+            setStdPlan(s => ({ ...s, totalPrice: Number(u.base_price) || s.totalPrice }))
+            setCurrency(u.currency || 'EGP')
+            setInputs(s => ({ ...s, planDurationYears: s.planDurationYears || 5 }))
+            setUnitInfo(s => ({
+              ...s,
+              unit_type: u.unit_type || s.unit_type,
+              unit_code: u.code || s.unit_code,
+              description: u.description || s.description,
+            }))
+          }}
+          style={styles.select()}
+          disabled={!selectedTypeId || loadingUnits || units.length === 0}
+        >
+          <option value="">{loadingUnits ? 'Loading…' : (units.length ? 'Select unit…' : 'No units')}</option>
+          {units.map(u => (
+            <option key={u.id} value={u.id}>{u.code} — {u.description || ''}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  )
+}
+
   // Persist on change
   useEffect(() => {
     const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes }
@@ -1044,70 +1119,18 @@ export default function App(props) {
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Unit & Project Information</h2>
           <div style={styles.grid2}>
-            <div style={{ position: 'relative' }}>
-              <label style={styles.label}>Unit Catalog (type to search)</label>
-              <input
-                style={styles.input()}
-                value={unitQuery}
-                onChange={e => { setUnitQuery(e.target.value); }}
-                onFocus={() => { if (unitsCatalog.length) setUnitDropdownOpen(true) }}
-                placeholder="Search by code or description…"
+            <div>
+              <label style={styles.label}>Unit Type</label>
+              <TypeAndUnitPicker
+                unitInfo={unitInfo}
+                setUnitInfo={setUnitInfo}
+                setStdPlan={setStdPlan}
+                setInputs={setInputs}
+                setCurrency={setCurrency}
               />
-              {unitSearchLoading ? <small style={styles.metaText}>Searching…</small> : null}
-              {unitDropdownOpen && unitsCatalog.length > 0 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    background: '#fff',
-                    border: '1px solid #e6eaf0',
-                    borderRadius: 10,
-                    boxShadow: '0 6px 14px rgba(21,24,28,0.08)',
-                    marginTop: 4,
-                    zIndex: 20,
-                    maxHeight: 280,
-                    overflow: 'auto'
-                  }}
-                >
-                  {unitsCatalog.map(u => (
-                    <div
-                      key={u.id}
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        // Apply selected unit to calculator
-                        setUnitDropdownOpen(false)
-                        setUnitQuery(`${u.code} — ${u.description || ''}`)
-                        setStdPlan(s => ({ ...s, totalPrice: Number(u.base_price) || s.totalPrice }))
-                        setCurrency(u.currency || 'EGP')
-                        // Heuristics: plan duration defaults (Villa -> 7 years, otherwise 5)
-                        const inferredYears = (u.unit_type || '').toLowerCase().includes('villa') ? 7 : 5
-                        setInputs(s => ({ ...s, planDurationYears: s.planDurationYears || inferredYears }))
-                        setUnitInfo(s => ({
-                          ...s,
-                          unit_type: u.unit_type || s.unit_type,
-                          unit_code: u.code || s.unit_code,
-                          description: u.description || s.description,
-                          // If you want to copy code into unit_number by default, uncomment:
-                          // unit_number: s.unit_number || u.code || ''
-                        }))
-                      }}
-                      style={{
-                        padding: '10px 12px',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid #f2f5fa'
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{u.code} — {u.description || ''}</div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>
-                        {u.unit_type || '-'} • {u.currency} {Number(u.base_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <small style={styles.metaText}>Selecting a unit will set Std Total Price, currency, unit type, code, and description. Defaults plan duration to 5 years (7 years for Villas).</small>
+              <small style={styles.metaText}>
+                Choose a type to view available inventory. Selecting a unit will set price and details automatically.
+              </small>
             </div>
             <div>
               <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
