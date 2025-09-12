@@ -173,6 +173,7 @@ export default function WorkflowLogs() {
           <button onClick={exportXLSX} disabled={!data} style={btn}>Export XLSX</button>
           <button onClick={exportCSV} disabled={!data} style={btn}>Export CSV</button>
         </div>
+      </div>
 
       {error ? <p style={errorText}>{error}</p> : null}
 
