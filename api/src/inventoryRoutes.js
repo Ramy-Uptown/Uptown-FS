@@ -281,6 +281,85 @@ router.patch('/holds/:id/extend', authMiddleware, requireRole(['financial_manage
 })
 
 // Override unblock (FM can override after CEO approvals elsewhere) if unit not reserved
+/**
+ * Override-unblock flow:
+ * 1) FM requests override -> status 'pending_override_ceo' and notify CEOs
+ * 2) CEO approves -> status 'override_ceo_approved' and notify FMs + consultant
+ * 3) FM executes override-unblock -> set available=true, status 'unblocked' and notify consultant + CEOs
+ */
+router.post('/holds/:id/override-request', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const id = num(req.params.id)
+    if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+    await client.query('BEGIN')
+    const cur = await client.query('SELECT * FROM holds WHERE id=$1', [id])
+    if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Hold not found') }
+    const hold = cur.rows[0]
+    // cannot request override if already reserved
+    if (hold.payment_plan_id) {
+      const rf = await client.query(`SELECT 1 FROM reservation_forms WHERE payment_plan_id=$1 AND status='approved' LIMIT 1`, [hold.payment_plan_id])
+      if (rf.rows.length > 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Cannot override: unit is reserved') }
+    }
+    const upd = await client.query(
+      `UPDATE holds SET status='pending_override_ceo', updated_at=now() WHERE id=$1 RETURNING *`,
+      [id]
+    )
+    // notify all CEOs
+    await client.query(
+      `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+       SELECT u.id, 'hold_override_request', 'holds', $1, 'Hold override requested and awaits CEO approval.'
+       FROM users u WHERE u.role='ceo' AND u.active=TRUE`,
+      [id]
+    )
+    await client.query('COMMIT'); client.release()
+    return ok(res, { hold: upd.rows[0] })
+  } catch (e) {
+    try { await client.query('ROLLBACK') } catch {}
+    client.release()
+    console.error('POST /api/inventory/holds/:id/override-request error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+router.patch('/holds/:id/override-approve', authMiddleware, requireRole(['ceo']), async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const id = num(req.params.id)
+    if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+    await client.query('BEGIN')
+    const cur = await client.query('SELECT * FROM holds WHERE id=$1', [id])
+    if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Hold not found') }
+    if (cur.rows[0].status !== 'pending_override_ceo') { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Not pending CEO override approval') }
+    const upd = await client.query(
+      `UPDATE holds SET status='override_ceo_approved', updated_at=now() WHERE id=$1 RETURNING *`,
+      [id]
+    )
+    // Notify all Financial Managers and the requesting consultant
+    await client.query(
+      `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+       SELECT u.id, 'hold_override_ceo_approved', 'holds', $1, 'CEO approved hold override. You may unblock the unit.'
+       FROM users u WHERE u.role='financial_manager' AND u.active=TRUE`,
+      [id]
+    )
+    const requestedBy = cur.rows[0].requested_by
+    if (requestedBy) {
+      await client.query(
+        `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+         VALUES ($1, 'hold_override_ceo_approved', 'holds', $2, 'CEO approved hold override for your request.')`,
+        [requestedBy, id]
+      )
+    }
+    await client.query('COMMIT'); client.release()
+    return ok(res, { hold: upd.rows[0] })
+  } catch (e) {
+    try { await client.query('ROLLBACK') } catch {}
+    client.release()
+    console.error('PATCH /api/inventory/holds/:id/override-approve error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
 router.patch('/holds/:id/override-unblock', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
   const client = await pool.connect()
   try {
@@ -290,7 +369,7 @@ router.patch('/holds/:id/override-unblock', authMiddleware, requireRole(['financ
     const cur = await client.query('SELECT * FROM holds WHERE id=$1', [id])
     if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Hold not found') }
     const hold = cur.rows[0]
-    // If linked to a payment plan that already has an approved reservation, do not allow override
+    if (hold.status !== 'override_ceo_approved') { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'CEO approval required before override-unblock') }
     if (hold.payment_plan_id) {
       const rf = await client.query(
         `SELECT 1 FROM reservation_forms WHERE payment_plan_id=$1 AND status='approved' LIMIT 1`,
@@ -298,12 +377,25 @@ router.patch('/holds/:id/override-unblock', authMiddleware, requireRole(['financ
       )
       if (rf.rows.length > 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Cannot override: unit is reserved') }
     }
-    // Otherwise unblock
     const upd = await client.query(
       `UPDATE holds SET status='unblocked', updated_at=now() WHERE id=$1 RETURNING *`,
       [id]
     )
     await client.query('UPDATE units SET available=TRUE, updated_at=now() WHERE id=$1', [hold.unit_id])
+    // Notify consultant and CEOs
+    if (hold.requested_by) {
+      await client.query(
+        `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+         VALUES ($1, 'hold_override_unblocked', 'holds', $2, 'Your hold has been overridden and unblocked by Financial Manager.')`,
+        [hold.requested_by, id]
+      )
+    }
+    await client.query(
+      `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+       SELECT u.id, 'hold_override_unblocked', 'holds', $1, 'Hold was unblocked after CEO approval.'
+       FROM users u WHERE u.role='ceo' AND u.active=TRUE`,
+      [id]
+    )
     await client.query('COMMIT'); client.release()
     return ok(res, { hold: upd.rows[0] })
   } catch (e) {
