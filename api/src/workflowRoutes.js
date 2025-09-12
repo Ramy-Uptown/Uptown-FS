@@ -144,21 +144,16 @@ router.patch(
       }
 
       await client.query('BEGIN')
-      // Set to pending_approval on any edit and clear approval
-      params.push(req.user.id) // param for history insert
-      params.push(id)
+      // Build update SQL using $ placeholders
       const updateSql = `
         UPDATE standard_pricing
         SET ${updates.join(', ')},
             status='pending_approval',
             approved_by=NULL,
             updated_at=now()
-        WHERE id=${params.length}
+        WHERE id=${params.length + 1}
         RETURNING *`
-      // Note: params layout: [field values..., req.user.id, id]; req.user.id is not used in SQL but kept for order; using index accordingly
-      // Execute update (ignoring the extra param for user id in update)
-      // Rebuild params to avoid confusion:
-      const updateParams = params.slice(0, updates.length).concat([id])
+      const updateParams = params.concat([id])
       const updRes = await client.query(updateSql, updateParams)
       const newRow = updRes.rows[0]
 
