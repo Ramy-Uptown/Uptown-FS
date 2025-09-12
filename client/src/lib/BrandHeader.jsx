@@ -140,10 +140,26 @@ export default function BrandHeader({ title, onLogout }) {
     transition: 'all .15s ease-in-out'
   }
 
-  const activeBtnStyle = {
+  // Non-active hover: invert to white background with brand text
+  const hoverBtnStyle = {
     background: '#fff',
     color: BRAND.primary,
     border: '1px solid #fff'
+  }
+
+  // Active (chosen) button: solid darker brand color with white text
+  const activeBtnStyle = {
+    background: BRAND.primaryDark,
+    color: '#fff',
+    border: `1px solid ${BRAND.primaryDark}`,
+    boxShadow: '0 0 0 2px rgba(255,255,255,0.15) inset'
+  }
+
+  // Active hover: slightly darker than active
+  const activeHoverStyle = {
+    background: '#775723',
+    color: '#fff',
+    border: '1px solid #775723'
   }
 
   return (
@@ -170,7 +186,7 @@ export default function BrandHeader({ title, onLogout }) {
                 key={idx}
                 onClick={() => { window.location.href = s.href }}
                 style={{ ...baseBtnStyle, ...(isActive ? activeBtnStyle : null) }}
-                hoverStyle={activeBtnStyle}
+                hoverStyle={isActive ? activeHoverStyle : hoverBtnStyle}
               >
                 {s.label}
               </HoverButton>
@@ -180,7 +196,7 @@ export default function BrandHeader({ title, onLogout }) {
             <HoverButton
               onClick={onLogout}
               style={baseBtnStyle}
-              hoverStyle={activeBtnStyle}
+              hoverStyle={hoverBtnStyle}
             >
               Logout
             </HoverButton>
