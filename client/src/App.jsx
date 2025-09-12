@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { fetchWithAuth } from './lib/apiClient.js'
 import BrandHeader from './lib/BrandHeader.jsx'
+import { getArabicMonth } from './lib/i18n.js'
+import numberToArabic from './lib/numberToArabic.js'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 const LS_KEY = 'uptown_calc_form_state_v2'
@@ -596,7 +598,9 @@ export default function App(props) {
         buyer,         // Pay To
         amountStr,     // Amount
         row.writtenAmount || '', // Amount in Words
-        `${row.label} (Month ${row.month})` // Notes
+        language === 'ar'
+          ? `${row.label} (شهر ${getArabicMonth(row.month)})`
+          : `${row.label} (Month ${row.month})` // Notes
       ]
     })
 
@@ -852,6 +856,7 @@ export default function App(props) {
                           <div>
                             <label style={styles.label}>Month (1-12)</label>
                             <input type="number" min="1" max="12" value={p.month} onChange={e => updateFirstYearPayment(idx, 'month', e.target.value)} style={styles.input(errMonth)} />
+                            {language === 'ar' && <small style={{...styles.metaText, fontStyle: 'italic'}}>{getArabicMonth(p.month)}</small>}
                             {errMonth && <small style={styles.error}>{errMonth}</small>}
                           </div>
                           <div>
@@ -1183,7 +1188,7 @@ export default function App(props) {
                         {Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td style={{ ...styles.td, direction: language === 'ar' ? 'rtl' : 'ltr', textAlign: language === 'ar' ? 'right' : 'left' }}>
-                        {row.writtenAmount}
+                        {language === 'ar' ? numberToArabic(row.amount, 'جنيه مصري', 'قرش') : row.writtenAmount}
                       </td>
                     </tr>
                   ))}
