@@ -1,11 +1,11 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: bitnami/postgresql:16
     container_name: app_db
     environment:
-      POSTGRES_USER: appuser
-      POSTGRES_PASSWORD: apppass
-      POSTGRES_DB: appdb
+      POSTGRESQL_USERNAME: appuser
+      POSTGRESQL_PASSWORD: apppass
+      POSTGRESQL_DATABASE: appdb
     ports:
       - "5432:5432"
     volumes:

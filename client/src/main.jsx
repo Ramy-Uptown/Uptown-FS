@@ -9,6 +9,23 @@ import Units from './admin/Units.jsx'
 import SalesTeam from './admin/SalesTeam.jsx'
 import CommissionPolicies from './admin/CommissionPolicies.jsx'
 import CommissionsReport from './admin/CommissionsReport.jsx'
+import StandardPricing from './admin/StandardPricing.jsx'
+
+function RoleBasedRoute({ children, allowedRoles }) {
+  const token = localStorage.getItem('auth_token');
+  const user = JSON.parse(localStorage.getItem('auth_user') || '{}');
+  const location = useLocation();
+
+  if (!token) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  if (!allowedRoles.includes(user?.role)) {
+    return <Navigate to="/deals" replace />;
+  }
+
+  return children;
+}
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('auth_token')
@@ -20,16 +37,7 @@ function PrivateRoute({ children }) {
 }
 
 function AdminRoute({ children }) {
-  const token = localStorage.getItem('auth_token')
-  const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
-  const location = useLocation()
-  if (!token) {
-    return <Navigate to="/login" replace state={{ from: location }} />
-  }
-  if (user?.role !== 'admin') {
-    return <Navigate to="/deals" replace />
-  }
-  return children
+  return <RoleBasedRoute allowedRoles={['admin']}>{children}</RoleBasedRoute>;
 }
 
 createRoot(document.getElementById('root')).render(
@@ -59,6 +67,14 @@ createRoot(document.getElementById('root')).render(
             <AdminRoute>
               <Users />
             </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/standard-pricing"
+          element={
+            <RoleBasedRoute allowedRoles={['financial_manager', 'ceo']}>
+              <StandardPricing />
+            </RoleBasedRoute>
           }
         />
         <Route

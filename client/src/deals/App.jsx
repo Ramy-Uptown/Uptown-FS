@@ -44,6 +44,9 @@ function RoleAwareNav() {
           <Link to="/admin/commissions" style={linkStyle('/admin/commissions')}>Commissions</Link>
         </>
       )}
+      {(role === 'financial_manager' || role === 'ceo') && (
+        <Link to="/admin/standard-pricing" style={linkStyle('/admin/standard-pricing')}>Standard Pricing</Link>
+      )}
       <Link to="/calculator" style={linkStyle('/calculator')}>Calculator</Link>
     </div>
   )
