@@ -105,6 +105,13 @@ export default function BrandHeader({ title, onLogout }) {
       case 'contract_person':
       case 'contract_manager':
         return base
+      case 'ceo':
+      case 'chairman':
+      case 'vicechairman':
+        return [
+          ...base,
+          { label: 'Workflow Logs', href: '/admin/workflow-logs' }
+        ]
       default:
         return base
     }

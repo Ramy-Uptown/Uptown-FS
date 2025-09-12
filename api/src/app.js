@@ -25,6 +25,7 @@ import ocrRoutes from './ocrRoutes.js'
 import { getCleanupMetrics } from './runtimeMetrics.js'
 import workflowRoutes from './workflowRoutes.js'
 import inventoryRoutes from './inventoryRoutes.js'
+import reportsRoutes from './reportsRoutes.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -67,6 +68,7 @@ app.use('/api/commissions', commissionsRoutes)
 app.use('/api/ocr', ocrRoutes)
 app.use('/api/workflow', workflowRoutes)
 app.use('/api/inventory', inventoryRoutes)
+app.use('/api/reports', reportsRoutes)
 
 // Simple in-process notifier for hold reminders (runs hourly)
 setInterval(async () => {
