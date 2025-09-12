@@ -22,10 +22,24 @@ export default function Users() {
   async function load() {
     try {
       setError('')
-      const resp = await fetchWithAuth(`${API_URL}/api/auth/users`)
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load users')
-      setUsers(data.users || [])
+      const [usersResp, memResp] = await Promise.all([
+        fetchWithAuth(`${API_URL}/api/auth/users`),
+        fetchWithAuth(`${API_URL}/api/workflow/sales-teams/memberships?active=true`).catch(() => null)
+      ])
+      const usersData = await usersResp.json()
+      if (!usersResp.ok) throw new Error(usersData?.error?.message || 'Failed to load users')
+      setUsers(usersData.users || [])
+
+      if (memResp) {
+        const memData = await memResp.json()
+        if (memResp.ok) {
+          const map = {}
+          ;(memData.memberships || []).forEach(m => {
+            map[m.consultant_user_id] = String(m.manager_user_id)
+          })
+          setAssignMap(map)
+        }
+      }
     } catch (e) {
       setError(e.message || String(e))
     }
@@ -250,7 +264,7 @@ export default function Users() {
               {filteredUsers.map(u => {
                 const isEditing = editingId === u.id
                 const isSelf = me.id === u.id
-                const canAssignManager = u.role === 'property_consultant'
+                const canAssignManager = ['property_consultant', 'financial_admin', 'contract_person'].includes(u.role)
                 return (
                   <tr key={u.id}>
                     <td style={td}>{u.id}</td>
