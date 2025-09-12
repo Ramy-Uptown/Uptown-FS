@@ -171,4 +171,127 @@ router.get('/units', authMiddleware, requireRole(['financial_manager','property_
   }
 })
 
+// Hold requests
+router.post('/holds', authMiddleware, requireRole(['property_consultant']), async (req, res) => {
+  try {
+    const { unit_id, payment_plan_id } = req.body || {}
+    const uid = num(unit_id)
+    if (!uid) return bad(res, 400, 'unit_id is required')
+    const pid = payment_plan_id ? num(payment_plan_id) : null
+    // Check unit available
+    const u = await pool.query('SELECT id, available FROM units WHERE id=$1', [uid])
+    if (u.rows.length === 0) return bad(res, 404, 'Unit not found')
+    if (u.rows[0].available === false) return bad(res, 400, 'Unit is not available')
+    const r = await pool.query(
+      `INSERT INTO holds (unit_id, payment_plan_id, requested_by, status)
+       VALUES ($1, $2, $3, 'pending_approval')
+       RETURNING *`,
+      [uid, pid, req.user.id]
+    )
+    return ok(res, { hold: r.rows[0] })
+  } catch (e) {
+    console.error('POST /api/inventory/holds error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+router.get('/holds', authMiddleware, requireRole(['financial_manager', 'sales_manager', 'admin', 'superadmin']), async (req, res) => {
+  try {
+    const { status } = req.query || {}
+    const clauses = []
+    const params = []
+    if (status) { params.push(String(status)); clauses.push(`status=${params.length}`) }
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+    const r = await pool.query(`SELECT * FROM holds ${where} ORDER BY id DESC`, params)
+    return ok(res, { holds: r.rows })
+  } catch (e) {
+    console.error('GET /api/inventory/holds error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+router.patch('/holds/:id/approve', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const id = num(req.params.id)
+    if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+    await client.query('BEGIN')
+    const cur = await client.query('SELECT * FROM holds WHERE id=$1', [id])
+    if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Hold not found') }
+    if (cur.rows[0].status !== 'pending_approval') { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Hold not pending') }
+    const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000)
+    const nextNotify = new Date(expiresAt.getTime())
+    const upd = await client.query(
+      `UPDATE holds
+       SET status='approved', approved_by=$1, expires_at=$2, next_notify_at=$3, updated_at=now()
+       WHERE id=$4 RETURNING *`,
+      [req.user.id, expiresAt.toISOString(), nextNotify.toISOString(), id]
+    )
+    // Block unit
+    await client.query('UPDATE units SET available=FALSE, updated_at=now() WHERE id=$1', [cur.rows[0].unit_id])
+    await client.query('COMMIT'); client.release()
+    return ok(res, { hold: upd.rows[0] })
+  } catch (e) {
+    try { await client.query('ROLLBACK') } catch {}
+    client.release()
+    console.error('PATCH /api/inventory/holds/:id/approve error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+router.patch('/holds/:id/unblock', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const id = num(req.params.id)
+    if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+    await client.query('BEGIN')
+    const cur = await client.query('SELECT * FROM holds WHERE id=$1', [id])
+    if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Hold not found') }
+    const upd = await client.query(
+      `UPDATE holds SET status='unblocked', updated_at=now() WHERE id=$1 RETURNING *`,
+      [id]
+    )
+    await client.query('UPDATE units SET available=TRUE, updated_at=now() WHERE id=$1', [cur.rows[0].unit_id])
+    await client.query('COMMIT'); client.release()
+    return ok(res, { hold: upd.rows[0] })
+  } catch (e) {
+    try { await client.query('ROLLBACK') } catch {}
+    client.release()
+    console.error('PATCH /api/inventory/holds/:id/unblock error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+router.patch('/holds/:id/extend', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const id = num(req.params.id)
+    if (!id) return bad(res, 400, 'Invalid id')
+    const r = await pool.query(
+      `UPDATE holds SET expires_at = COALESCE(expires_at, now()) + INTERVAL '7 days', next_notify_at = COALESCE(expires_at, now()) + INTERVAL '7 days', updated_at=now()
+       WHERE id=$1 AND status='approved'
+       RETURNING *`,
+      [id]
+    )
+    if (r.rows.length === 0) return bad(res, 404, 'Hold not found or not approved')
+    return ok(res, { hold: r.rows[0] })
+  } catch (e) {
+    console.error('PATCH /api/inventory/holds/:id/extend error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// Notifications list (for financial manager)
+router.get('/notifications', authMiddleware, requireRole(['financial_manager', 'admin', 'superadmin']), async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT * FROM notifications WHERE user_id=$1 AND read=FALSE ORDER BY id DESC`,
+      [req.user.id]
+    )
+    return ok(res, { notifications: r.rows })
+  } catch (e) {
+    console.error('GET /api/inventory/notifications error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
 export default router

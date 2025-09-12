@@ -764,36 +764,95 @@ router.patch(
       if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
       await client.query('BEGIN')
       const prev = await client.query('SELECT * FROM reservation_forms WHERE id=$1', [id])
-'
+      const result = await client.query(
+        `UPDATE reservation_forms
+         SET status='rejected', approved_by=$1, updated_at=now()
+         WHERE id=$2 AND status='pending_approval'
          RETURNING *`,
         [req.user.id, id]
       )
-      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+      if (result.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found or not pending') }
+      await client.query(
+        `INSERT INTO reservation_forms_history (reservation_form_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'reject', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(prev.rows[0] || null), JSON.stringify(result.rows[0])]
+      )
+      await client.query('COMMIT'); client.release()
       return ok(res, { reservation_form: result.rows[0] })
     } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
       console.error('PATCH /api/workflow/reservation-forms/:id/reject error:', e)
       return bad(res, 500, 'Internal error')
     }
   }
 )
 
-/**
- * SECTION 4: Contracts (Contract Person -> Contract Manager review)
- * - create/edit by: contract_person
- * - approve/reject by: contract_manager
- */
+// Reservation cancellation workflow
 router.post(
-  '/contracts',
+  '/reservation-forms/:id/cancel-request',
   authMiddleware,
-  requireRole(['contract_person']),
+  requireRole(['financial_admin']),
   async (req, res) => {
     const client = await pool.connect()
     try {
-      const { reservation_form_id, details } = req.body || {}
-      const rid = ensureNumber(reservation_form_id)
-      if (!rid) { client.release(); return bad(res, 400, 'reservation_form_id is required and must be a number') }
-      // Ensure reservation exists and is approved
-      const chk = await client.query('SELECT id, status FROM reservation_forms WHERE id=$1', [rid])
+      const id = ensureNumber(req.params.id)
+      if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+      await client.query('BEGIN')
+      const cur = await client.query('SELECT * FROM reservation_forms WHERE id=$1', [id])
+      if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found') }
+      const upd = await client.query(
+        `UPDATE reservation_forms SET status='pending_cancel_approval', updated_at=now() WHERE id=$1 RETURNING *`,
+        [id]
+      )
+      await client.query(
+        `INSERT INTO reservation_forms_history (reservation_form_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'cancel_request', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(cur.rows[0]), JSON.stringify(upd.rows[0])]
+      )
+      await client.query('COMMIT'); client.release()
+      return ok(res, { reservation_form: upd.rows[0] })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
+      console.error('POST /api/workflow/reservation-forms/:id/cancel-request error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/reservation-forms/:id/cancel-approve',
+  authMiddleware,
+  requireRole(['financial_manager']),
+  async (req, res) => {
+    const client = await pool.connect()
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+      await client.query('BEGIN')
+      const cur = await client.query('SELECT * FROM reservation_forms WHERE id=$1', [id])
+      if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found') }
+      const upd = await client.query(
+        `UPDATE reservation_forms SET status='cancelled', approved_by=$1, updated_at=now() WHERE id=$2 AND status='pending_cancel_approval' RETURNING *`,
+        [req.user.id, id]
+      )
+      if (upd.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Not pending cancellation approval') }
+      await client.query(
+        `INSERT INTO reservation_forms_history (reservation_form_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'cancel_approve', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(cur.rows[0]), JSON.stringify(upd.rows[0])]
+      )
+      await client.query('COMMIT'); client.release()
+      return ok(res, { reservation_form: upd.rows[0] })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
+      console.error('PATCH /api/workflow/reservation-forms/:id/cancel-approve error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
       if (chk.rows.length === 0) { client.release(); return bad(res, 404, 'Reservation form not found') }
       if (chk.rows[0].status !== 'approved') { client.release(); return bad(res, 400, 'Reservation must be approved before creating contract') }
 
@@ -900,7 +959,7 @@ router.patch(
       const prev = await client.query('SELECT * FROM contracts WHERE id=$1', [id])
       const result = await client.query(
         `UPDATE contracts
-         SET status='approved', approved_by=$1, updated_at=now()
+         SET status='pending_ceo_approval', approved_by=$1, updated_at=now()
          WHERE id=$2 AND status='pending_approval'
          RETURNING *`,
         [req.user.id, id]
@@ -908,7 +967,7 @@ router.patch(
       if (result.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found or not pending') }
       await client.query(
         `INSERT INTO contracts_history (contract_id, change_type, changed_by, old_values, new_values)
-         VALUES ($1, 'approve', $2, $3::jsonb, $4::jsonb)`,
+         VALUES ($1, 'approve_manager', $2, $3::jsonb, $4::jsonb)`,
         [id, req.user.id, JSON.stringify(prev.rows[0] || null), JSON.stringify(result.rows[0])]
       )
       await client.query('COMMIT'); client.release()
@@ -917,6 +976,42 @@ router.patch(
       try { await client.query('ROLLBACK') } catch {}
       client.release()
       console.error('PATCH /api/workflow/contracts/:id/approve error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// CEO final approval for contracts
+router.patch(
+  '/contracts/:id/approve-ceo',
+  authMiddleware,
+  requireRole(['ceo']),
+  async (req, res) => {
+    const client = await pool.connect()
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+      await client.query('BEGIN')
+      const prev = await client.query('SELECT * FROM contracts WHERE id=$1', [id])
+      const result = await client.query(
+        `UPDATE contracts
+         SET status='approved', updated_at=now()
+         WHERE id=$1 AND status='pending_ceo_approval'
+         RETURNING *`,
+        [id]
+      )
+      if (result.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found or not pending CEO approval') }
+      await client.query(
+        `INSERT INTO contracts_history (contract_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'approve_ceo', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(prev.rows[0] || null), JSON.stringify(result.rows[0])]
+      )
+      await client.query('COMMIT'); client.release()
+      return ok(res, { contract: result.rows[0] })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
+      console.error('PATCH /api/workflow/contracts/:id/approve-ceo error:', e)
       return bad(res, 500, 'Internal error')
     }
   }
@@ -936,7 +1031,7 @@ router.patch(
       const result = await client.query(
         `UPDATE contracts
          SET status='rejected', approved_by=$1, updated_at=now()
-         WHERE id=$2 AND status='pending_approval'
+         WHERE id=$2 AND status IN ('pending_approval','pending_ceo_approval')
          RETURNING *`,
         [req.user.id, id]
       )
@@ -952,6 +1047,105 @@ router.patch(
       try { await client.query('ROLLBACK') } catch {}
       client.release()
       console.error('PATCH /api/workflow/contracts/:id/reject error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// Contract cancellation workflow
+router.post(
+  '/contracts/:id/cancel-request',
+  authMiddleware,
+  requireRole(['contract_person']),
+  async (req, res) => {
+    const client = await pool.connect()
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+      await client.query('BEGIN')
+      const cur = await client.query('SELECT * FROM contracts WHERE id=$1', [id])
+      if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found') }
+      const upd = await client.query(
+        `UPDATE contracts SET status='pending_cancel_manager_approval', updated_at=now() WHERE id=$1 RETURNING *`,
+        [id]
+      )
+      await client.query(
+        `INSERT INTO contracts_history (contract_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'cancel_request', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(cur.rows[0]), JSON.stringify(upd.rows[0])]
+      )
+      await client.query('COMMIT'); client.release()
+      return ok(res, { contract: upd.rows[0] })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
+      console.error('POST /api/workflow/contracts/:id/cancel-request error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/contracts/:id/cancel-approve-manager',
+  authMiddleware,
+  requireRole(['contract_manager']),
+  async (req, res) => {
+    const client = await pool.connect()
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+      await client.query('BEGIN')
+      const cur = await client.query('SELECT * FROM contracts WHERE id=$1', [id])
+      if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found') }
+      const upd = await client.query(
+        `UPDATE contracts SET status='pending_cancel_ceo_approval', updated_at=now() WHERE id=$1 AND status='pending_cancel_manager_approval' RETURNING *`,
+        [id]
+      )
+      if (upd.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Not pending manager cancellation approval') }
+      await client.query(
+        `INSERT INTO contracts_history (contract_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'cancel_approve_manager', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(cur.rows[0]), JSON.stringify(upd.rows[0])]
+      )
+      await client.query('COMMIT'); client.release()
+      return ok(res, { contract: upd.rows[0] })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
+      console.error('PATCH /api/workflow/contracts/:id/cancel-approve-manager error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/contracts/:id/cancel-approve-ceo',
+  authMiddleware,
+  requireRole(['ceo']),
+  async (req, res) => {
+    const client = await pool.connect()
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+      await client.query('BEGIN')
+      const cur = await client.query('SELECT * FROM contracts WHERE id=$1', [id])
+      if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found') }
+      const upd = await client.query(
+        `UPDATE contracts SET status='cancelled', updated_at=now() WHERE id=$1 AND status='pending_cancel_ceo_approval' RETURNING *`,
+        [id]
+      )
+      if (upd.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Not pending CEO cancellation approval') }
+      await client.query(
+        `INSERT INTO contracts_history (contract_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'cancel_approve_ceo', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(cur.rows[0]), JSON.stringify(upd.rows[0])]
+      )
+      await client.query('COMMIT'); client.release()
+      return ok(res, { contract: upd.rows[0] })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
+      console.error('PATCH /api/workflow/contracts/:id/cancel-approve-ceo error:', e)
       return bad(res, 500, 'Internal error')
     }
   }

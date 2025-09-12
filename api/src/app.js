@@ -68,6 +68,32 @@ app.use('/api/ocr', ocrRoutes)
 app.use('/api/workflow', workflowRoutes)
 app.use('/api/inventory', inventoryRoutes)
 
+// Simple in-process notifier for hold reminders (runs hourly)
+setInterval(async () => {
+  try {
+    const now = new Date()
+    const r = await pool.query(
+      `SELECT h.id, h.unit_id, h.next_notify_at
+       FROM holds h
+       WHERE h.status='approved' AND (h.next_notify_at IS NULL OR h.next_notify_at <= now())`
+    )
+    for (const row of r.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+         SELECT u.id, 'hold_reminder', 'holds', $1, 'Hold requires decision: unblock or extend.'
+         FROM users u WHERE u.role='financial_manager' AND u.active=TRUE`,
+        [row.id]
+      )
+      await pool.query(
+        `UPDATE holds SET next_notify_at = now() + INTERVAL '7 days' WHERE id=$1`,
+        [row.id]
+      )
+    }
+  } catch (e) {
+    console.error('Hold reminder scheduler error:', e)
+  }
+}, 60 * 60 * 1000)
+
 // Health endpoint (now protected by middleware below)
 app.get('/api/health', (req, res) => {
   res.json({
