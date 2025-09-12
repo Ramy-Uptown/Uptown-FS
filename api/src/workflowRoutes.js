@@ -97,25 +97,131 @@ router.get(
   }
 )
 
+// Financial manager updates standard data (even if approved) -> moves to pending_approval and logs history
+router.patch(
+  '/standard-pricing/:id',
+  authMiddleware,
+  requireRole(['financial_manager']),
+  async (req, res) => {
+    const client = await pool.connect()
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+
+      // Load old row
+      const oldRes = await client.query('SELECT * FROM standard_pricing WHERE id=$1', [id])
+      if (oldRes.rows.length === 0) {
+        client.release()
+        return bad(res, 404, 'Standard record not found')
+      }
+      const oldRow = oldRes.rows[0]
+
+      const allowedFields = [
+        'unit_type', 'price', 'area', 'std_financial_rate_percent',
+        'plan_duration_years', 'installment_frequency'
+      ]
+      const updates = []
+      const params = []
+      for (const f of allowedFields) {
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, f)) {
+          params.push(req.body[f])
+          updates.push(`${f} = ${params.length}`)
+        }
+      }
+      if (updates.length === 0) {
+        client.release()
+        return bad(res, 400, 'No updatable fields provided')
+      }
+
+      // Enforce valid frequency if provided
+      if (Object.prototype.hasOwnProperty.call(req.body, 'installment_frequency')) {
+        const freq = String(req.body.installment_frequency || '').toLowerCase()
+        const allowed = new Set(['monthly', 'quarterly', 'bi-annually', 'annually'])
+        if (!allowed.has(freq)) {
+          client.release()
+          return bad(res, 400, 'installment_frequency must be one of monthly|quarterly|bi-annually|annually')
+        }
+      }
+
+      await client.query('BEGIN')
+      // Set to pending_approval on any edit and clear approval
+      params.push(req.user.id) // param for history insert
+      params.push(id)
+      const updateSql = `
+        UPDATE standard_pricing
+        SET ${updates.join(', ')},
+            status='pending_approval',
+            approved_by=NULL,
+            updated_at=now()
+        WHERE id=${params.length}
+        RETURNING *`
+      // Note: params layout: [field values..., req.user.id, id]; req.user.id is not used in SQL but kept for order; using index accordingly
+      // Execute update (ignoring the extra param for user id in update)
+      // Rebuild params to avoid confusion:
+      const updateParams = params.slice(0, updates.length).concat([id])
+      const updRes = await client.query(updateSql, updateParams)
+      const newRow = updRes.rows[0]
+
+      // History log
+      await client.query(
+        `INSERT INTO standard_pricing_history
+         (standard_pricing_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'update', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(oldRow), JSON.stringify(newRow)]
+      )
+
+      await client.query('COMMIT')
+      client.release()
+      return ok(res, { standard_pricing: newRow })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
+      console.error('PATCH /api/workflow/standard-pricing/:id error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
 // CEO approves/rejects
 router.patch(
   '/standard-pricing/:id/approve',
   authMiddleware,
   requireRole(['ceo']),
   async (req, res) => {
+    const client = await pool.connect()
     try {
       const id = ensureNumber(req.params.id)
-      if (!id) return bad(res, 400, 'Invalid id')
-      const result = await pool.query(
+      if (!id) {
+        client.release()
+        return bad(res, 400, 'Invalid id')
+      }
+      await client.query('BEGIN')
+      const prev = await client.query('SELECT * FROM standard_pricing WHERE id=$1', [id])
+      const result = await client.query(
         `UPDATE standard_pricing
          SET status='approved', approved_by=$1, updated_at=now()
          WHERE id=$2 AND status='pending_approval'
          RETURNING *`,
         [req.user.id, id]
       )
-      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
-      return ok(res, { standard_pricing: result.rows[0] })
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK')
+        client.release()
+        return bad(res, 404, 'Not found or not pending')
+      }
+      const row = result.rows[0]
+      await client.query(
+        `INSERT INTO standard_pricing_history
+         (standard_pricing_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'approve', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(prev.rows[0] || null), JSON.stringify(row)]
+      )
+      await client.query('COMMIT')
+      client.release()
+      return ok(res, { standard_pricing: row })
     } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
       console.error('PATCH /api/workflow/standard-pricing/:id/approve error:', e)
       return bad(res, 500, 'Internal error')
     }
@@ -127,19 +233,40 @@ router.patch(
   authMiddleware,
   requireRole(['ceo']),
   async (req, res) => {
+    const client = await pool.connect()
     try {
       const id = ensureNumber(req.params.id)
-      if (!id) return bad(res, 400, 'Invalid id')
-      const result = await pool.query(
+      if (!id) {
+        client.release()
+        return bad(res, 400, 'Invalid id')
+      }
+      await client.query('BEGIN')
+      const prev = await client.query('SELECT * FROM standard_pricing WHERE id=$1', [id])
+      const result = await client.query(
         `UPDATE standard_pricing
          SET status='rejected', approved_by=$1, updated_at=now()
          WHERE id=$2 AND status='pending_approval'
          RETURNING *`,
         [req.user.id, id]
       )
-      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
-      return ok(res, { standard_pricing: result.rows[0] })
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK')
+        client.release()
+        return bad(res, 404, 'Not found or not pending')
+      }
+      const row = result.rows[0]
+      await client.query(
+        `INSERT INTO standard_pricing_history
+         (standard_pricing_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'reject', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(prev.rows[0] || null), JSON.stringify(row)]
+      )
+      await client.query('COMMIT')
+      client.release()
+      return ok(res, { standard_pricing: row })
     } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
       console.error('PATCH /api/workflow/standard-pricing/:id/reject error:', e)
       return bad(res, 500, 'Internal error')
     }
@@ -489,6 +616,35 @@ router.get(
       return ok(res, { standard_pricing: r.rows[0] })
     } catch (e) {
       console.error('GET /api/workflow/standard-pricing/approved-by-unit/:unitId error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// Simple read-only endpoint: fetch approved standard by unit type in one call
+router.get(
+  '/standard-pricing/approved-by-type/:unitType',
+  authMiddleware,
+  requireRole(['property_consultant', 'financial_admin', 'contract_person', 'contract_manager', 'financial_manager', 'ceo', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const unitType = String(req.params.unitType || '').trim()
+      if (!unitType) return bad(res, 400, 'Invalid unitType')
+
+      const r = await pool.query(
+        `SELECT *
+         FROM standard_pricing
+         WHERE unit_type ILIKE $1 AND status='approved'
+         ORDER BY id DESC
+         LIMIT 1`,
+        [unitType]
+      )
+      if (r.rows.length === 0) {
+        return bad(res, 404, 'No approved standard found for this type')
+      }
+      return ok(res, { standard_pricing: r.rows[0] })
+    } catch (e) {
+      console.error('GET /api/workflow/standard-pricing/approved-by-type/:unitType error:', e)
       return bad(res, 500, 'Internal error')
     }
   }
