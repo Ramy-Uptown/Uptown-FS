@@ -27,17 +27,38 @@ router.post(
   requireRole(['financial_manager']),
   async (req, res) => {
     try {
-      const { unit_id, price } = req.body || {}
+      const {
+        unit_id,
+        unit_type,
+        price,
+        area,
+        std_financial_rate_percent,
+        plan_duration_years,
+        installment_frequency
+      } = req.body || {}
+
       const unitId = ensureNumber(unit_id)
       const pr = ensureNumber(price)
+      const ar = ensureNumber(area)
+      const rate = Number(std_financial_rate_percent)
+      const years = Number(plan_duration_years)
+      const freq = String(installment_frequency || '').toLowerCase()
+
       if (!unitId) return bad(res, 400, 'unit_id is required and must be a number')
+      if (!unit_type || typeof unit_type !== 'string') return bad(res, 400, 'unit_type is required')
       if (pr == null || pr < 0) return bad(res, 400, 'price must be a non-negative number')
+      if (ar == null || ar <= 0) return bad(res, 400, 'area must be a positive number')
+      if (!isFinite(rate)) return bad(res, 400, 'std_financial_rate_percent must be a number')
+      if (!Number.isInteger(years) || years <= 0) return bad(res, 400, 'plan_duration_years must be integer >= 1')
+      const allowedFreq = new Set(['monthly', 'quarterly', 'bi-annually', 'annually'])
+      if (!allowedFreq.has(freq)) return bad(res, 400, 'installment_frequency must be one of monthly|quarterly|bi-annually|annually')
 
       const result = await pool.query(
-        `INSERT INTO standard_pricing (unit_id, price, created_by, status)
-         VALUES ($1, $2, $3, 'pending_approval')
+        `INSERT INTO standard_pricing
+          (unit_id, unit_type, price, area, std_financial_rate_percent, plan_duration_years, installment_frequency, created_by, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_approval')
          RETURNING *`,
-        [unitId, pr, req.user.id]
+        [unitId, unit_type, pr, ar, rate, years, freq, req.user.id]
       )
       return ok(res, { standard_pricing: result.rows[0] })
     } catch (e) {
@@ -50,7 +71,7 @@ router.post(
 router.get(
   '/standard-pricing',
   authMiddleware,
-  requireRole(['financial_manager', 'ceo', 'admin', 'superadmin']),
+  requireRole(['financial_manager', 'ceo', 'admin', 'superadmin', 'property_consultant', 'financial_admin', 'contract_person', 'contract_manager']),
   async (req, res) => {
     try {
       const { unit_id, status } = req.query || {}
@@ -59,11 +80,11 @@ router.get(
       const params = []
       if (unitId) {
         params.push(unitId)
-        clauses.push(`unit_id = $${params.length}`)
+        clauses.push(`unit_id = ${params.length}`)
       }
       if (status) {
         params.push(String(status))
-        clauses.push(`status = $${params.length}`)
+        clauses.push(`status = ${params.length}`)
       }
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
       const q = `SELECT * FROM standard_pricing ${where} ORDER BY id DESC`
@@ -244,6 +265,12 @@ router.post(
       const { payment_plan_id, details } = req.body || {}
       const pid = ensureNumber(payment_plan_id)
       if (!pid) return bad(res, 400, 'payment_plan_id is required and must be a number')
+
+      // Ensure payment plan exists and is approved by financial manager
+      const planRes = await pool.query('SELECT id, status FROM payment_plans WHERE id=$1', [pid])
+      if (planRes.rows.length === 0) return bad(res, 404, 'Payment plan not found')
+      if (planRes.rows[0].status !== 'approved') return bad(res, 400, 'Payment plan must be approved before creating reservation')
+
       const det = details && typeof details === 'object' ? details : {}
       const result = await pool.query(
         `INSERT INTO reservation_forms (payment_plan_id, details, created_by, status)

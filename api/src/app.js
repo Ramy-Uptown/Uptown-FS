@@ -15,6 +15,7 @@ import {
 import convertToWords from '../utils/converter.js'
 import { createRequire } from 'module'
 import authRoutes from './authRoutes.js'
+import { pool } from './db.js'
 import dealsRoutes from './dealsRoutes.js'
 import unitsRoutes from './unitsRoutes.js'
 import salesPeopleRoutes from './salesPeopleRoutes.js'
@@ -188,39 +189,74 @@ function validateInputs(inputs) {
  *   splitFirstYearPayments, firstYearPayments[], subsequentYears[]
  * }
  */
-app.post('/api/calculate', (req, res) => {
+app.post('/api/calculate', async (req, res) => {
   try {
-    const { mode, stdPlan, inputs } = req.body || {}
+    const { mode, stdPlan, inputs, standardPricingId, unitId } = req.body || {}
 
     if (!mode || !allowedModes.has(mode)) {
       return bad(res, 400, 'Invalid or missing mode', { allowedModes: [...allowedModes] })
     }
-    if (!isObject(stdPlan)) {
-      return bad(res, 400, 'stdPlan must be an object with totalPrice, financialDiscountRate, calculatedPV')
-    }
-    // Basic presence checks
-    const stdTotal = Number(stdPlan.totalPrice)
-    const stdRate = Number(stdPlan.financialDiscountRate)
-    const stdPV = Number(stdPlan.calculatedPV)
-    if (!isFinite(stdTotal) || stdTotal < 0) {
-      return bad(res, 400, 'stdPlan.totalPrice must be a non-negative number')
-    }
-    if (!isFinite(stdRate)) {
-      return bad(res, 400, 'stdPlan.financialDiscountRate must be a number (percent)')
-    }
-    if (!isFinite(stdPV) || stdPV < 0) {
-      return bad(res, 400, 'stdPlan.calculatedPV must be a non-negative number')
+
+    let effectiveStdPlan = null
+
+    if (standardPricingId || unitId) {
+      // Load approved standard by id or unit id
+      const clauses = ["status='approved'"]
+      const params = []
+      if (standardPricingId) {
+        params.push(Number(standardPricingId))
+        clauses.push(`id = ${params.length}`)
+      }
+      if (unitId) {
+        params.push(Number(unitId))
+        clauses.push(`unit_id = ${params.length}`)
+      }
+      const where = 'WHERE ' + clauses.join(' AND ')
+      const q = `SELECT price, std_financial_rate_percent, plan_duration_years, installment_frequency FROM standard_pricing ${where} ORDER BY id DESC LIMIT 1`
+      const r = await pool.query(q, params)
+      if (r.rows.length === 0) {
+        return bad(res, 404, 'Approved standard data not found for given identifier(s)')
+      }
+      const row = r.rows[0]
+      effectiveStdPlan = {
+        totalPrice: Number(row.price) || 0,
+        financialDiscountRate: Number(row.std_financial_rate_percent) || 0,
+        calculatedPV: Number(row.price) || 0 // baseline PV equals nominal when rate is zero; algorithm uses target PV for some modes
+      }
+      // Default inputs fields from standard if not provided
+      if (!isObject(req.body.inputs)) req.body.inputs = {}
+      if (req.body.inputs.planDurationYears == null) req.body.inputs.planDurationYears = row.plan_duration_years
+      if (!req.body.inputs.installmentFrequency) req.body.inputs.installmentFrequency = row.installment_frequency
+    } else {
+      if (!isObject(stdPlan)) {
+        return bad(res, 400, 'Provide either standardPricingId/unitId or stdPlan object')
+      }
+      // Basic presence checks
+      const stdTotal = Number(stdPlan.totalPrice)
+      const stdRate = Number(stdPlan.financialDiscountRate)
+      const stdPV = Number(stdPlan.calculatedPV)
+      if (!isFinite(stdTotal) || stdTotal < 0) {
+        return bad(res, 400, 'stdPlan.totalPrice must be a non-negative number')
+      }
+      if (!isFinite(stdRate)) {
+        return bad(res, 400, 'stdPlan.financialDiscountRate must be a number (percent)')
+      }
+      if (!isFinite(stdPV) || stdPV < 0) {
+        return bad(res, 400, 'stdPlan.calculatedPV must be a non-negative number')
+      }
+      effectiveStdPlan = stdPlan
     }
 
-    if (!isObject(inputs)) {
+    const effInputs = req.body.inputs || inputs
+    if (!isObject(effInputs)) {
       return bad(res, 400, 'inputs must be an object')
     }
-    const inputErrors = validateInputs(inputs)
+    const inputErrors = validateInputs(effInputs)
     if (inputErrors.length > 0) {
       return bad(res, 422, 'Invalid inputs', inputErrors)
     }
 
-    const result = calculateByMode(mode, stdPlan, inputs)
+    const result = calculateByMode(mode, effectiveStdPlan, effInputs)
     return res.json({ ok: true, data: result })
   } catch (err) {
     console.error('POST /api/calculate error:', err)
@@ -235,16 +271,49 @@ app.post('/api/calculate', (req, res) => {
  * - currency: optional. For English, can be code (EGP, USD, SAR, EUR, AED, KWD) or full name (e.g., "Egyptian Pounds")
  * Returns: { ok: true, schedule: [{label, month, amount, writtenAmount}], totals, meta }
  */
-app.post('/api/generate-plan', (req, res) => {
+app.post('/api/generate-plan', async (req, res) => {
   try {
-    const { mode, stdPlan, inputs, language, currency, languageForWrittenAmounts } = req.body || {}
+    const { mode, stdPlan, inputs, language, currency, languageForWrittenAmounts, standardPricingId, unitId } = req.body || {}
     if (!mode || !allowedModes.has(mode)) {
       return bad(res, 400, 'Invalid or missing mode', { allowedModes: [...allowedModes] })
     }
-    if (!isObject(stdPlan) || !isObject(inputs)) {
-      return bad(res, 400, 'Missing stdPlan or inputs')
+
+    let effectiveStdPlan = null
+    const effInputs = req.body.inputs || inputs || {}
+
+    if (standardPricingId || unitId) {
+      const clauses = ["status='approved'"]
+      const params = []
+      if (standardPricingId) {
+        params.push(Number(standardPricingId))
+        clauses.push(`id = ${params.length}`)
+      }
+      if (unitId) {
+        params.push(Number(unitId))
+        clauses.push(`unit_id = ${params.length}`)
+      }
+      const where = 'WHERE ' + clauses.join(' AND ')
+      const q = `SELECT price, std_financial_rate_percent, plan_duration_years, installment_frequency FROM standard_pricing ${where} ORDER BY id DESC LIMIT 1`
+      const r = await pool.query(q, params)
+      if (r.rows.length === 0) {
+        return bad(res, 404, 'Approved standard data not found for given identifier(s)')
+      }
+      const row = r.rows[0]
+      effectiveStdPlan = {
+        totalPrice: Number(row.price) || 0,
+        financialDiscountRate: Number(row.std_financial_rate_percent) || 0,
+        calculatedPV: Number(row.price) || 0
+      }
+      if (effInputs.planDurationYears == null) effInputs.planDurationYears = row.plan_duration_years
+      if (!effInputs.installmentFrequency) effInputs.installmentFrequency = row.installment_frequency
+    } else {
+      if (!isObject(stdPlan) || !isObject(effInputs)) {
+        return bad(res, 400, 'Provide either standardPricingId/unitId or stdPlan with inputs')
+      }
+      effectiveStdPlan = stdPlan
     }
-    const inputErrors = validateInputs(inputs)
+
+    const inputErrors = validateInputs(effInputs)
     if (inputErrors.length > 0) {
       return bad(res, 422, 'Invalid inputs', inputErrors)
     }
@@ -253,7 +322,7 @@ app.post('/api/generate-plan', (req, res) => {
     const langInput = language || languageForWrittenAmounts || 'en'
     const lang = String(langInput).toLowerCase().startsWith('ar') ? 'ar' : 'en'
 
-    const result = calculateByMode(mode, stdPlan, inputs)
+    const result = calculateByMode(mode, effectiveStdPlan, effInputs)
 
     const schedule = []
     const pushEntry = (label, month, amount) => {
@@ -268,18 +337,16 @@ app.post('/api/generate-plan', (req, res) => {
     }
 
     // Down payment or split first year
-    const splitY1 = !!inputs.splitFirstYearPayments
+    const splitY1 = !!effInputs.splitFirstYearPayments
     if (splitY1) {
-      for (const p of (inputs.firstYearPayments || [])) {
+      for (const p of (effInputs.firstYearPayments || [])) {
         pushEntry(p.type === 'dp' ? 'Down Payment (Y1 split)' : 'First Year', p.month, p.amount)
       }
     } else {
-      // single down payment at month 0
       pushEntry('Down Payment', 0, result.downPaymentAmount)
     }
 
-    // Subsequent custom years (expand totals into installments)
-    const subs = inputs.subsequentYears || []
+    const subs = effInputs.subsequentYears || []
     subs.forEach((y, idx) => {
       let nInYear = 0
       switch (y.frequency) {
@@ -290,23 +357,19 @@ app.post('/api/generate-plan', (req, res) => {
         default: nInYear = 0;
       }
       const per = (Number(y.totalNominal) || 0) / (nInYear || 1)
-      // determine absolute year number
       const startAfterYear = (splitY1 ? 1 : 0) + idx
       const months = getPaymentMonths(nInYear, y.frequency, startAfterYear)
       months.forEach((m, i) => pushEntry(`Year ${startAfterYear + 1} (${y.frequency})`, m, per))
     })
 
-    // Additional handover
-    if ((Number(inputs.additionalHandoverPayment) || 0) > 0 && (Number(inputs.handoverYear) || 0) > 0) {
-      pushEntry('Handover', Number(inputs.handoverYear) * 12, inputs.additionalHandoverPayment)
+    if ((Number(effInputs.additionalHandoverPayment) || 0) > 0 && (Number(effInputs.handoverYear) || 0) > 0) {
+      pushEntry('Handover', Number(effInputs.handoverYear) * 12, effInputs.additionalHandoverPayment)
     }
 
-    // Equal installments
     const eqMonths = result.equalInstallmentMonths || []
     const eqAmt = Number(result.equalInstallmentAmount) || 0
     eqMonths.forEach((m, i) => pushEntry('Equal Installment', m, eqAmt))
 
-    // Sort by month then by label for consistency
     schedule.sort((a, b) => (a.month - b.month) || a.label.localeCompare(b.label))
 
     const totals = {
