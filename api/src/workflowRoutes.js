@@ -465,4 +465,33 @@ router.patch(
   }
 )
 
+// Simple read-only endpoint: fetch approved standard for a unit in one call
+router.get(
+  '/standard-pricing/approved-by-unit/:unitId',
+  authMiddleware,
+  requireRole(['property_consultant', 'financial_admin', 'contract_person', 'contract_manager', 'financial_manager', 'ceo', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const unitId = Number(req.params.unitId)
+      if (!Number.isFinite(unitId)) return bad(res, 400, 'Invalid unitId')
+
+      const r = await pool.query(
+        `SELECT *
+         FROM standard_pricing
+         WHERE unit_id = $1 AND status = 'approved'
+         ORDER BY id DESC
+         LIMIT 1`,
+        [unitId]
+      )
+      if (r.rows.length === 0) {
+        return bad(res, 404, 'No approved standard found for this unit')
+      }
+      return ok(res, { standard_pricing: r.rows[0] })
+    } catch (e) {
+      console.error('GET /api/workflow/standard-pricing/approved-by-unit/:unitId error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
 export default router
