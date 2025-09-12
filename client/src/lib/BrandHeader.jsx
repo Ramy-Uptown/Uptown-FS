@@ -82,7 +82,8 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Users', href: '/admin/users' },
           { label: 'Commission Policies', href: '/admin/commission-policies' },
           { label: 'Team Proposals', href: '/deals/team-proposals' },
-          { label: 'Sales Assignments', href: '/admin/sales-assignments' }
+          { label: 'Sales Assignments', href: '/admin/sales-assignments' },
+          { label: 'Holds', href: '/admin/holds' }
         ]
       case 'financial_admin':
         return [

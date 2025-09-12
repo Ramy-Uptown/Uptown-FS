@@ -96,6 +96,42 @@ setInterval(async () => {
   }
 }, 60 * 60 * 1000)
 
+// Daily job to expire holds past expires_at (runs every 24 hours)
+setInterval(async () => {
+  try {
+    // Expire approved holds whose expires_at is in the past, and unit not reserved
+    const rows = await pool.query(
+      `SELECT h.id, h.unit_id, h.payment_plan_id
+       FROM holds h
+       WHERE h.status='approved' AND h.expires_at IS NOT NULL AND h.expires_at < now()`
+    )
+    for (const h of rows.rows) {
+      // Check reservation exists
+      let reserved = false
+      if (h.payment_plan_id) {
+        const rf = await pool.query(
+          `SELECT 1 FROM reservation_forms WHERE payment_plan_id=$1 AND status='approved' LIMIT 1`,
+          [h.payment_plan_id]
+        )
+        reserved = rf.rows.length > 0
+      }
+      if (!reserved) {
+        await pool.query('UPDATE holds SET status=\'expired\', updated_at=now() WHERE id=$1', [h.id])
+        await pool.query('UPDATE units SET available=TRUE, updated_at=now() WHERE id=$1', [h.unit_id])
+        // notify FMs
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+           SELECT u.id, 'hold_expired', 'holds', $1, 'Hold expired automatically and unit was unblocked.'
+           FROM users u WHERE u.role='financial_manager' AND u.active=TRUE`,
+          [h.id]
+        )
+      }
+    }
+  } catch (e) {
+    console.error('Daily hold expiry job error:', e)
+  }
+}, 24 * 60 * 60 * 1000)
+
 // Health endpoint (now protected by middleware below)
 app.get('/api/health', (req, res) => {
   res.json({
