@@ -45,9 +45,9 @@ export function getPaymentMonths(numberOfInstallments, frequency, startAfterYear
     case Frequencies.Quarterly:
       periodInMonths = 3; firstInstallmentOffset = 3; break;
     case Frequencies.BiAnnually:
-      periodInMonths = 6; firstInstallmentOffset = 4; break; // keep parity with FE
+      periodInMonths = 6; firstInstallmentOffset = 6; break; // keep parity with FE
     case Frequencies.Annually:
-      periodInMonths = 12; firstInstallmentOffset = 3; break; // keep parity with FE
+      periodInMonths = 12; firstInstallmentOffset = 12; break; // keep parity with FE
     default:
       throw new Error(`Invalid frequency: ${frequency}`);
   }
