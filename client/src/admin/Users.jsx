@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { th, td, tableWrap, table, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js'
+import BrandHeader from '../lib/BrandHeader.jsx'
 
 export default function Users() {
   const [users, setUsers] = useState([])
@@ -58,53 +59,74 @@ export default function Users() {
     'ceo'
   ]
 
+  const handleLogout = async () => {
+    try {
+      const rt = localStorage.getItem('refresh_token')
+      if (rt) {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: rt })
+        }).catch(() => {})
+      }
+    } finally {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('auth_user')
+      window.location.href = '/login'
+    }
+  }
+
   return (
-    <div style={{ ...pageContainer, maxWidth: 1000 }}>
-      <h2 style={pageTitle}>Users</h2>
-      {error ? <p style={errorText}>{error}</p> : null}
-      <div style={tableWrap}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>ID</th>
-              <th style={th}>Email</th>
-              <th style={th}>Role</th>
-              <th style={th}>Created</th>
-              <th style={th}>Updated</th>
-              <th style={th}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(u => (
-              <tr key={u.id}>
-                <td style={td}>{u.id}</td>
-                <td style={td}>{u.email}</td>
-                <td style={td}>{u.role}</td>
-                <td style={td}>{u.created_at ? new Date(u.created_at).toLocaleString() : ''}</td>
-                <td style={td}>{u.updated_at ? new Date(u.updated_at).toLocaleString() : ''}</td>
-                <td style={td}>
-                  <select
-                    value={u.role}
-                    onChange={(e) => changeRole(u.id, e.target.value)}
-                    disabled={busyId === u.id || me.id === u.id}
-                    style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #d1d9e6' }}
-                  >
-                    {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </td>
-              </tr>
-            ))}
-            {users.length === 0 && (
+    <div>
+      <BrandHeader onLogout={handleLogout} />
+      <div style={{ ...pageContainer, maxWidth: 1000 }}>
+        <h2 style={pageTitle}>Users</h2>
+        {error ? <p style={errorText}>{error}</p> : null}
+        <div style={tableWrap}>
+          <table style={table}>
+            <thead>
               <tr>
-                <td style={td} colSpan={6}>No users.</td>
+                <th style={th}>ID</th>
+                <th style={th}>Email</th>
+                <th style={th}>Role</th>
+                <th style={th}>Created</th>
+                <th style={th}>Updated</th>
+                <th style={th}>Action</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id}>
+                  <td style={td}>{u.id}</td>
+                  <td style={td}>{u.email}</td>
+                  <td style={td}>{u.role}</td>
+                  <td style={td}>{u.created_at ? new Date(u.created_at).toLocaleString() : ''}</td>
+                  <td style={td}>{u.updated_at ? new Date(u.updated_at).toLocaleString() : ''}</td>
+                  <td style={td}>
+                    <select
+                      value={u.role}
+                      onChange={(e) => changeRole(u.id, e.target.value)}
+                      disabled={busyId === u.id || me.id === u.id}
+                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #d1d9e6' }}
+                    >
+                      {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+              {users.length === 0 && (
+                <tr>
+                  <td style={td} colSpan={6}>No users.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p style={{ ...metaText, marginTop: 8 }}>
+          Note: You cannot change your own role from this screen.
+        </p>
       </div>
-      <p style={{ ...metaText, marginTop: 8 }}>
-        Note: You cannot change your own role from this screen.
-      </p>
     </div>
   )
 }

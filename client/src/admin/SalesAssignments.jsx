@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { ctrl, btn, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js'
+import BrandHeader from '../lib/BrandHeader.jsx'
 
 export default function SalesAssignments() {
   const [managerId, setManagerId] = useState('')
@@ -72,27 +73,48 @@ export default function SalesAssignments() {
     }
   }
 
+  const handleLogout = async () => {
+    try {
+      const rt = localStorage.getItem('refresh_token')
+      if (rt) {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: rt })
+        }).catch(() => {})
+      }
+    } finally {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('auth_user')
+      window.location.href = '/login'
+    }
+  }
+
   return (
-    <div style={{ ...pageContainer, maxWidth: 800 }}>
-      <h2 style={pageTitle}>Sales Team Assignments</h2>
-      {error ? <p style={errorText}>{error}</p> : null}
+    <div>
+      <BrandHeader onLogout={handleLogout} />
+      <div style={{ ...pageContainer, maxWidth: 800 }}>
+        <h2 style={pageTitle}>Sales Team Assignments</h2>
+        {error ? <p style={errorText}>{error}</p> : null}
 
-      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 12 }}>
-        <input placeholder="Manager User ID" value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl} />
-        <input placeholder="Consultant User ID" value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
-          Active
-        </label>
-        <div>
-          <button onClick={assign} disabled={loading} style={btn}>Assign</button>
-          <button onClick={updateActive} disabled={loading} style={btn}>Update</button>
+        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 12 }}>
+          <input placeholder="Manager User ID" value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl} />
+          <input placeholder="Consultant User ID" value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
+            Active
+          </label>
+          <div>
+            <button onClick={assign} disabled={loading} style={btn}>Assign</button>
+            <button onClick={updateActive} disabled={loading} style={btn}>Update</button>
+          </div>
         </div>
-      </div>
 
-      <p style={metaText}>
-        Tip: Use the Users or Sales Team pages to find user IDs. This page lets you assign/unassign manager-consultant pairs.
-      </p>
+        <p style={metaText}>
+          Tip: Use the Users or Sales Team pages to find user IDs. This page lets you assign/unassign manager-consultant pairs.
+        </p>
+      </div>
     </div>
   )
 }

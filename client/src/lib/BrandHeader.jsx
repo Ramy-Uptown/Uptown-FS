@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 
 const BRAND = {
   primary: '#A97E34', // corporate color
@@ -61,7 +61,7 @@ export default function BrandHeader({ title, onLogout }) {
 
   const navForRole = (role) => {
     // Map role to visible shortcuts
-    const base = [{ label: 'Calculator', href: '/' }]
+    const base = [{ label: 'Calculator', href: '/calculator' }, { label: 'Deals', href: '/deals' }]
     switch (role) {
       case 'superadmin':
         return [
@@ -69,9 +69,9 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Units', href: '/admin/units' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'Users', href: '/admin/users' },
-          { label: 'Sales Team', href: '/admin/sales-team' },
+          { label: 'Sales Team', href: '/admin/sales' },
           { label: 'Commission Policies', href: '/admin/commission-policies' },
-          { label: 'Commissions Report', href: '/admin/commissions-report' }
+          { label: 'Commissions Report', href: '/admin/commissions' }
         ]
       case 'admin':
       case 'financial_manager':
@@ -127,6 +127,24 @@ export default function BrandHeader({ title, onLogout }) {
   }
 
   const shortcuts = navForRole(user?.role)
+  const pathname = useMemo(() => (typeof window !== 'undefined' ? window.location.pathname : ''), [])
+
+  const baseBtnStyle = {
+    padding: '8px 12px',
+    borderRadius: 999,
+    border: '1px solid rgba(255,255,255,0.7)',
+    background: 'transparent',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: 12,
+    transition: 'all .15s ease-in-out'
+  }
+
+  const activeBtnStyle = {
+    background: '#fff',
+    color: BRAND.primary,
+    border: '1px solid #fff'
+  }
 
   return (
     <div style={{ position: 'sticky', top: 0, zIndex: 1000, background: BRAND.primary, color: '#fff', borderBottom: `4px solid ${BRAND.primaryDark}` }}>
@@ -145,27 +163,45 @@ export default function BrandHeader({ title, onLogout }) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {shortcuts.map((s, idx) => (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => { window.location.href = s.href }}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.7)', background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: 12 }}
-            >
-              {s.label}
-            </button>
-          ))}
+          {shortcuts.map((s, idx) => {
+            const isActive = pathname && (pathname === s.href || pathname.startsWith(s.href + '/'))
+            return (
+              <HoverButton
+                key={idx}
+                onClick={() => { window.location.href = s.href }}
+                style={{ ...baseBtnStyle, ...(isActive ? activeBtnStyle : null) }}
+                hoverStyle={activeBtnStyle}
+              >
+                {s.label}
+              </HoverButton>
+            )
+          })}
           {onLogout && (
-            <button
-              type="button"
+            <HoverButton
               onClick={onLogout}
-              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.7)', background: 'transparent', color: '#fff', cursor: 'pointer' }}
+              style={baseBtnStyle}
+              hoverStyle={activeBtnStyle}
             >
               Logout
-            </button>
+            </HoverButton>
           )}
         </div>
       </div>
     </div>
+  )
+}
+
+function HoverButton({ children, style, hoverStyle, onClick, type = 'button' }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{ ...(style || {}), ...(hover ? (hoverStyle || {}) : {}) }}
+    >
+      {children}
+    </button>
   )
 }

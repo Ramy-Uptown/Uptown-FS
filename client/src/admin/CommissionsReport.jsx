@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { th, td, ctrl, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
+import BrandHeader from '../lib/BrandHeader.jsx'
 
 export default function CommissionsReport() {
   const [rows, setRows] = useState([])
@@ -46,64 +47,85 @@ export default function CommissionsReport() {
 
   useEffect(() => { load() }, [])
 
+  const handleLogout = async () => {
+    try {
+      const rt = localStorage.getItem('refresh_token')
+      if (rt) {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: rt })
+        }).catch(() => {})
+      }
+    } finally {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('auth_user')
+      window.location.href = '/login'
+    }
+  }
+
   return (
-    <div style={pageContainer}>
-      <h2 style={pageTitle}>Commissions Report</h2>
+    <div>
+      <BrandHeader onLogout={handleLogout} />
+      <div style={pageContainer}>
+        <h2 style={pageTitle}>Commissions Report</h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
-        <select value={filters.sales_person_id} onChange={e => setFilters(s => ({ ...s, sales_person_id: e.target.value }))} style={ctrl}>
-          <option value="">All sales</option>
-          {sales.map(s => <option key={s.id} value={s.id}>{s.name} {s.email ? `(${s.email})` : ''}</option>)}
-        </select>
-        <select value={filters.policy_id} onChange={e => setFilters(s => ({ ...s, policy_id: e.target.value }))} style={ctrl}>
-          <option value="">All policies</option>
-          {policies.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <input type="date" value={filters.startDate} onChange={e => setFilters(s => ({ ...s, startDate: e.target.value }))} style={ctrl} />
-        <input type="date" value={filters.endDate} onChange={e => setFilters(s => ({ ...s, endDate: e.target.value }))} style={ctrl} />
-        <button onClick={load} style={btn}>Apply</button>
-        <div />
-      </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
+          <select value={filters.sales_person_id} onChange={e => setFilters(s => ({ ...s, sales_person_id: e.target.value }))} style={ctrl}>
+            <option value="">All sales</option>
+            {sales.map(s => <option key={s.id} value={s.id}>{s.name} {s.email ? `(${s.email})` : ''}</option>)}
+          </select>
+          <select value={filters.policy_id} onChange={e => setFilters(s => ({ ...s, policy_id: e.target.value }))} style={ctrl}>
+            <option value="">All policies</option>
+            {policies.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <input type="date" value={filters.startDate} onChange={e => setFilters(s => ({ ...s, startDate: e.target.value }))} style={ctrl} />
+          <input type="date" value={filters.endDate} onChange={e => setFilters(s => ({ ...s, endDate: e.target.value }))} style={ctrl} />
+          <button onClick={load} style={btn}>Apply</button>
+          <div />
+        </div>
 
-      {error ? <p style={errorText}>{error}</p> : null}
+        {error ? <p style={errorText}>{error}</p> : null}
 
-      <div style={tableWrap}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>ID</th>
-              <th style={th}>Deal</th>
-              <th style={th}>Sales</th>
-              <th style={th}>Policy</th>
-              <th style={{ ...th, textAlign: 'right' }}>Amount</th>
-              <th style={th}>Calculated At</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id}>
-                <td style={td}>{r.id}</td>
-                <td style={td}>{r.deal_title || r.deal_id}</td>
-                <td style={td}>{r.sales_name || r.sales_person_id}</td>
-                <td style={td}>{r.policy_name || r.policy_id}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{Number(r.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                <td style={td}>{r.calculated_at ? new Date(r.calculated_at).toLocaleString() : ''}</td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
+        <div style={tableWrap}>
+          <table style={table}>
+            <thead>
               <tr>
-                <td style={td} colSpan={6}>No results.</td>
+                <th style={th}>ID</th>
+                <th style={th}>Deal</th>
+                <th style={th}>Sales</th>
+                <th style={th}>Policy</th>
+                <th style={{ ...th, textAlign: 'right' }}>Amount</th>
+                <th style={th}>Calculated At</th>
               </tr>
-            )}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={4} style={{ ...td, textAlign: 'right', fontWeight: 700 }}>Total</td>
-              <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-              <td style={td}></td>
-            </tr>
-          </tfoot>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id}>
+                  <td style={td}>{r.id}</td>
+                  <td style={td}>{r.deal_title || r.deal_id}</td>
+                  <td style={td}>{r.sales_name || r.sales_person_id}</td>
+                  <td style={td}>{r.policy_name || r.policy_id}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>{Number(r.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                  <td style={td}>{r.calculated_at ? new Date(r.calculated_at).toLocaleString() : ''}</td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td style={td} colSpan={6}>No results.</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={4} style={{ ...td, textAlign: 'right', fontWeight: 700 }}>Total</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                <td style={td}></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
     </div>
   )

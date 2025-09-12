@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchWithAuth } from '../lib/apiClient.js';
 import { th, td, ctrl, btnPrimary, btnSuccess, btnDanger, tableWrap, table, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js';
+import BrandHeader from '../lib/BrandHeader.jsx';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -77,83 +78,114 @@ export default function StandardPricing() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      const rt = localStorage.getItem('refresh_token')
+      if (rt) {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: rt })
+        }).catch(() => {})
+      }
+    } finally {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('auth_user')
+      window.location.href = '/login'
+    }
+  }
+
   if (loading) {
-    return <div style={pageContainer}>Loading...</div>;
+    return (
+      <div>
+        <BrandHeader onLogout={handleLogout} />
+        <div style={pageContainer}>Loading...</div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div style={pageContainer}><p style={errorText}>Error: {error}</p></div>;
+    return (
+      <div>
+        <BrandHeader onLogout={handleLogout} />
+        <div style={pageContainer}><p style={errorText}>Error: {error}</p></div>
+      </div>
+    );
   }
 
   return (
-    <div style={pageContainer}>
-      <h2 style={pageTitle}>Standard Pricing</h2>
+    <div>
+      <BrandHeader onLogout={handleLogout} />
+      <div style={pageContainer}>
+        <h2 style={pageTitle}>Standard Pricing</h2>
 
-      {role === 'financial_manager' && (
-        <form onSubmit={handleCreatePricing} style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 2px 6px rgba(21,24,28,0.04)' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Create New Standard Price</h3>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <select
-              value={selectedUnit}
-              onChange={(e) => setSelectedUnit(e.target.value)}
-              required
-              style={ctrl}
-            >
-              <option value="">Select a Unit</option>
-              {units.map(unit => (
-                <option key={unit.id} value={unit.id}>{unit.code} - {unit.description}</option>
-              ))}
-            </select>
-            <input
-              type="number"
-              value={newPrice}
-              onChange={(e) => setNewPrice(e.target.value)}
-              placeholder="Price"
-              required
-              style={ctrl}
-            />
-            <button type="submit" style={btnPrimary}>Create</button>
-          </div>
-        </form>
-      )}
+        {role === 'financial_manager' && (
+          <form onSubmit={handleCreatePricing} style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 2px 6px rgba(21,24,28,0.04)' }}>
+            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Create New Standard Price</h3>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select
+                value={selectedUnit}
+                onChange={(e) => setSelectedUnit(e.target.value)}
+                required
+                style={ctrl}
+              >
+                <option value="">Select a Unit</option>
+                {units.map(unit => (
+                  <option key={unit.id} value={unit.id}>{unit.code} - {unit.description}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={newPrice}
+                onChange={(e) => setNewPrice(e.target.value)}
+                placeholder="Price"
+                required
+                style={ctrl}
+              />
+              <button type="submit" style={btnPrimary}>Create</button>
+            </div>
+          </form>
+        )}
 
-      <div style={tableWrap}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>Unit</th>
-              <th style={th}>Price</th>
-              <th style={th}>Status</th>
-              <th style={th}>Created By</th>
-              <th style={th}>Approved By</th>
-              <th style={th}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pricings.map(p => (
-              <tr key={p.id}>
-                <td style={td}>{p.unit_code}</td>
-                <td style={td}>{p.price}</td>
-                <td style={td}>{p.status}</td>
-                <td style={td}>{p.created_by_email}</td>
-                <td style={td}>{p.approved_by_email || 'N/A'}</td>
-                <td style={td}>
-                  {role === 'ceo' && p.status === 'pending_approval' && (
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button onClick={() => handleUpdateStatus(p.id, 'approved')} style={btnSuccess}>Approve</button>
-                      <button onClick={() => handleUpdateStatus(p.id, 'rejected')} style={btnDanger}>Reject</button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {pricings.length === 0 && (
+        <div style={tableWrap}>
+          <table style={table}>
+            <thead>
               <tr>
-                <td style={td} colSpan={6}>No standard pricing entries.</td>
+                <th style={th}>Unit</th>
+                <th style={th}>Price</th>
+                <th style={th}>Status</th>
+                <th style={th}>Created By</th>
+                <th style={th}>Approved By</th>
+                <th style={th}>Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {pricings.map(p => (
+                <tr key={p.id}>
+                  <td style={td}>{p.unit_code}</td>
+                  <td style={td}>{p.price}</td>
+                  <td style={td}>{p.status}</td>
+                  <td style={td}>{p.created_by_email}</td>
+                  <td style={td}>{p.approved_by_email || 'N/A'}</td>
+                  <td style={td}>
+                    {role === 'ceo' && p.status === 'pending_approval' && (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button onClick={() => handleUpdateStatus(p.id, 'approved')} style={btnSuccess}>Approve</button>
+                        <button onClick={() => handleUpdateStatus(p.id, 'rejected')} style={btnDanger}>Reject</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {pricings.length === 0 && (
+                <tr>
+                  <td style={td} colSpan={6}>No standard pricing entries.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
