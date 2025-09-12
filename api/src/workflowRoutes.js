@@ -1,0 +1,441 @@
+import express from 'express'
+import { pool } from './db.js'
+import { authMiddleware, requireRole } from './authRoutes.js'
+
+const router = express.Router()
+
+// Utilities
+function bad(res, code, message, details) {
+  return res.status(code).json({ error: { message, details }, timestamp: new Date().toISOString() })
+}
+function ok(res, payload) {
+  return res.json({ ok: true, ...payload })
+}
+function ensureNumber(v) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+/**
+ * SECTION 1: Standard Pricing (Financial Manager -> CEO approval)
+ * - create/update by: financial_manager
+ * - approve/reject by: ceo
+ */
+router.post(
+  '/standard-pricing',
+  authMiddleware,
+  requireRole(['financial_manager']),
+  async (req, res) => {
+    try {
+      const { unit_id, price } = req.body || {}
+      const unitId = ensureNumber(unit_id)
+      const pr = ensureNumber(price)
+      if (!unitId) return bad(res, 400, 'unit_id is required and must be a number')
+      if (pr == null || pr < 0) return bad(res, 400, 'price must be a non-negative number')
+
+      const result = await pool.query(
+        `INSERT INTO standard_pricing (unit_id, price, created_by, status)
+         VALUES ($1, $2, $3, 'pending_approval')
+         RETURNING *`,
+        [unitId, pr, req.user.id]
+      )
+      return ok(res, { standard_pricing: result.rows[0] })
+    } catch (e) {
+      console.error('POST /api/workflow/standard-pricing error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.get(
+  '/standard-pricing',
+  authMiddleware,
+  requireRole(['financial_manager', 'ceo', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { unit_id, status } = req.query || {}
+      const unitId = unit_id ? ensureNumber(unit_id) : null
+      const clauses = []
+      const params = []
+      if (unitId) {
+        params.push(unitId)
+        clauses.push(`unit_id = $${params.length}`)
+      }
+      if (status) {
+        params.push(String(status))
+        clauses.push(`status = $${params.length}`)
+      }
+      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+      const q = `SELECT * FROM standard_pricing ${where} ORDER BY id DESC`
+      const result = await pool.query(q, params)
+      return ok(res, { standard_pricing: result.rows })
+    } catch (e) {
+      console.error('GET /api/workflow/standard-pricing error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// CEO approves/rejects
+router.patch(
+  '/standard-pricing/:id/approve',
+  authMiddleware,
+  requireRole(['ceo']),
+  async (req, res) => {
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+      const result = await pool.query(
+        `UPDATE standard_pricing
+         SET status='approved', approved_by=$1, updated_at=now()
+         WHERE id=$2 AND status='pending_approval'
+         RETURNING *`,
+        [req.user.id, id]
+      )
+      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+      return ok(res, { standard_pricing: result.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/standard-pricing/:id/approve error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/standard-pricing/:id/reject',
+  authMiddleware,
+  requireRole(['ceo']),
+  async (req, res) => {
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+      const result = await pool.query(
+        `UPDATE standard_pricing
+         SET status='rejected', approved_by=$1, updated_at=now()
+         WHERE id=$2 AND status='pending_approval'
+         RETURNING *`,
+        [req.user.id, id]
+      )
+      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+      return ok(res, { standard_pricing: result.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/standard-pricing/:id/reject error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+/**
+ * SECTION 2: Payment Plans (Sales Consultant -> Financial Manager approval)
+ * - create by: property_consultant
+ * - approve/reject by: financial_manager
+ */
+router.post(
+  '/payment-plans',
+  authMiddleware,
+  requireRole(['property_consultant']),
+  async (req, res) => {
+    try {
+      const { deal_id, details } = req.body || {}
+      const dealId = ensureNumber(deal_id)
+      if (!dealId) return bad(res, 400, 'deal_id is required and must be a number')
+      const det = details && typeof details === 'object' ? details : {}
+      const result = await pool.query(
+        `INSERT INTO payment_plans (deal_id, details, created_by, status)
+         VALUES ($1, $2, $3, 'pending_approval')
+         RETURNING *`,
+        [dealId, det, req.user.id]
+      )
+      return ok(res, { payment_plan: result.rows[0] })
+    } catch (e) {
+      console.error('POST /api/workflow/payment-plans error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.get(
+  '/payment-plans',
+  authMiddleware,
+  requireRole(['property_consultant', 'financial_manager', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { deal_id, status } = req.query || {}
+      const clauses = []
+      const params = []
+      if (deal_id) {
+        params.push(ensureNumber(deal_id))
+        clauses.push(`deal_id = $${params.length}`)
+      }
+      if (status) {
+        params.push(String(status))
+        clauses.push(`status = $${params.length}`)
+      }
+      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+      const result = await pool.query(`SELECT * FROM payment_plans ${where} ORDER BY id DESC`, params)
+      return ok(res, { payment_plans: result.rows })
+    } catch (e) {
+      console.error('GET /api/workflow/payment-plans error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// Approvals by financial_manager
+router.patch(
+  '/payment-plans/:id/approve',
+  authMiddleware,
+  requireRole(['financial_manager']),
+  async (req, res) => {
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+      const result = await pool.query(
+        `UPDATE payment_plans
+         SET status='approved', approved_by=$1, updated_at=now()
+         WHERE id=$2 AND status='pending_approval'
+         RETURNING *`,
+        [req.user.id, id]
+      )
+      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+      return ok(res, { payment_plan: result.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/payment-plans/:id/approve error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/payment-plans/:id/reject',
+  authMiddleware,
+  requireRole(['financial_manager']),
+  async (req, res) => {
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+      const result = await pool.query(
+        `UPDATE payment_plans
+         SET status='rejected', approved_by=$1, updated_at=now()
+         WHERE id=$2 AND status='pending_approval'
+         RETURNING *`,
+        [req.user.id, id]
+      )
+      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+      return ok(res, { payment_plan: result.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/payment-plans/:id/reject error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+/**
+ * SECTION 3: Reservation Forms (Financial Admin -> Financial Manager review)
+ * - create by: financial_admin
+ * - approve/reject by: financial_manager
+ */
+router.post(
+  '/reservation-forms',
+  authMiddleware,
+  requireRole(['financial_admin']),
+  async (req, res) => {
+    try {
+      const { payment_plan_id, details } = req.body || {}
+      const pid = ensureNumber(payment_plan_id)
+      if (!pid) return bad(res, 400, 'payment_plan_id is required and must be a number')
+      const det = details && typeof details === 'object' ? details : {}
+      const result = await pool.query(
+        `INSERT INTO reservation_forms (payment_plan_id, details, created_by, status)
+         VALUES ($1, $2, $3, 'pending_approval')
+         RETURNING *`,
+        [pid, det, req.user.id]
+      )
+      return ok(res, { reservation_form: result.rows[0] })
+    } catch (e) {
+      console.error('POST /api/workflow/reservation-forms error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.get(
+  '/reservation-forms',
+  authMiddleware,
+  requireRole(['financial_admin', 'financial_manager', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { payment_plan_id, status } = req.query || {}
+      const clauses = []
+      const params = []
+      if (payment_plan_id) {
+        params.push(ensureNumber(payment_plan_id))
+        clauses.push(`payment_plan_id = $${params.length}`)
+      }
+      if (status) {
+        params.push(String(status))
+        clauses.push(`status = $${params.length}`)
+      }
+      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+      const result = await pool.query(`SELECT * FROM reservation_forms ${where} ORDER BY id DESC`, params)
+      return ok(res, { reservation_forms: result.rows })
+    } catch (e) {
+      console.error('GET /api/workflow/reservation-forms error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/reservation-forms/:id/approve',
+  authMiddleware,
+  requireRole(['financial_manager']),
+  async (req, res) => {
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+      const result = await pool.query(
+        `UPDATE reservation_forms
+         SET status='approved', approved_by=$1, updated_at=now()
+         WHERE id=$2 AND status='pending_approval'
+         RETURNING *`,
+        [req.user.id, id]
+      )
+      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+      return ok(res, { reservation_form: result.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/reservation-forms/:id/approve error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/reservation-forms/:id/reject',
+  authMiddleware,
+  requireRole(['financial_manager']),
+  async (req, res) => {
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+      const result = await pool.query(
+        `UPDATE reservation_forms
+         SET status='rejected', approved_by=$1, updated_at=now()
+         WHERE id=$2 AND status='pending_approval'
+         RETURNING *`,
+        [req.user.id, id]
+      )
+      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+      return ok(res, { reservation_form: result.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/reservation-forms/:id/reject error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+/**
+ * SECTION 4: Contracts (Contract Person -> Contract Manager review)
+ * - create by: contract_person
+ * - approve/reject by: contract_manager
+ */
+router.post(
+  '/contracts',
+  authMiddleware,
+  requireRole(['contract_person']),
+  async (req, res) => {
+    try {
+      const { reservation_form_id, details } = req.body || {}
+      const rid = ensureNumber(reservation_form_id)
+      if (!rid) return bad(res, 400, 'reservation_form_id is required and must be a number')
+      const det = details && typeof details === 'object' ? details : {}
+      const result = await pool.query(
+        `INSERT INTO contracts (reservation_form_id, details, created_by, status)
+         VALUES ($1, $2, $3, 'pending_approval')
+         RETURNING *`,
+        [rid, det, req.user.id]
+      )
+      return ok(res, { contract: result.rows[0] })
+    } catch (e) {
+      console.error('POST /api/workflow/contracts error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.get(
+  '/contracts',
+  authMiddleware,
+  requireRole(['contract_person', 'contract_manager', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { reservation_form_id, status } = req.query || {}
+      const clauses = []
+      const params = []
+      if (reservation_form_id) {
+        params.push(ensureNumber(reservation_form_id))
+        clauses.push(`reservation_form_id = $${params.length}`)
+      }
+      if (status) {
+        params.push(String(status))
+        clauses.push(`status = $${params.length}`)
+      }
+      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+      const result = await pool.query(`SELECT * FROM contracts ${where} ORDER BY id DESC`, params)
+      return ok(res, { contracts: result.rows })
+    } catch (e) {
+      console.error('GET /api/workflow/contracts error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/contracts/:id/approve',
+  authMiddleware,
+  requireRole(['contract_manager']),
+  async (req, res) => {
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+      const result = await pool.query(
+        `UPDATE contracts
+         SET status='approved', approved_by=$1, updated_at=now()
+         WHERE id=$2 AND status='pending_approval'
+         RETURNING *`,
+        [req.user.id, id]
+      )
+      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+      return ok(res, { contract: result.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/contracts/:id/approve error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/contracts/:id/reject',
+  authMiddleware,
+  requireRole(['contract_manager']),
+  async (req, res) => {
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+      const result = await pool.query(
+        `UPDATE contracts
+         SET status='rejected', approved_by=$1, updated_at=now()
+         WHERE id=$2 AND status='pending_approval'
+         RETURNING *`,
+        [req.user.id, id]
+      )
+      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+      return ok(res, { contract: result.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/contracts/:id/reject error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+export default router
