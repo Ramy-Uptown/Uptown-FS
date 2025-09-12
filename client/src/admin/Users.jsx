@@ -11,6 +11,7 @@ export default function Users() {
   const [createForm, setCreateForm] = useState({ email: '', password: '', role: 'user' })
   const [editingId, setEditingId] = useState(0)
   const [editEmail, setEditEmail] = useState('')
+  const [statusFilter, setStatusFilter] = useState('active') // 'active' | 'inactive' | 'all'
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
 
   useEffect(() => {
@@ -66,25 +67,6 @@ export default function Users() {
     }
   }
 
-  async function deactivateUser(u) {
-    if (!confirm('Deactivate this user? They will not be able to login, but their data will be preserved.')) return
-    setBusyId(u.id)
-    try {
-      const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${u.id}/active`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: false })
-      })
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to deactivate user')
-      await load()
-    } catch (e) {
-      alert(e.message || String(e))
-    } finally {
-      setBusyId(0)
-    }
-  }
-
   async function startEdit(u) {
     setEditingId(u.id)
     setEditEmail(u.email || '')
@@ -132,13 +114,17 @@ export default function Users() {
     }
   }
 
-  async function deleteUser(u) {
-    if (!confirm('Delete this user?')) return
+  async function deactivateUser(u) {
+    if (!confirm('Deactivate this user? They will not be able to login, but their data will be preserved.')) return
     setBusyId(u.id)
     try {
-      const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${u.id}`, { method: 'DELETE' })
+      const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${u.id}/active`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: false })
+      })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Delete failed')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to deactivate user')
       await load()
     } catch (e) {
       alert(e.message || String(e))
@@ -181,6 +167,15 @@ export default function Users() {
     }
   }
 
+  const filteredUsers = users.filter(u => {
+    if (statusFilter === 'all') return true
+    if (statusFilter === 'active') return u.active !== false
+    return u.active === false
+  })
+
+  const activeCount = users.filter(u => u.active !== false).length
+  const inactiveCount = users.filter(u => u.active === false).length
+
   return (
     <div>
       <BrandHeader onLogout={handleLogout} />
@@ -197,6 +192,16 @@ export default function Users() {
           <button type="submit" disabled={creating} style={btnPrimary}>{creating ? 'Creating…' : 'Create'}</button>
         </form>
 
+        {/* Status filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={ctrl}>
+            <option value="active">Active only</option>
+            <option value="inactive">Inactive only</option>
+            <option value="all">All</option>
+          </select>
+          <span style={metaText}>Active: {activeCount} • Inactive: {inactiveCount}</span>
+        </div>
+
         {error ? <p style={errorText}>{error}</p> : null}
         <div style={tableWrap}>
           <table style={table}>
@@ -212,7 +217,7 @@ export default function Users() {
               </tr>
             </thead>
             <tbody>
-              {users.map(u => {
+              {filteredUsers.map(u => {
                 const isEditing = editingId === u.id
                 const isSelf = me.id === u.id
                 return (
@@ -266,9 +271,23 @@ export default function Users() {
                   </tr>
                 )
               })}
-              {users.length === 0 && (
+              {filteredUsers.length === 0 && (
                 <tr>
                   <td style={td} colSpan={7}>No users.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p style={{ ...metaText, marginTop: 8 }}>
+          Notes:
+          <br />• You cannot change your own role or deactivate/delete your own account.
+          <br />• Admins cannot create, modify, or delete superadmin accounts. Superadmins can manage all.
+        </p>
+      </div>
+    </div>
+  )
+} colSpan={7}>No users.</td>
                 </tr>
               )}
             </tbody>
