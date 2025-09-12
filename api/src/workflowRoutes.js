@@ -396,7 +396,7 @@ router.patch(
       const result = await pool.query(
         `UPDATE payment_plans
          SET status='rejected', approved_by=$1, updated_at=now()
-         WHERE id=$2 AND status IN ('pending_approval', 'pending_ceo_approval')
+         WHERE id=$2 AND status IN ('pending_approval','pending_ceo_approval')
          RETURNING *`,
         [req.user.id, id]
       )
@@ -434,6 +434,187 @@ router.patch(
   }
 )
 
+// Sales team assignments
+router.post(
+  '/sales-teams/assign',
+  authMiddleware,
+  requireRole(['sales_manager', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { manager_user_id, consultant_user_id } = req.body || {}
+      const mid = ensureNumber(manager_user_id)
+      const cid = ensureNumber(consultant_user_id)
+      if (!mid || !cid) return bad(res, 400, 'manager_user_id and consultant_user_id are required numbers')
+      const r = await pool.query(
+        `INSERT INTO sales_team_members (manager_user_id, consultant_user_id, active)
+         VALUES ($1, $2, TRUE)
+         ON CONFLICT (manager_user_id, consultant_user_id)
+         DO UPDATE SET active=TRUE, updated_at=now()
+         RETURNING *`,
+        [mid, cid]
+      )
+      return ok(res, { membership: r.rows[0] })
+    } catch (e) {
+      console.error('POST /api/workflow/sales-teams/assign error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/sales-teams/assign',
+  authMiddleware,
+  requireRole(['sales_manager', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { manager_user_id, consultant_user_id, active } = req.body || {}
+      const mid = ensureNumber(manager_user_id)
+      const cid = ensureNumber(consultant_user_id)
+      if (!mid || !cid || typeof active !== 'boolean') return bad(res, 400, 'manager_user_id, consultant_user_id and active:boolean are required')
+      const r = await pool.query(
+        `UPDATE sales_team_members SET active=$1, updated_at=now()
+         WHERE manager_user_id=$2 AND consultant_user_id=$3
+         RETURNING *`,
+        [active, mid, cid]
+      )
+      if (r.rows.length === 0) return bad(res, 404, 'Assignment not found')
+      return ok(res, { membership: r.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/sales-teams/assign error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// Proposal listing helpers
+router.get(
+  '/payment-plans/my',
+  authMiddleware,
+  requireRole(['property_consultant']),
+  async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT * FROM payment_plans WHERE created_by=$1 ORDER BY id DESC`,
+        [req.user.id]
+      )
+      return ok(res, { payment_plans: r.rows })
+    } catch (e) {
+      console.error('GET /api/workflow/payment-plans/my error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.get(
+  '/payment-plans/team',
+  authMiddleware,
+  requireRole(['sales_manager']),
+  async (req, res) => {
+    try {
+      // consultants assigned to this manager
+      const team = await pool.query(
+        `SELECT consultant_user_id AS uid
+         FROM sales_team_members
+         WHERE manager_user_id=$1 AND active=TRUE`,
+        [req.user.id]
+      )
+      const uids = team.rows.map(r => r.uid)
+      if (uids.length === 0) return ok(res, { payment_plans: [] })
+      const placeholders = uids.map((_, i) => `${i + 1}`).join(',')
+      const r = await pool.query(
+        `SELECT * FROM payment_plans WHERE created_by IN (${placeholders}) ORDER BY id DESC`,
+        uids
+      )
+      return ok(res, { payment_plans: r.rows })
+    } catch (e) {
+      console.error('GET /api/workflow/payment-plans/team error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// Create a new version of a payment plan
+router.post(
+  '/payment-plans/:id/new-version',
+  authMiddleware,
+  requireRole(['property_consultant', 'financial_manager']),
+  async (req, res) => {
+    const client = await pool.connect()
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) {
+        client.release()
+        return bad(res, 400, 'Invalid id')
+      }
+      await client.query('BEGIN')
+      const cur = await client.query('SELECT * FROM payment_plans WHERE id=$1', [id])
+      if (cur.rows.length === 0) {
+        await client.query('ROLLBACK'); client.release()
+        return bad(res, 404, 'Payment plan not found')
+      }
+      const prev = cur.rows[0]
+      // Next version number for same deal
+      const vres = await client.query('SELECT COALESCE(MAX(version),0)+1 AS v FROM payment_plans WHERE deal_id=$1', [prev.deal_id])
+      const nextV = vres.rows[0].v || 1
+      const ins = await client.query(
+        `INSERT INTO payment_plans (deal_id, details, created_by, status, version, supersedes_id)
+         VALUES ($1, $2, $3, 'pending_approval', $4, $5)
+         RETURNING *`,
+        [prev.deal_id, prev.details, req.user.id, nextV, id]
+      )
+      await client.query('COMMIT'); client.release()
+      return ok(res, { payment_plan: ins.rows[0] })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
+      console.error('POST /api/workflow/payment-plans/:id/new-version error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// Mark an approved plan as accepted (unique per deal)
+router.patch(
+  '/payment-plans/:id/mark-accepted',
+  authMiddleware,
+  requireRole(['financial_manager', 'ceo']),
+  async (req, res) => {
+    const client = await pool.connect()
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) {
+        client.release()
+        return bad(res, 400, 'Invalid id')
+      }
+      await client.query('BEGIN')
+      const cur = await client.query('SELECT id, deal_id, status FROM payment_plans WHERE id=$1', [id])
+      if (cur.rows.length === 0) {
+        await client.query('ROLLBACK'); client.release()
+        return bad(res, 404, 'Not found')
+      }
+      if (cur.rows[0].status !== 'approved') {
+        await client.query('ROLLBACK'); client.release()
+        return bad(res, 400, 'Only approved plans can be accepted')
+      }
+      // Set accepted on this plan; unique index ensures only one per deal
+      const upd = await client.query(
+        `UPDATE payment_plans SET accepted=TRUE, accepted_at=now() WHERE id=$1 RETURNING *`,
+        [id]
+      )
+      await client.query('COMMIT'); client.release()
+      return ok(res, { payment_plan: upd.rows[0] })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
+      if (String(e.message || '').includes('uniq_payment_plans_one_accepted_per_deal')) {
+        return bad(res, 400, 'This deal already has an accepted plan')
+      }
+      console.error('PATCH /api/workflow/payment-plans/:id/mark-accepted error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
 /**
  * SECTION 3: Reservation Forms (Financial Admin -> Financial Manager review)
  * - create by: financial_admin
@@ -444,25 +625,39 @@ router.post(
   authMiddleware,
   requireRole(['financial_admin']),
   async (req, res) => {
+    const client = await pool.connect()
     try {
       const { payment_plan_id, details } = req.body || {}
       const pid = ensureNumber(payment_plan_id)
-      if (!pid) return bad(res, 400, 'payment_plan_id is required and must be a number')
+      if (!pid) {
+        client.release()
+        return bad(res, 400, 'payment_plan_id is required and must be a number')
+      }
 
       // Ensure payment plan exists and is approved by financial manager
-      const planRes = await pool.query('SELECT id, status FROM payment_plans WHERE id=$1', [pid])
-      if (planRes.rows.length === 0) return bad(res, 404, 'Payment plan not found')
-      if (planRes.rows[0].status !== 'approved') return bad(res, 400, 'Payment plan must be approved before creating reservation')
+      const planRes = await client.query('SELECT id, status FROM payment_plans WHERE id=$1', [pid])
+      if (planRes.rows.length === 0) { client.release(); return bad(res, 404, 'Payment plan not found') }
+      if (planRes.rows[0].status !== 'approved') { client.release(); return bad(res, 400, 'Payment plan must be approved before creating reservation') }
 
       const det = details && typeof details === 'object' ? details : {}
-      const result = await pool.query(
+      await client.query('BEGIN')
+      const result = await client.query(
         `INSERT INTO reservation_forms (payment_plan_id, details, created_by, status)
          VALUES ($1, $2, $3, 'pending_approval')
          RETURNING *`,
         [pid, det, req.user.id]
       )
-      return ok(res, { reservation_form: result.rows[0] })
+      const row = result.rows[0]
+      await client.query(
+        `INSERT INTO reservation_forms_history (reservation_form_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'create', $2, $3::jsonb, $4::jsonb)`,
+        [row.id, req.user.id, JSON.stringify(null), JSON.stringify(row)]
+      )
+      await client.query('COMMIT'); client.release()
+      return ok(res, { reservation_form: row })
     } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
       console.error('POST /api/workflow/reservation-forms error:', e)
       return bad(res, 500, 'Internal error')
     }
@@ -525,13 +720,13 @@ router.patch(
   authMiddleware,
   requireRole(['financial_manager']),
   async (req, res) => {
+    const client = await pool.connect()
     try {
       const id = ensureNumber(req.params.id)
-      if (!id) return bad(res, 400, 'Invalid id')
-      const result = await pool.query(
-        `UPDATE reservation_forms
-         SET status='rejected', approved_by=$1, updated_at=now()
-         WHERE id=$2 AND status='pending_approval'
+      if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+      await client.query('BEGIN')
+      const prev = await client.query('SELECT * FROM reservation_forms WHERE id=$1', [id])
+'
          RETURNING *`,
         [req.user.id, id]
       )
@@ -554,19 +749,30 @@ router.post(
   authMiddleware,
   requireRole(['contract_person']),
   async (req, res) => {
+    const client = await pool.connect()
     try {
       const { reservation_form_id, details } = req.body || {}
       const rid = ensureNumber(reservation_form_id)
-      if (!rid) return bad(res, 400, 'reservation_form_id is required and must be a number')
+      if (!rid) { client.release(); return bad(res, 400, 'reservation_form_id is required and must be a number') }
       const det = details && typeof details === 'object' ? details : {}
-      const result = await pool.query(
+      await client.query('BEGIN')
+      const result = await client.query(
         `INSERT INTO contracts (reservation_form_id, details, created_by, status)
          VALUES ($1, $2, $3, 'pending_approval')
          RETURNING *`,
         [rid, det, req.user.id]
       )
-      return ok(res, { contract: result.rows[0] })
+      const row = result.rows[0]
+      await client.query(
+        `INSERT INTO contracts_history (contract_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'create', $2, $3::jsonb, $4::jsonb)`,
+        [row.id, req.user.id, JSON.stringify(null), JSON.stringify(row)]
+      )
+      await client.query('COMMIT'); client.release()
+      return ok(res, { contract: row })
     } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
       console.error('POST /api/workflow/contracts error:', e)
       return bad(res, 500, 'Internal error')
     }
@@ -605,19 +811,30 @@ router.patch(
   authMiddleware,
   requireRole(['contract_manager']),
   async (req, res) => {
+    const client = await pool.connect()
     try {
       const id = ensureNumber(req.params.id)
-      if (!id) return bad(res, 400, 'Invalid id')
-      const result = await pool.query(
+      if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+      await client.query('BEGIN')
+      const prev = await client.query('SELECT * FROM contracts WHERE id=$1', [id])
+      const result = await client.query(
         `UPDATE contracts
          SET status='approved', approved_by=$1, updated_at=now()
          WHERE id=$2 AND status='pending_approval'
          RETURNING *`,
         [req.user.id, id]
       )
-      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+      if (result.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found or not pending') }
+      await client.query(
+        `INSERT INTO contracts_history (contract_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'approve', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(prev.rows[0] || null), JSON.stringify(result.rows[0])]
+      )
+      await client.query('COMMIT'); client.release()
       return ok(res, { contract: result.rows[0] })
     } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
       console.error('PATCH /api/workflow/contracts/:id/approve error:', e)
       return bad(res, 500, 'Internal error')
     }
@@ -629,19 +846,30 @@ router.patch(
   authMiddleware,
   requireRole(['contract_manager']),
   async (req, res) => {
+    const client = await pool.connect()
     try {
       const id = ensureNumber(req.params.id)
-      if (!id) return bad(res, 400, 'Invalid id')
-      const result = await pool.query(
+      if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+      await client.query('BEGIN')
+      const prev = await client.query('SELECT * FROM contracts WHERE id=$1', [id])
+      const result = await client.query(
         `UPDATE contracts
          SET status='rejected', approved_by=$1, updated_at=now()
          WHERE id=$2 AND status='pending_approval'
          RETURNING *`,
         [req.user.id, id]
       )
-      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+      if (result.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found or not pending') }
+      await client.query(
+        `INSERT INTO contracts_history (contract_id, change_type, changed_by, old_values, new_values)
+         VALUES ($1, 'reject', $2, $3::jsonb, $4::jsonb)`,
+        [id, req.user.id, JSON.stringify(prev.rows[0] || null), JSON.stringify(result.rows[0])]
+      )
+      await client.query('COMMIT'); client.release()
       return ok(res, { contract: result.rows[0] })
     } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
       console.error('PATCH /api/workflow/contracts/:id/reject error:', e)
       return bad(res, 500, 'Internal error')
     }
