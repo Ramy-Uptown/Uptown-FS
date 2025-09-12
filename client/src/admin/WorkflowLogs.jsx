@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import * as XLSX from 'xlsx'
 import { th, td, ctrl, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
+import BrandHeader from '../lib/BrandHeader.jsx'
 
 export default function WorkflowLogs() {
   const [startDate, setStartDate] = useState('')
@@ -35,6 +36,24 @@ export default function WorkflowLogs() {
   }
 
   useEffect(() => { load() }, [])
+
+  const handleLogout = async () => {
+    try {
+      const rt = localStorage.getItem('refresh_token')
+      if (rt) {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: rt })
+        }).catch(() => {})
+      }
+    } finally {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('auth_user')
+      window.location.href = '/login'
+    }
+  }
 
   function exportXLSX() {
     if (!data) return
@@ -131,7 +150,7 @@ export default function WorkflowLogs() {
       const body = rows.map(r => headers.map(h => {
         const v = r[h]
         const s = v == null ? '' : String(v)
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+        return /[\",\n]/.test(s) ? `\"${s.replace(/\"/g, '\"\"')}\"` : s
       }).join(','))
       return [headers.join(','), ...body].join('\n')
     }
@@ -155,36 +174,39 @@ export default function WorkflowLogs() {
   }
 
   return (
-    <div style={pageContainer}>
-      <h2 style={pageTitle}>Workflow Logs</h2>
-      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: 12 }}>
-        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={ctrl} />
-        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={ctrl} />
-        <select value={type} onChange={e => setType(e.target.value)} style={ctrl}>
-          <option value="">All Types</option>
-          <option value="offers">Offers</option>
-          <option value="reservations">Reservations</option>
-          <option value="contracts">Contracts</option>
-        </select>
-        <input type="number" placeholder="Consultant User ID" value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl} />
-        <input type="number" placeholder="Sales Manager User ID" value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl} />
-        <div>
-          <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Apply'}</button>
-          <button onClick={exportXLSX} disabled={!data} style={btn}>Export XLSX</button>
-          <button onClick={exportCSV} disabled={!data} style={btn}>Export CSV</button>
+    <div>
+      <BrandHeader onLogout={handleLogout} />
+      <div style={pageContainer}>
+        <h2 style={pageTitle}>Workflow Logs</h2>
+        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: 12 }}>
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={ctrl} />
+          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={ctrl} />
+          <select value={type} onChange={e => setType(e.target.value)} style={ctrl}>
+            <option value="">All Types</option>
+            <option value="offers">Offers</option>
+            <option value="reservations">Reservations</option>
+            <option value="contracts">Contracts</option>
+          </select>
+          <input type="number" placeholder="Consultant User ID" value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl} />
+          <input type="number" placeholder="Sales Manager User ID" value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl} />
+          <div>
+            <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Apply'}</button>
+            <button onClick={exportXLSX} disabled={!data} style={btn}>Export XLSX</button>
+            <button onClick={exportCSV} disabled={!data} style={btn}>Export CSV</button>
+          </div>
         </div>
+
+        {error ? <p style={errorText}>{error}</p> : null}
+
+        {data && (
+          <>
+            <Section title="Offers" rows={data.offers?.rows} total={data.offers?.total} />
+            <Section title="Reservations" rows={data.reservations?.rows} total={data.reservations?.total} />
+            <Section title="Contracts" rows={data.contracts?.rows} total={data.contracts?.total} />
+            <div style={{ marginTop: 12, fontWeight: 700 }}>Grand Total: {Number(data.grandTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          </>
+        )}
       </div>
-
-      {error ? <p style={errorText}>{error}</p> : null}
-
-      {data && (
-        <>
-          <Section title="Offers" rows={data.offers?.rows} total={data.offers?.total} />
-          <Section title="Reservations" rows={data.reservations?.rows} total={data.reservations?.total} />
-          <Section title="Contracts" rows={data.contracts?.rows} total={data.contracts?.total} />
-          <div style={{ marginTop: 12, fontWeight: 700 }}>Grand Total: {Number(data.grandTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-        </>
-      )}
     </div>
   )
 }

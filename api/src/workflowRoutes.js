@@ -80,11 +80,11 @@ router.get(
       const params = []
       if (unitId) {
         params.push(unitId)
-        clauses.push(`unit_id = $${params.length}`)
+        clauses.push(`unit_id = ${params.length}`)
       }
       if (status) {
         params.push(String(status))
-        clauses.push(`status = $${params.length}`)
+        clauses.push(`status = ${params.length}`)
       }
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
       const q = `SELECT * FROM standard_pricing ${where} ORDER BY id DESC`
@@ -92,6 +92,60 @@ router.get(
       return ok(res, { standard_pricing: result.rows })
     } catch (e) {
       console.error('GET /api/workflow/standard-pricing error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+/**
+ * Sales team membership listing
+ * Allows viewing existing manager assignments.
+ * Optional query params:
+ *  - consultant_user_id (number)
+ *  - manager_user_id (number)
+ *  - active (boolean, default true)
+ */
+router.get(
+  '/sales-teams/memberships',
+  authMiddleware,
+  requireRole(['sales_manager', 'admin', 'superadmin', 'contract_manager', 'financial_manager']),
+  async (req, res) => {
+    try {
+      const { consultant_user_id, manager_user_id } = req.query || {}
+      const active = req.query.active === undefined ? true : String(req.query.active).toLowerCase() === 'true'
+      const clauses = []
+      const params = []
+
+      if (consultant_user_id) {
+        params.push(ensureNumber(consultant_user_id))
+        clauses.push(`stm.consultant_user_id = ${params.length}`)
+      }
+      if (manager_user_id) {
+        params.push(ensureNumber(manager_user_id))
+        clauses.push(`stm.manager_user_id = ${params.length}`)
+      }
+      if (typeof active === 'boolean') {
+        params.push(active)
+        clauses.push(`stm.active = ${params.length}`)
+      }
+
+      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+      const sql = `
+        SELECT stm.manager_user_id,
+               stm.consultant_user_id,
+               stm.active,
+               m.email AS manager_email,
+               c.email AS consultant_email
+        FROM sales_team_members stm
+        JOIN users m ON m.id = stm.manager_user_id
+        JOIN users c ON c.id = stm.consultant_user_id
+        ${where}
+        ORDER BY stm.manager_user_id ASC, stm.consultant_user_id ASC
+      `
+      const r = await pool.query(sql, params)
+      return ok(res, { memberships: r.rows })
+    } catch (e) {
+      console.error('GET /api/workflow/sales-teams/memberships error:', e)
       return bad(res, 500, 'Internal error')
     }
   }

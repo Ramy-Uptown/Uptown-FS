@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { th, td, ctrl, btn, btnPrimary, tableWrap, table, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js'
+import BrandHeader from '../lib/BrandHeader.jsx'
 
 export default function SalesTeam() {
   const [list, setList] = useState([])
@@ -95,85 +96,106 @@ export default function SalesTeam() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
+  const handleLogout = async () => {
+    try {
+      const rt = localStorage.getItem('refresh_token')
+      if (rt) {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: rt })
+        }).catch(() => {})
+      }
+    } finally {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('auth_user')
+      window.location.href = '/login'
+    }
+  }
+
   return (
-    <div style={pageContainer}>
-      <h2 style={pageTitle}>Sales Team</h2>
+    <div>
+      <BrandHeader onLogout={handleLogout} />
+      <div style={pageContainer}>
+        <h2 style={pageTitle}>Sales Team</h2>
 
-      <form onSubmit={save} style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
-        <input placeholder="User ID (optional)" value={form.user_id} onChange={e => setForm(s => ({ ...s, user_id: e.target.value }))} style={ctrl} />
-        <input placeholder="Name" value={form.name} onChange={e => setForm(s => ({ ...s, name: e.target.value }))} style={ctrl} required />
-        <input placeholder="Email" value={form.email} onChange={e => setForm(s => ({ ...s, email: e.target.value }))} style={ctrl} />
-        <select value={form.role} onChange={e => setForm(s => ({ ...s, role: e.target.value }))} style={ctrl}>
-          <option value="sales">sales</option>
-          <option value="senior_sales">senior_sales</option>
-          <option value="manager">manager</option>
-        </select>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="checkbox" checked={!!form.active} onChange={e => setForm(s => ({ ...s, active: e.target.checked }))} />
-          Active
-        </label>
-        <div>
-          <button type="submit" disabled={saving} style={btnPrimary}>{saving ? 'Saving…' : (editingId ? 'Update' : 'Create')}</button>
-          {editingId ? <button type="button" onClick={resetForm} style={btn}>Cancel</button> : null}
+        <form onSubmit={save} style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
+          <input placeholder="User ID (optional)" value={form.user_id} onChange={e => setForm(s => ({ ...s, user_id: e.target.value }))} style={ctrl} />
+          <input placeholder="Name" value={form.name} onChange={e => setForm(s => ({ ...s, name: e.target.value }))} style={ctrl} required />
+          <input placeholder="Email" value={form.email} onChange={e => setForm(s => ({ ...s, email: e.target.value }))} style={ctrl} />
+          <select value={form.role} onChange={e => setForm(s => ({ ...s, role: e.target.value }))} style={ctrl}>
+            <option value="sales">sales</option>
+            <option value="senior_sales">senior_sales</option>
+            <option value="manager">manager</option>
+          </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={!!form.active} onChange={e => setForm(s => ({ ...s, active: e.target.checked }))} />
+            Active
+          </label>
+          <div>
+            <button type="submit" disabled={saving} style={btnPrimary}>{saving ? 'Saving…' : (editingId ? 'Update' : 'Create')}</button>
+            {editingId ? <button type="button" onClick={resetForm} style={btn}>Cancel</button> : null}
+          </div>
+        </form>
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <input placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} style={ctrl} />
+          <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} style={ctrl}>
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
         </div>
-      </form>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-        <input placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} style={ctrl} />
-        <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} style={ctrl}>
-          <option value={10}>10</option>
-          <option value={20}>20</option>
-          <option value={50}>50</option>
-          <option value={100}>100</option>
-        </select>
-      </div>
+        {error ? <p style={errorText}>{error}</p> : null}
 
-      {error ? <p style={errorText}>{error}</p> : null}
-
-      <div style={tableWrap}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>ID</th>
-              <th style={th}>Name</th>
-              <th style={th}>Email</th>
-              <th style={th}>Role</th>
-              <th style={th}>Active</th>
-              <th style={th}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map(r => (
-              <tr key={r.id}>
-                <td style={td}>{r.id}</td>
-                <td style={td}>{r.name}</td>
-                <td style={td}>{r.email || ''}</td>
-                <td style={td}>{r.role || ''}</td>
-                <td style={td}>{r.active ? 'Yes' : 'No'}</td>
-                <td style={td}>
-                  <button onClick={() => edit(r)} style={btn}>Edit</button>
-                  <button onClick={() => remove(r.id)} style={btn}>Delete</button>
-                </td>
-              </tr>
-            ))}
-            {list.length === 0 && !loading && (
+        <div style={tableWrap}>
+          <table style={table}>
+            <thead>
               <tr>
-                <td style={td} colSpan={6}>No sales people.</td>
+                <th style={th}>ID</th>
+                <th style={th}>Name</th>
+                <th style={th}>Email</th>
+                <th style={th}>Role</th>
+                <th style={th}>Active</th>
+                <th style={th}>Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {list.map(r => (
+                <tr key={r.id}>
+                  <td style={td}>{r.id}</td>
+                  <td style={td}>{r.name}</td>
+                  <td style={td}>{r.email || ''}</td>
+                  <td style={td}>{r.role || ''}</td>
+                  <td style={td}>{r.active ? 'Yes' : 'No'}</td>
+                  <td style={td}>
+                    <button onClick={() => edit(r)} style={btn}>Edit</button>
+                    <button onClick={() => remove(r.id)} style={btn}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+              {list.length === 0 && !loading && (
+                <tr>
+                  <td style={td} colSpan={6}>No sales people.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-        <span style={metaText}>
-          Page {page} of {totalPages} — {total} total
-        </span>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => setPage(1)} disabled={page === 1} style={btn}>First</button>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btn}>Prev</button>
-          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={btn}>Next</button>
-          <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={btn}>Last</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+          <span style={metaText}>
+            Page {page} of {totalPages} — {total} total
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => setPage(1)} disabled={page === 1} style={btn}>First</button>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btn}>Prev</button>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={btn}>Next</button>
+            <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={btn}>Last</button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { th, td, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
+import BrandHeader from '../lib/BrandHeader.jsx'
 
 export default function HoldsCEO() {
   const [rows, setRows] = useState([])
@@ -50,41 +51,62 @@ export default function HoldsCEO() {
 
   const canCEO = role === 'ceo'
 
+  const handleLogout = async () => {
+    try {
+      const rt = localStorage.getItem('refresh_token')
+      if (rt) {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: rt })
+        }).catch(() => {})
+      }
+    } finally {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('auth_user')
+      window.location.href = '/login'
+    }
+  }
+
   return (
-    <div style={{ ...pageContainer, maxWidth: 900 }}>
-      <h2 style={pageTitle}>Hold Override Approvals — {canCEO ? 'CEO' : 'Read Only'}</h2>
-      <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Refresh'}</button>
-      {error ? <p style={errorText}>{error}</p> : null}
-      <div style={{ ...tableWrap, marginTop: 12 }}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>ID</th>
-              <th style={th}>Unit</th>
-              <th style={th}>Plan</th>
-              <th style={th}>Requested By</th>
-              <th style={th}>Expires</th>
-              <th style={th}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id}>
-                <td style={td}>{r.id}</td>
-                <td style={td}>{r.unit_id}</td>
-                <td style={td}>{r.payment_plan_id || ''}</td>
-                <td style={td}>{r.requested_by || ''}</td>
-                <td style={td}>{r.expires_at ? new Date(r.expires_at).toLocaleString() : ''}</td>
-                <td style={td}>
-                  {canCEO ? <button onClick={() => approve(r.id)} style={btn}>Approve Override</button> : <span style={{ color: '#64748b' }}>View only</span>}
-                </td>
+    <div>
+      <BrandHeader onLogout={handleLogout} />
+      <div style={{ ...pageContainer, maxWidth: 900 }}>
+        <h2 style={pageTitle}>Hold Override Approvals — {canCEO ? 'CEO' : 'Read Only'}</h2>
+        <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Refresh'}</button>
+        {error ? <p style={errorText}>{error}</p> : null}
+        <div style={{ ...tableWrap, marginTop: 12 }}>
+          <table style={table}>
+            <thead>
+              <tr>
+                <th style={th}>ID</th>
+                <th style={th}>Unit</th>
+                <th style={th}>Plan</th>
+                <th style={th}>Requested By</th>
+                <th style={th}>Expires</th>
+                <th style={th}>Actions</th>
               </tr>
-            ))}
-            {rows.length === 0 && !loading && (
-              <tr><td style={td} colSpan={6}>No pending requests.</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id}>
+                  <td style={td}>{r.id}</td>
+                  <td style={td}>{r.unit_id}</td>
+                  <td style={td}>{r.payment_plan_id || ''}</td>
+                  <td style={td}>{r.requested_by || ''}</td>
+                  <td style={td}>{r.expires_at ? new Date(r.expires_at).toLocaleString() : ''}</td>
+                  <td style={td}>
+                    {canCEO ? <button onClick={() => approve(r.id)} style={btn}>Approve Override</button> : <span style={{ color: '#64748b' }}>View only</span>}
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && !loading && (
+                <tr><td style={td} colSpan={6}>No pending requests.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
