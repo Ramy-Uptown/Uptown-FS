@@ -174,6 +174,38 @@ export default function Users() {
     }
   }
 
+  async function clearManager(userId) {
+    const currentManagerId = Number(assignMap[userId] || 0)
+    if (!currentManagerId) {
+      alert('No current manager to clear.')
+      return
+    }
+    setBusyId(userId)
+    try {
+      const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manager_user_id: currentManagerId,
+          consultant_user_id: userId,
+          active: false
+        })
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to clear manager')
+      setAssignMap(s => {
+        const copy = { ...s }
+        delete copy[userId]
+        return copy
+      })
+      alert('Manager cleared.')
+    } catch (e) {
+      alert(e.message || String(e))
+    } finally {
+      setBusyId(0)
+    }
+  }
+
   const roleOptions = [
     'user',
     'admin',
@@ -217,7 +249,13 @@ export default function Users() {
   const activeCount = users.filter(u => u.active !== false).length
   const inactiveCount = users.filter(u => u.active === false).length
 
-  const managers = users.filter(u => u.role === 'sales_manager' || u.role === 'manager')
+  const managers = users.filter(u =>
+    u.role === 'sales_manager' ||
+    u.role === 'manager' ||
+    u.role === 'contract_manager' ||
+    u.role === 'financial_manager'
+  )
+  const userById = Object.fromEntries(users.map(u => [u.id, u]))
 
   return (
     <div>
@@ -291,18 +329,30 @@ export default function Users() {
                     </td>
                     <td style={td}>
                       {canAssignManager ? (
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          <select
-                            value={assignMap[u.id] || ''}
-                            onChange={e => setAssignMap(s => ({ ...s, [u.id]: e.target.value }))}
-                            style={ctrl}
-                          >
-                            <option value="">Select manager…</option>
-                            {managers.map(m => (
-                              <option key={m.id} value={m.id}>{m.email} (id {m.id})</option>
-                            ))}
-                          </select>
-                          <button type="button" onClick={() => assignManager(u.id)} disabled={busyId === u.id || !assignMap[u.id]} style={btn}>Assign</button>
+                        <div style={{ display: 'grid', gap: 6 }}>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <select
+                              value={assignMap[u.id] || ''}
+                              onChange={e => setAssignMap(s => ({ ...s, [u.id]: e.target.value }))}
+                              style={ctrl}
+                            >
+                              <option value="">Select manager…</option>
+                              {managers.map(m => (
+                                <option key={m.id} value={m.id}>{m.email} (id {m.id})</option>
+                              ))}
+                            </select>
+                            <button type="button" onClick={() => assignManager(u.id)} disabled={busyId === u.id || !assignMap[u.id]} style={btn}>Assign</button>
+                            {assignMap[u.id] ? (
+                              <button type="button" onClick={() => clearManager(u.id)} disabled={busyId === u.id} style={btnDanger} title="Deactivate current manager assignment">
+                                Clear
+                              </button>
+                            ) : null}
+                          </div>
+                          <div style={metaText}>
+                            {assignMap[u.id]
+                              ? `Current manager: ${userById[Number(assignMap[u.id])] ? userById[Number(assignMap[u.id])].email : '(' + assignMap[u.id] + ')' }`
+                              : 'No manager assigned'}
+                          </div>
                         </div>
                       ) : (
                         <span style={metaText}>—</span>
