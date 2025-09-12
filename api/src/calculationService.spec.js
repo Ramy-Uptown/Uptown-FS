@@ -32,8 +32,10 @@ async function run() {
   // payment months
   assert(JSON.stringify(getPaymentMonths(3, Frequencies.Monthly, 0)) === JSON.stringify([1, 2, 3]), 'monthly schedule')
   assert(JSON.stringify(getPaymentMonths(3, Frequencies.Quarterly, 0)) === JSON.stringify([3, 6, 9]), 'quarterly schedule')
-  assert(JSON.stringify(getPaymentMonths(2, Frequencies.BiAnnually, 1)) === JSON.stringify([16, 22]), 'bi-annually with startAfterYear')
-  assert(JSON.stringify(getPaymentMonths(1, Frequencies.Annually, 2)) === JSON.stringify([27]), 'annually with startAfterYear')
+  assert(JSON.stringify(getPaymentMonths(2, Frequencies.BiAnnually, 0)) === JSON.stringify([6, 12]), 'bi-annually schedule')
+  assert(JSON.stringify(getPaymentMonths(2, Frequencies.BiAnnually, 1)) === JSON.stringify([18, 24]), 'bi-annually with startAfterYear')
+  assert(JSON.stringify(getPaymentMonths(1, Frequencies.Annually, 0)) === JSON.stringify([12]), 'annually schedule')
+  assert(JSON.stringify(getPaymentMonths(1, Frequencies.Annually, 2)) === JSON.stringify([36]), 'annually with startAfterYear')
 
   // PVAF sanity
   const pvafMonthly = calculatePVAF(12, Frequencies.Monthly, mr, 0)
