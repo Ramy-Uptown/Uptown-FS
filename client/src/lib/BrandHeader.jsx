@@ -111,7 +111,8 @@ export default function BrandHeader({ title, onLogout }) {
       case 'vicechairman':
         return [
           ...base,
-          { label: 'Workflow Logs', href: '/admin/workflow-logs' }
+          { label: 'Workflow Logs', href: '/admin/workflow-logs' },
+          { label: 'Hold Approvals', href: '/admin/hold-approvals' }
         ]
       default:
         return base
