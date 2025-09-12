@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { th, td, ctrl, btn, btnPrimary, tableWrap, table } from '../lib/ui.js'
+import { th, td, ctrl, btn, btnPrimary, tableWrap, table, pageContainer, pageTitle, metaText, errorText } from '../lib/ui.js'
 
 export default function Units() {
   const [units, setUnits] = useState([])
@@ -97,8 +97,8 @@ export default function Units() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <h2 style={{ marginTop: 0 }}>Units Catalog</h2>
+    <div style={pageContainer}>
+      <h2 style={pageTitle}>Units Catalog</h2>
 
       <form onSubmit={saveUnit} style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
         <input placeholder="Code" value={form.code} onChange={e => setForm(s => ({ ...s, code: e.target.value }))} style={ctrl} required />
@@ -129,7 +129,7 @@ export default function Units() {
         </select>
       </div>
 
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+      {error ? <p style={errorText}>{error}</p> : null}
 
       <div style={tableWrap}>
         <table style={table}>
@@ -169,7 +169,7 @@ export default function Units() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-        <span style={{ color: '#64748b', fontSize: 12 }}>
+        <span style={metaText}>
           Page {page} of {Math.max(1, Math.ceil(total / pageSize))} — {total} total
         </span>
         <div style={{ display: 'flex', gap: 6 }}>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchWithAuth } from '../lib/apiClient.js';
-import { th, td, ctrl, btnPrimary, btnSuccess, btnDanger, tableWrap, table } from '../lib/ui.js';
+import { th, td, ctrl, btnPrimary, btnSuccess, btnDanger, tableWrap, table, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -78,16 +78,16 @@ export default function StandardPricing() {
   };
 
   if (loading) {
-    return <div style={{ padding: 20 }}>Loading...</div>;
+    return <div style={pageContainer}>Loading...</div>;
   }
 
   if (error) {
-    return <div style={{ padding: 20, color: '#e11d48' }}>Error: {error}</div>;
+    return <div style={pageContainer}><p style={errorText}>Error: {error}</p></div>;
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <h2 style={{ margin: 0, marginBottom: 12 }}>Standard Pricing</h2>
+    <div style={pageContainer}>
+      <h2 style={pageTitle}>Standard Pricing</h2>
 
       {role === 'financial_manager' && (
         <form onSubmit={handleCreatePricing} style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 2px 6px rgba(21,24,28,0.04)' }}>

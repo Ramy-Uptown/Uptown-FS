@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { th, td, ctrl, btn, tableWrap, table } from '../lib/ui.js'
+import { th, td, ctrl, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
 
 export default function CommissionsReport() {
   const [rows, setRows] = useState([])
@@ -47,8 +47,8 @@ export default function CommissionsReport() {
   useEffect(() => { load() }, [])
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <h2 style={{ marginTop: 0 }}>Commissions Report</h2>
+    <div style={pageContainer}>
+      <h2 style={pageTitle}>Commissions Report</h2>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
         <select value={filters.sales_person_id} onChange={e => setFilters(s => ({ ...s, sales_person_id: e.target.value }))} style={ctrl}>
@@ -65,7 +65,7 @@ export default function CommissionsReport() {
         <div />
       </div>
 
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+      {error ? <p style={errorText}>{error}</p> : null}
 
       <div style={tableWrap}>
         <table style={table}>

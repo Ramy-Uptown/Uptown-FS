@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { ctrl, btn } from '../lib/ui.js'
+import { ctrl, btn, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js'
 
 export default function SalesAssignments() {
   const [managerId, setManagerId] = useState('')
@@ -73,9 +73,9 @@ export default function SalesAssignments() {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 800, margin: '0 auto' }}>
-      <h2>Sales Team Assignments</h2>
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+    <div style={{ ...pageContainer, maxWidth: 800 }}>
+      <h2 style={pageTitle}>Sales Team Assignments</h2>
+      {error ? <p style={errorText}>{error}</p> : null}
 
       <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 12 }}>
         <input placeholder="Manager User ID" value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl} />
@@ -90,7 +90,7 @@ export default function SalesAssignments() {
         </div>
       </div>
 
-      <p style={{ color: '#64748b', fontSize: 12 }}>
+      <p style={metaText}>
         Tip: Use the Users or Sales Team pages to find user IDs. This page lets you assign/unassign manager-consultant pairs.
       </p>
     </div>

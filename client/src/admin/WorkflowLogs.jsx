@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import * as XLSX from 'xlsx'
-import { th, td, ctrl, btn, tableWrap, table } from '../lib/ui.js'
+import { th, td, ctrl, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
 
 export default function WorkflowLogs() {
   const [startDate, setStartDate] = useState('')
@@ -155,8 +155,8 @@ export default function WorkflowLogs() {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <h2>Workflow Logs</h2>
+    <div style={pageContainer}>
+      <h2 style={pageTitle}>Workflow Logs</h2>
       <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: 12 }}>
         <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={ctrl} />
         <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={ctrl} />
@@ -174,7 +174,7 @@ export default function WorkflowLogs() {
           <button onClick={exportCSV} disabled={!data} style={btn}>Export CSV</button>
         </div>
 
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+      {error ? <p style={errorText}>{error}</p> : null}
 
       {data && (
         <>
@@ -198,8 +198,7 @@ function Section({ title, rows, total }) {
         <div style={{ fontWeight: 700 }}>Total: {Number(total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
       </div>
       <div style={tableWrap}>
-       <btable style={olid #e6eaf0', borderRadius: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table style={table}>
           <thead>
             <tr>
               {list.length > 0 && Object.keys(list[0]).map(k => <th key={k} style={th}>{k}</th>)}

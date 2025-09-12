@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { th, td, ctrl, btn, tableWrap, table } from '../lib/ui.js'
+import { th, td, ctrl, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
 
 export default function HoldsFM() {
   const [status, setStatus] = useState('approved')
@@ -53,8 +53,8 @@ export default function HoldsFM() {
   const canFM = role === 'financial_manager'
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <h2>Holds — {canFM ? 'Financial Manager' : 'Read Only'}</h2>
+    <div style={pageContainer}>
+      <h2 style={pageTitle}>Holds — {canFM ? 'Financial Manager' : 'Read Only'}</h2>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
         <select value={status} onChange={e => setStatus(e.target.value)} style={ctrl}>
           <option value="">All</option>
@@ -68,7 +68,7 @@ export default function HoldsFM() {
         </select>
         <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Refresh'}</button>
       </div>
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+      {error ? <p style={errorText}>{error}</p> : null}
       <div style={tableWrap}>
         <table style={table}>
           <thead>

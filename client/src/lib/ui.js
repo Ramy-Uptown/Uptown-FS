@@ -7,3 +7,7 @@ export const btnSuccess = { padding: '8px 12px', borderRadius: 8, border: '1px s
 export const btnDanger = { padding: '8px 12px', borderRadius: 8, border: '1px solid #dc2626', background: '#dc2626', color: '#fff', fontWeight: 600, cursor: 'pointer' }
 export const tableWrap = { overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }
 export const table = { width: '100%', borderCollapse: 'collapse' }
+export const metaText = { color: '#64748b', fontSize: 12 }
+export const errorText = { color: '#e11d48' }
+export const pageContainer = { padding: 20, maxWidth: 1200, margin: '0 auto' }
+export const pageTitle = { marginTop: 0 }
