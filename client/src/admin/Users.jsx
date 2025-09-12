@@ -1,42 +1,6 @@
 import React, { useEffect, useState } from 'react';
-
-// --- Mocks for Self-Contained Example ---
-// In a real app, these would be imported from other files.
-
-const API_URL = '/api'; // Placeholder for your API base URL
-
-// Mock for BrandHeader component
-const BrandHeader = ({ onLogout }) => (
-    <header className="bg-gray-800 text-white p-4 flex justify-between items-center shadow-md print:hidden">
-        <h1 className="text-xl font-bold">Admin Dashboard</h1>
-        <button onClick={onLogout} className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
-            Logout
-        </button>
-    </header>
-);
-
-// Mock data for users
-const mockUsers = [
-    { id: 1, email: 'super@example.com', role: 'superadmin', active: true, created_at: '2025-08-01T10:00:00Z', updated_at: '2025-09-10T11:00:00Z', notes: 'Main system administrator.' },
-    { id: 2, email: 'manager.jane@example.com', role: 'sales_manager', active: true, created_at: '2025-08-05T14:20:00Z', updated_at: '2025-09-11T09:30:00Z', notes: '' },
-    { id: 3, email: 'consultant.bob@example.com', role: 'property_consultant', active: true, created_at: '2025-08-15T11:00:00Z', updated_at: '2025-09-12T16:45:00Z', notes: 'Top performer Q3.' },
-    { id: 4, email: 'inactive.user@example.com', role: 'user', active: false, created_at: '2025-07-20T09:00:00Z', updated_at: '2025-08-30T18:00:00Z', notes: 'Left the company.' },
-    { id: 5, email: 'finance.guy@example.com', role: 'financial_admin', active: true, created_at: '2025-08-22T13:00:00Z', updated_at: '2025-09-09T12:00:00Z', notes: '' },
-];
-
-// Mock for the API fetching logic
-const fetchWithAuth = async (url, options) => {
-    console.log(`Mock Fetching: ${url}`, options || '');
-    await new Promise(resolve => setTimeout(resolve, 400)); // Simulate network delay
-    if (url.includes('/api/auth/users')) {
-        return { ok: true, json: () => Promise.resolve({ users: mockUsers }) };
-    }
-     if (url.includes('/api/workflow/sales-teams/memberships')) {
-        // Simulate a consultant being assigned to a manager
-        return { ok: true, json: () => Promise.resolve({ memberships: [{ consultant_user_id: 3, manager_user_id: 2 }] }) };
-    }
-    return { ok: true, json: () => Promise.resolve({}) }; // Default success for other actions
-};
+import { fetchWithAuth, API_URL } from '../lib/apiClient';
+import BrandHeader from '../lib/BrandHeader';
 
 // --- Main Component ---
 
@@ -55,31 +19,38 @@ export default function Users() {
     const [filters, setFilters] = useState({ status: 'active', role: 'all', search: '' });
     const [assignMap, setAssignMap] = useState({}); // { [userId]: managerId }
 
-    // Mock current user for disabling actions on self
-    const me = { id: 1 }; // Assuming the current user is the superadmin
+    const [me, setMe] = useState(null);
 
     // --- Data Loading ---
     async function loadData() {
         setIsLoading(true);
         setError('');
         try {
-            const [usersResp, memResp] = await Promise.all([
+            const [usersResp, memResp, meResp] = await Promise.all([
                 fetchWithAuth(`${API_URL}/api/auth/users`),
-                fetchWithAuth(`${API_URL}/api/workflow/sales-teams/memberships?active=true`)
+                fetchWithAuth(`${API_URL}/api/workflow/sales-teams/memberships?active=true`),
+                fetchWithAuth(`${API_URL}/api/auth/me`)
             ]);
 
-            const usersData = await usersResp.json();
             if (!usersResp.ok) throw new Error('Failed to load users');
+            const usersData = await usersResp.json();
             setUsers(usersData.users || []);
 
-            const memData = await memResp.json();
-            if (memResp.ok && memData.memberships) {
-                const map = memData.memberships.reduce((acc, m) => {
-                    acc[m.consultant_user_id] = String(m.manager_user_id);
-                    return acc;
-                }, {});
-                setAssignMap(map);
+            if (memResp.ok) {
+                const memData = await memResp.json();
+                if (memData.memberships) {
+                    const map = memData.memberships.reduce((acc, m) => {
+                        acc[m.consultant_user_id] = String(m.manager_user_id);
+                        return acc;
+                    }, {});
+                    setAssignMap(map);
+                }
             }
+
+            if (!meResp.ok) throw new Error('Failed to load current user profile');
+            const meData = await meResp.json();
+            setMe(meData.user);
+
         } catch (e) {
             setError(e.message || 'An unknown error occurred.');
         } finally {
@@ -111,37 +82,61 @@ export default function Users() {
         e.preventDefault();
         setCreating(true);
         handleUserAction(null, async () => {
-             await fetchWithAuth(`${API_URL}/api/auth/users`, {
+            const resp = await fetchWithAuth(`${API_URL}/api/auth/users`, {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(createForm),
             });
+            if (!resp.ok) {
+                const errorData = await resp.json().catch(() => ({ error: { message: 'An unknown error occurred' } }));
+                throw new Error(errorData.error?.message || 'Failed to create user');
+            }
             setCreateForm({ email: '', password: '', role: 'user' }); // Reset form
         }).finally(() => setCreating(false));
     };
 
     const saveEmail = (userId) => {
         handleUserAction(userId, async () => {
-            await fetchWithAuth(`${API_URL}/api/auth/users/${userId}`, {
+            const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${userId}`, {
                 method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: editEmail }),
             });
+            if (!resp.ok) {
+                const errorData = await resp.json().catch(() => ({ error: { message: 'An unknown error occurred' } }));
+                throw new Error(errorData.error?.message || 'Failed to update user');
+            }
             setEditingId(null);
             setEditEmail('');
         });
     };
     
     const changeRole = (userId, role) => {
-        handleUserAction(userId, () => fetchWithAuth(`${API_URL}/api/auth/users/${userId}/role`, {
-             method: 'PATCH',
-             body: JSON.stringify({ role }),
-        }));
+        handleUserAction(userId, async () => {
+            const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${userId}/role`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role }),
+            });
+            if (!resp.ok) {
+                const errorData = await resp.json().catch(() => ({ error: { message: 'An unknown error occurred' } }));
+                throw new Error(errorData.error?.message || 'Failed to change role');
+            }
+        });
     };
 
     const toggleActive = (user) => {
-        handleUserAction(user.id, () => fetchWithAuth(`${API_URL}/api/auth/users/${user.id}/active`, {
-             method: 'PATCH',
-             body: JSON.stringify({ active: !user.active }),
-        }));
+        handleUserAction(user.id, async () => {
+            const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${user.id}/active`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active: !user.active }),
+            });
+            if (!resp.ok) {
+                const errorData = await resp.json().catch(() => ({ error: { message: 'An unknown error occurred' } }));
+                throw new Error(errorData.error?.message || 'Failed to toggle active status');
+            }
+        });
     };
 
     const handleLogout = () => {
@@ -230,8 +225,8 @@ export default function Users() {
                             </tr>
                         </thead>
                         <tbody>
-                            {isLoading ? (
-                                <tr><td colSpan="6" className="text-center p-8 text-gray-500">Loading users...</td></tr>
+                            {isLoading || !me ? (
+                                <tr><td colSpan="6" className="text-center p-8 text-gray-500">Loading...</td></tr>
                             ) : filteredUsers.length === 0 ? (
                                 <tr><td colSpan="6" className="text-center p-8 text-gray-500">No users match the current filters.</td></tr>
                             ) : (
