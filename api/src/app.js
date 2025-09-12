@@ -403,7 +403,16 @@ app.post('/api/generate-plan', async (req, res) => {
     const lang = String(langInput).toLowerCase().startsWith('ar') ? 'ar' : 'en'
 
     // Enforce role-based discount limits
-    const rolen, effInputs)
+    const role = req.user?.role
+    const disc = Number(effInputs.salesDiscountPercent) || 0
+    if (role === 'property_consultant' && disc > 2) {
+      return bad(res, 403, 'Sales consultants can apply a maximum discount of 2%.')
+    }
+    if (role === 'financial_manager' && disc > 5) {
+      return bad(res, 403, 'Financial managers can apply a maximum discount of 5% (requires CEO approval in workflow if over 2%).')
+    }
+
+    const result = calculateByMode(mode, effectiveStdPlan, effInputs)
 
     const schedule = []
     const pushEntry = (label, month, amount) => {
