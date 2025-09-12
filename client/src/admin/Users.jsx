@@ -12,6 +12,7 @@ export default function Users() {
   const [editingId, setEditingId] = useState(0)
   const [editEmail, setEditEmail] = useState('')
   const [statusFilter, setStatusFilter] = useState('active') // 'active' | 'inactive' | 'all'
+  const [assignMap, setAssignMap] = useState({}) // { [userId]: managerId }
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
 
   useEffect(() => {
@@ -133,6 +134,32 @@ export default function Users() {
     }
   }
 
+  async function assignManager(userId) {
+    const managerId = Number(assignMap[userId] || 0)
+    if (!managerId) {
+      alert('Please select a manager first.')
+      return
+    }
+    setBusyId(userId)
+    try {
+      const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manager_user_id: managerId,
+          consultant_user_id: userId
+        })
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to assign manager')
+      alert('Manager assigned.')
+    } catch (e) {
+      alert(e.message || String(e))
+    } finally {
+      setBusyId(0)
+    }
+  }
+
   const roleOptions = [
     'user',
     'admin',
@@ -176,6 +203,8 @@ export default function Users() {
   const activeCount = users.filter(u => u.active !== false).length
   const inactiveCount = users.filter(u => u.active === false).length
 
+  const managers = users.filter(u => u.role === 'sales_manager' || u.role === 'manager')
+
   return (
     <div>
       <BrandHeader onLogout={handleLogout} />
@@ -210,6 +239,7 @@ export default function Users() {
                 <th style={th}>ID</th>
                 <th style={th}>Email</th>
                 <th style={th}>Role</th>
+                <th style={th}>Manager</th>
                 <th style={th}>Active</th>
                 <th style={th}>Created</th>
                 <th style={th}>Updated</th>
@@ -220,6 +250,7 @@ export default function Users() {
               {filteredUsers.map(u => {
                 const isEditing = editingId === u.id
                 const isSelf = me.id === u.id
+                const canAssignManager = u.role === 'property_consultant'
                 return (
                   <tr key={u.id}>
                     <td style={td}>{u.id}</td>
@@ -243,6 +274,25 @@ export default function Users() {
                       >
                         {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
                       </select>
+                    </td>
+                    <td style={td}>
+                      {canAssignManager ? (
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <select
+                            value={assignMap[u.id] || ''}
+                            onChange={e => setAssignMap(s => ({ ...s, [u.id]: e.target.value }))}
+                            style={ctrl}
+                          >
+                            <option value="">Select manager…</option>
+                            {managers.map(m => (
+                              <option key={m.id} value={m.id}>{m.email} (id {m.id})</option>
+                            ))}
+                          </select>
+                          <button type="button" onClick={() => assignManager(u.id)} disabled={busyId === u.id || !assignMap[u.id]} style={btn}>Assign</button>
+                        </div>
+                      ) : (
+                        <span style={metaText}>—</span>
+                      )}
                     </td>
                     <td style={td}>
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -273,7 +323,7 @@ export default function Users() {
               })}
               {filteredUsers.length === 0 && (
                 <tr>
-                  <td style={td} colSpan={7}>No users.</td>
+                  <td style={td} colSpan={8}>No users.</td>
                 </tr>
               )}
             </tbody>

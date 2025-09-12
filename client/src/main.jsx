@@ -83,39 +83,39 @@ createRoot(document.getElementById('root')).render(
         <Route
           path="/admin/units"
           element={
-            <AdminRoute>
+            <RoleBasedRoute allowedRoles={['superadmin']}>
               <Units />
-            </AdminRoute>
+            </RoleBasedRoute>
           }
         />
         <Route
           path="/admin/sales"
           element={
-            <AdminRoute>
+            <RoleBasedRoute allowedRoles={['superadmin']}>
               <SalesTeam />
-            </AdminRoute>
+            </RoleBasedRoute>
           }
         />
         <Route
           path="/admin/commission-policies"
           element={
-            <AdminRoute>
+            <RoleBasedRoute allowedRoles={['superadmin']}>
               <CommissionPolicies />
-            </AdminRoute>
+            </RoleBasedRoute>
           }
         />
         <Route
           path="/admin/commissions"
           element={
-            <AdminRoute>
+            <RoleBasedRoute allowedRoles={['superadmin']}>
               <CommissionsReport />
-            </AdminRoute>
+            </RoleBasedRoute>
           }
         />
         <Route
           path="/admin/holds"
           element={
-            <RoleBasedRoute allowedRoles={['financial_manager', 'admin', 'sales_manager', 'contract_manager']}>
+            <RoleBasedRoute allowedRoles={['financial_manager', 'sales_manager', 'contract_manager']}>
               <HoldsFM />
             </RoleBasedRoute>
           }
@@ -131,7 +131,7 @@ createRoot(document.getElementById('root')).render(
         <Route
           path="/admin/workflow-logs"
           element={
-            <RoleBasedRoute allowedRoles={['ceo', 'chairman', 'vicechairman', 'admin', 'superadmin', 'sales_manager', 'contract_manager']}>
+            <RoleBasedRoute allowedRoles={['ceo', 'chairman', 'vicechairman', 'superadmin', 'sales_manager', 'contract_manager']}>
               <WorkflowLogs />
             </RoleBasedRoute>
           }

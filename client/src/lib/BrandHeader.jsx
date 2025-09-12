@@ -74,21 +74,20 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Commissions Report', href: '/admin/commissions' }
         ]
       case 'admin':
+        // In this context, admin manages employees only: expose Users page only.
+        return [
+          ...base,
+          { label: 'Users', href: '/admin/users' }
+        ]
       case 'financial_manager':
         return [
           ...base,
-          { label: 'Units', href: '/admin/units' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
-          { label: 'Users', href: '/admin/users' },
-          { label: 'Commission Policies', href: '/admin/commission-policies' },
-          { label: 'Team Proposals', href: '/deals/team-proposals' },
-          { label: 'Sales Assignments', href: '/admin/sales-assignments' },
           { label: 'Holds', href: '/admin/holds' }
         ]
       case 'financial_admin':
         return [
           ...base,
-          { label: 'Units', href: '/admin/units' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'My Proposals', href: '/deals/my-proposals' }
         ]
@@ -96,7 +95,6 @@ export default function BrandHeader({ title, onLogout }) {
         return [
           ...base,
           { label: 'Team Proposals', href: '/deals/team-proposals' },
-          { label: 'Sales Assignments', href: '/admin/sales-assignments' },
           { label: 'Holds', href: '/admin/holds' },
           { label: 'Workflow Logs', href: '/admin/workflow-logs' }
         ]
