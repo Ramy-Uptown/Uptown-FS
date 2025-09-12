@@ -281,18 +281,29 @@ router.patch(
 router.post(
   '/payment-plans',
   authMiddleware,
-  requireRole(['property_consultant']),
+  requireRole(['property_consultant', 'financial_manager']),
   async (req, res) => {
     try {
       const { deal_id, details } = req.body || {}
       const dealId = ensureNumber(deal_id)
       if (!dealId) return bad(res, 400, 'deal_id is required and must be a number')
       const det = details && typeof details === 'object' ? details : {}
+
+      // Extract discount percent from typical shapes
+      const disc = Number(det?.inputs?.salesDiscountPercent ?? det?.salesDiscountPercent ?? 0) || 0
+      let status = 'pending_approval'
+      if (req.user?.role === 'property_consultant') {
+        if (disc > 2) return bad(res, 400, 'Sales consultants can apply a maximum discount of 2%')
+      } else if (req.user?.role === 'financial_manager') {
+        if (disc > 5) return bad(res, 400, 'Financial managers can apply a maximum discount of 5%')
+        if (disc > 2) status = 'pending_ceo_approval'
+      }
+
       const result = await pool.query(
         `INSERT INTO payment_plans (deal_id, details, created_by, status)
-         VALUES ($1, $2, $3, 'pending_approval')
+         VALUES ($1, $2, $3, $4)
          RETURNING *`,
-        [dealId, det, req.user.id]
+        [dealId, det, req.user.id, status]
       )
       return ok(res, { payment_plan: result.rows[0] })
     } catch (e) {
@@ -338,15 +349,35 @@ router.patch(
     try {
       const id = ensureNumber(req.params.id)
       if (!id) return bad(res, 400, 'Invalid id')
-      const result = await pool.query(
-        `UPDATE payment_plans
-         SET status='approved', approved_by=$1, updated_at=now()
-         WHERE id=$2 AND status='pending_approval'
-         RETURNING *`,
-        [req.user.id, id]
-      )
-      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending')
-      return ok(res, { payment_plan: result.rows[0] })
+
+      // Load plan to check discount and current status
+      const cur = await pool.query('SELECT id, details, status FROM payment_plans WHERE id=$1', [id])
+      if (cur.rows.length === 0) return bad(res, 404, 'Not found')
+      if (cur.rows[0].status !== 'pending_approval') return bad(res, 400, 'Plan not in pending_approval state')
+
+      const det = cur.rows[0].details || {}
+      const disc = Number(det?.inputs?.salesDiscountPercent ?? det?.salesDiscountPercent ?? 0) || 0
+
+      if (disc > 2) {
+        // Move to CEO queue
+        const result = await pool.query(
+          `UPDATE payment_plans
+           SET status='pending_ceo_approval', approved_by=$1, updated_at=now()
+           WHERE id=$2
+           RETURNING *`,
+          [req.user.id, id]
+        )
+        return ok(res, { payment_plan: result.rows[0] })
+      } else {
+        const result = await pool.query(
+          `UPDATE payment_plans
+           SET status='approved', approved_by=$1, updated_at=now()
+           WHERE id=$2
+           RETURNING *`,
+          [req.user.id, id]
+        )
+        return ok(res, { payment_plan: result.rows[0] })
+      }
     } catch (e) {
       console.error('PATCH /api/workflow/payment-plans/:id/approve error:', e)
       return bad(res, 500, 'Internal error')
@@ -365,7 +396,7 @@ router.patch(
       const result = await pool.query(
         `UPDATE payment_plans
          SET status='rejected', approved_by=$1, updated_at=now()
-         WHERE id=$2 AND status='pending_approval'
+         WHERE id=$2 AND status IN ('pending_approval', 'pending_ceo_approval')
          RETURNING *`,
         [req.user.id, id]
       )
@@ -373,6 +404,31 @@ router.patch(
       return ok(res, { payment_plan: result.rows[0] })
     } catch (e) {
       console.error('PATCH /api/workflow/payment-plans/:id/reject error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// CEO approval for plans that exceeded 2% discount
+router.patch(
+  '/payment-plans/:id/approve-ceo',
+  authMiddleware,
+  requireRole(['ceo']),
+  async (req, res) => {
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+      const result = await pool.query(
+        `UPDATE payment_plans
+         SET status='approved', approved_by=$1, updated_at=now()
+         WHERE id=$2 AND status='pending_ceo_approval'
+         RETURNING *`,
+        [req.user.id, id]
+      )
+      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending CEO approval')
+      return ok(res, { payment_plan: result.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/payment-plans/:id/approve-ceo error:', e)
       return bad(res, 500, 'Internal error')
     }
   }

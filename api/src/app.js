@@ -130,7 +130,11 @@ function validateInputs(inputs) {
     errors.push({ field: 'planDurationYears', message: 'Required' })
   } else {
     const yrs = Number(inputs.planDurationYears)
-    if (!Number.isInteger(yrs) || yrs <= 0) errors.push({ field: 'planDurationYears', message: 'Must be integer >= 1' })
+    if (!Number.isInteger(yrs) || yrs <= 0) {
+      errors.push({ field: 'planDurationYears', message: 'Must be integer >= 1' })
+    } else if (yrs > 12) {
+      errors.push({ field: 'planDurationYears', message: 'Max allowed is 12 years' })
+    }
   }
 
   // dpType and value
@@ -256,6 +260,16 @@ app.post('/api/calculate', async (req, res) => {
       return bad(res, 422, 'Invalid inputs', inputErrors)
     }
 
+    // Enforce role-based discount limits
+    const role = req.user?.role
+    const disc = Number(effInputs.salesDiscountPercent) || 0
+    if (role === 'property_consultant' && disc > 2) {
+      return bad(res, 403, 'Sales consultants can apply a maximum discount of 2%.')
+    }
+    if (role === 'financial_manager' && disc > 5) {
+      return bad(res, 403, 'Financial managers can apply a maximum discount of 5% (requires CEO approval in workflow if over 2%).')
+    }
+
     const result = calculateByMode(mode, effectiveStdPlan, effInputs)
     return res.json({ ok: true, data: result })
   } catch (err) {
@@ -322,7 +336,8 @@ app.post('/api/generate-plan', async (req, res) => {
     const langInput = language || languageForWrittenAmounts || 'en'
     const lang = String(langInput).toLowerCase().startsWith('ar') ? 'ar' : 'en'
 
-    const result = calculateByMode(mode, effectiveStdPlan, effInputs)
+    // Enforce role-based discount limits
+    const rolen, effInputs)
 
     const schedule = []
     const pushEntry = (label, month, amount) => {
