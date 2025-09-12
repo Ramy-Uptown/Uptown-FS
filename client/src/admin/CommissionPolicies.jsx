@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import { th, td, ctrl, btn, btnPrimary } from '../lib/ui.js'
 
 export default function CommissionPolicies() {
   const [list, setList] = useState([])

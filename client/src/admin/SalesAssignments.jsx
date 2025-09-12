@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import { ctrl, btn } from '../lib/ui.js'
 
 export default function SalesAssignments() {
   const [managerId, setManagerId] = useState('')
@@ -96,5 +97,3 @@ export default function SalesAssignments() {
   )
 }
 
-const ctrl = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6' }
-const btn = { marginLeft: 6, padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
