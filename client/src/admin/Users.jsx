@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import { th, td, tableWrap, table, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js'
 
 export default function Users() {
   const [users, setUsers] = useState([])
@@ -58,11 +59,11 @@ export default function Users() {
   ]
 
   return (
-    <div style={{ padding: 20, maxWidth: 1000, margin: '0 auto' }}>
-      <h2 style={{ marginTop: 0 }}>Users</h2>
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
-      <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+    <div style={{ ...pageContainer, maxWidth: 1000 }}>
+      <h2 style={pageTitle}>Users</h2>
+      {error ? <p style={errorText}>{error}</p> : null}
+      <div style={tableWrap}>
+        <table style={table}>
           <thead>
             <tr>
               <th style={th}>ID</th>
@@ -101,12 +102,10 @@ export default function Users() {
           </tbody>
         </table>
       </div>
-      <p style={{ color: '#6b7280', fontSize: 12, marginTop: 8 }}>
+      <p style={{ ...metaText, marginTop: 8 }}>
         Note: You cannot change your own role from this screen.
       </p>
     </div>
   )
 }
 
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }

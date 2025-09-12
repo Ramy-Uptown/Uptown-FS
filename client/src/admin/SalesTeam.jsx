@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import { th, td, ctrl, btn, btnPrimary, tableWrap, table, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js'
 
 export default function SalesTeam() {
   const [list, setList] = useState([])
@@ -95,8 +96,8 @@ export default function SalesTeam() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <h2 style={{ marginTop: 0 }}>Sales Team</h2>
+    <div style={pageContainer}>
+      <h2 style={pageTitle}>Sales Team</h2>
 
       <form onSubmit={save} style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
         <input placeholder="User ID (optional)" value={form.user_id} onChange={e => setForm(s => ({ ...s, user_id: e.target.value }))} style={ctrl} />
@@ -127,10 +128,10 @@ export default function SalesTeam() {
         </select>
       </div>
 
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+      {error ? <p style={errorText}>{error}</p> : null}
 
-      <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div style={tableWrap}>
+        <table style={table}>
           <thead>
             <tr>
               <th style={th}>ID</th>
@@ -165,7 +166,7 @@ export default function SalesTeam() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-        <span style={{ color: '#64748b', fontSize: 12 }}>
+        <span style={metaText}>
           Page {page} of {totalPages} — {total} total
         </span>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -179,8 +180,3 @@ export default function SalesTeam() {
   )
 }
 
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
-const ctrl = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6' }
-const btn = { marginLeft: 6, padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
-const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #1f6feb', background: '#1f6feb', color: '#fff', fontWeight: 600 }

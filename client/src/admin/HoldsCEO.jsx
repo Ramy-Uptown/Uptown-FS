@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import { th, td, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
 
 export default function HoldsCEO() {
   const [rows, setRows] = useState([])
@@ -50,12 +51,12 @@ export default function HoldsCEO() {
   const canCEO = role === 'ceo'
 
   return (
-    <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
-      <h2>Hold Override Approvals — {canCEO ? 'CEO' : 'Read Only'}</h2>
+    <div style={{ ...pageContainer, maxWidth: 900 }}>
+      <h2 style={pageTitle}>Hold Override Approvals — {canCEO ? 'CEO' : 'Read Only'}</h2>
       <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Refresh'}</button>
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
-      <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12, marginTop: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      {error ? <p style={errorText}>{error}</p> : null}
+      <div style={{ ...tableWrap, marginTop: 12 }}>
+        <table style={table}>
           <thead>
             <tr>
               <th style={th}>ID</th>
@@ -89,6 +90,3 @@ export default function HoldsCEO() {
   )
 }
 
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid '#f2f5fa', fontSize: 14 }
-const btn = { marginLeft: 6, padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import * as XLSX from 'xlsx'
+import { th, td, ctrl, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
 
 export default function WorkflowLogs() {
   const [startDate, setStartDate] = useState('')
@@ -154,8 +155,8 @@ export default function WorkflowLogs() {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <h2>Workflow Logs</h2>
+    <div style={pageContainer}>
+      <h2 style={pageTitle}>Workflow Logs</h2>
       <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: 12 }}>
         <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={ctrl} />
         <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={ctrl} />
@@ -173,7 +174,7 @@ export default function WorkflowLogs() {
           <button onClick={exportCSV} disabled={!data} style={btn}>Export CSV</button>
         </div>
 
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+      {error ? <p style={errorText}>{error}</p> : null}
 
       {data && (
         <>
@@ -189,14 +190,15 @@ export default function WorkflowLogs() {
 
 function Section({ title, rows, total }) {
   const list = rows || []
+  const numCols = list.length > 0 ? Object.keys(list[0]).length : 1
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 style={{ margin: 0 }}>{title}</h3>
         <div style={{ fontWeight: 700 }}>Total: {Number(total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
       </div>
-      <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div style={tableWrap}>
+        <table style={table}>
           <thead>
             <tr>
               {list.length > 0 && Object.keys(list[0]).map(k => <th key={k} style={th}>{k}</th>)}
@@ -209,7 +211,7 @@ function Section({ title, rows, total }) {
               </tr>
             ))}
             {list.length === 0 && (
-              <tr><td style={td}>No records.</td></tr>
+              <tr><td style={{ ...td, textAlign: 'center' }} colSpan={numCols}>No records.</td></tr>
             )}
           </tbody>
         </table>
@@ -229,7 +231,3 @@ function formatCell(k, v) {
   return String(v ?? '')
 }
 
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
-const ctrl = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6' }
-const btn = { marginLeft: 6, padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
