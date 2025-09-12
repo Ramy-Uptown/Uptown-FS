@@ -168,10 +168,10 @@ export default function WorkflowLogs() {
         <input type="number" placeholder="Consultant User ID" value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl} />
         <input type="number" placeholder="Sales Manager User ID" value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl} />
         <div>
-         <<button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Appl}</</button>
-         <<button onClick={exportXLSX} disabled={!data} style={btn}>Export XL</</button>
-         <dbutton onClick={exportCSV} disabled={!data} style={btn}>Exportiv>
-      </div>
+          <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Apply'}</button>
+          <button onClick={exportXLSX} disabled={!data} style={btn}>Export XLSX</button>
+          <button onClick={exportCSV} disabled={!data} style={btn}>Export CSV</button>
+        </div>
 
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
 
