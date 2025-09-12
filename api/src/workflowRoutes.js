@@ -80,11 +80,11 @@ router.get(
       const params = []
       if (unitId) {
         params.push(unitId)
-        clauses.push(`unit_id = ${params.length}`)
+        clauses.push(`unit_id = $${params.length}`)
       }
       if (status) {
         params.push(String(status))
-        clauses.push(`status = ${params.length}`)
+        clauses.push(`status = $${params.length}`)
       }
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
       const q = `SELECT * FROM standard_pricing ${where} ORDER BY id DESC`
@@ -125,7 +125,7 @@ router.patch(
       for (const f of allowedFields) {
         if (Object.prototype.hasOwnProperty.call(req.body || {}, f)) {
           params.push(req.body[f])
-          updates.push(`${f} = ${params.length}`)
+          updates.push(`${f} = $${params.length}`)
         }
       }
       if (updates.length === 0) {
@@ -151,7 +151,7 @@ router.patch(
             status='pending_approval',
             approved_by=NULL,
             updated_at=now()
-        WHERE id=${params.length + 1}
+        WHERE id=$${params.length + 1}
         RETURNING *`
       const updateParams = params.concat([id])
       const updRes = await client.query(updateSql, updateParams)
@@ -515,7 +515,7 @@ router.get(
       )
       const uids = team.rows.map(r => r.uid)
       if (uids.length === 0) return ok(res, { payment_plans: [] })
-      const placeholders = uids.map((_, i) => `${i + 1}`).join(',')
+      const placeholders = uids.map((_, i) => `$${i + 1}`).join(',')
       const r = await pool.query(
         `SELECT * FROM payment_plans WHERE created_by IN (${placeholders}) ORDER BY id DESC`,
         uids
@@ -848,8 +848,37 @@ router.patch(
     }
   }
 )
-      if (chk.rows.length === 0) { client.release(); return bad(res, 404, 'Reservation form not found') }
-      if (chk.rows[0].status !== 'approved') { client.release(); return bad(res, 400, 'Reservation must be approved before creating contract') }
+
+/**
+ * SECTION 4: Contracts (Contract Person -> Contract Manager -> CEO approval)
+ * - create/edit by: contract_person
+ * - approve/reject by: contract_manager
+ * - final approve: ceo
+ */
+router.post(
+  '/contracts',
+  authMiddleware,
+  requireRole(['contract_person']),
+  async (req, res) => {
+    const client = await pool.connect()
+    try {
+      const { reservation_form_id, details } = req.body || {}
+      const rid = ensureNumber(reservation_form_id)
+      if (!rid) {
+        client.release()
+        return bad(res, 400, 'reservation_form_id is required and must be a number')
+      }
+
+      // Check reservation form
+      const chk = await client.query('SELECT id, status FROM reservation_forms WHERE id=$1', [rid])
+      if (chk.rows.length === 0) {
+        client.release()
+        return bad(res, 404, 'Reservation form not found')
+      }
+      if (chk.rows[0].status !== 'approved') {
+        client.release()
+        return bad(res, 400, 'Reservation must be approved before creating a contract')
+      }
 
       const det = details && typeof details === 'object' ? details : {}
       await client.query('BEGIN')
@@ -865,7 +894,8 @@ router.patch(
          VALUES ($1, 'create', $2, $3::jsonb, $4::jsonb)`,
         [row.id, req.user.id, JSON.stringify(null), JSON.stringify(row)]
       )
-      await client.query('COMMIT'); client.release()
+      await client.query('COMMIT')
+      client.release()
       return ok(res, { contract: row })
     } catch (e) {
       try { await client.query('ROLLBACK') } catch {}
@@ -925,11 +955,11 @@ router.get(
       const params = []
       if (reservation_form_id) {
         params.push(ensureNumber(reservation_form_id))
-        clauses.push(`reservation_form_id = ${params.length}`)
+        clauses.push(`reservation_form_id = $${params.length}`)
       }
       if (status) {
         params.push(String(status))
-        clauses.push(`status = ${params.length}`)
+        clauses.push(`status = $${params.length}`)
       }
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
       const result = await pool.query(`SELECT * FROM contracts ${where} ORDER BY id DESC`, params)
