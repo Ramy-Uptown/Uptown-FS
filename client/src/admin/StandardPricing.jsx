@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchWithAuth } from '../lib/apiClient.js';
+import { th, td, ctrl, btnPrimary, btnSuccess, btnDanger, tableWrap, table } from '../lib/ui.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -40,14 +41,6 @@ export default function StandardPricing() {
     fetchData();
   }, []);
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  if (error) {
-    return <div>Error: {error}</div>;
-  }
-
   const [newPrice, setNewPrice] = useState('');
   const [selectedUnit, setSelectedUnit] = useState('');
 
@@ -84,19 +77,27 @@ export default function StandardPricing() {
     }
   };
 
+  if (loading) {
+    return <div style={{ padding: 20 }}>Loading...</div>;
+  }
+
+  if (error) {
+    return <div style={{ padding: 20, color: '#e11d48' }}>Error: {error}</div>;
+  }
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Standard Pricing</h1>
+    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
+      <h2 style={{ margin: 0, marginBottom: 12 }}>Standard Pricing</h2>
 
       {role === 'financial_manager' && (
-        <form onSubmit={handleCreatePricing} className="mb-8 p-4 border rounded shadow">
-          <h2 className="text-xl font-bold mb-2">Create New Standard Price</h2>
-          <div className="flex gap-4">
+        <form onSubmit={handleCreatePricing} style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 2px 6px rgba(21,24,28,0.04)' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Create New Standard Price</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <select
               value={selectedUnit}
               onChange={(e) => setSelectedUnit(e.target.value)}
               required
-              className="p-2 border rounded"
+              style={ctrl}
             >
               <option value="">Select a Unit</option>
               {units.map(unit => (
@@ -109,43 +110,48 @@ export default function StandardPricing() {
               onChange={(e) => setNewPrice(e.target.value)}
               placeholder="Price"
               required
-              className="p-2 border rounded"
+              style={ctrl}
             />
-            <button type="submit" className="px-4 py-2 bg-blue-500 text-white rounded">Create</button>
+            <button type="submit" style={btnPrimary}>Create</button>
           </div>
         </form>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full bg-white">
+      <div style={tableWrap}>
+        <table style={table}>
           <thead>
             <tr>
-              <th className="py-2 px-4 border-b">Unit</th>
-              <th className="py-2 px-4 border-b">Price</th>
-              <th className="py-2 px-4 border-b">Status</th>
-              <th className="py-2 px-4 border-b">Created By</th>
-              <th className="py-2 px-4 border-b">Approved By</th>
-              <th className="py-2 px-4 border-b">Actions</th>
+              <th style={th}>Unit</th>
+              <th style={th}>Price</th>
+              <th style={th}>Status</th>
+              <th style={th}>Created By</th>
+              <th style={th}>Approved By</th>
+              <th style={th}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {pricings.map(p => (
               <tr key={p.id}>
-                <td className="py-2 px-4 border-b">{p.unit_code}</td>
-                <td className="py-2 px-4 border-b">{p.price}</td>
-                <td className="py-2 px-4 border-b">{p.status}</td>
-                <td className="py-2 px-4 border-b">{p.created_by_email}</td>
-                <td className="py-2 px-4 border-b">{p.approved_by_email || 'N/A'}</td>
-                <td className="py-2 px-4 border-b">
+                <td style={td}>{p.unit_code}</td>
+                <td style={td}>{p.price}</td>
+                <td style={td}>{p.status}</td>
+                <td style={td}>{p.created_by_email}</td>
+                <td style={td}>{p.approved_by_email || 'N/A'}</td>
+                <td style={td}>
                   {role === 'ceo' && p.status === 'pending_approval' && (
-                    <div className="flex gap-2">
-                      <button onClick={() => handleUpdateStatus(p.id, 'approved')} className="px-2 py-1 bg-green-500 text-white rounded">Approve</button>
-                      <button onClick={() => handleUpdateStatus(p.id, 'rejected')} className="px-2 py-1 bg-red-500 text-white rounded">Reject</button>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => handleUpdateStatus(p.id, 'approved')} style={btnSuccess}>Approve</button>
+                      <button onClick={() => handleUpdateStatus(p.id, 'rejected')} style={btnDanger}>Reject</button>
                     </div>
                   )}
                 </td>
               </tr>
             ))}
+            {pricings.length === 0 && (
+              <tr>
+                <td style={td} colSpan={6}>No standard pricing entries.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import * as XLSX from 'xlsx'
-import { th, td, ctrl, btn } from '../lib/ui.js'
+import { th, td, ctrl, btn, tableWrap, table } from '../lib/ui.js'
 
 export default function WorkflowLogs() {
   const [startDate, setStartDate] = useState('')
@@ -197,7 +197,8 @@ function Section({ title, rows, total }) {
         <h3 style={{ margin: 0 }}>{title}</h3>
         <div style={{ fontWeight: 700 }}>Total: {Number(total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
       </div>
-      <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
+      <div style={tableWrap}>
+       <btable style={olid #e6eaf0', borderRadius: 12 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>

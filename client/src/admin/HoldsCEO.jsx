@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { th, td, btn } from '../lib/ui.js'
+import { th, td, btn, tableWrap, table } from '../lib/ui.js'
 
 export default function HoldsCEO() {
   const [rows, setRows] = useState([])
@@ -55,8 +55,8 @@ export default function HoldsCEO() {
       <h2>Hold Override Approvals — {canCEO ? 'CEO' : 'Read Only'}</h2>
       <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Refresh'}</button>
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
-      <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12, marginTop: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div style={{ ...tableWrap, marginTop: 12 }}>
+        <table style={table}>
           <thead>
             <tr>
               <th style={th}>ID</th>

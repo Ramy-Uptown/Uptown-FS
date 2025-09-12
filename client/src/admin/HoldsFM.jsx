@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { th, td, ctrl, btn } from '../lib/ui.js'
+import { th, td, ctrl, btn, tableWrap, table } from '../lib/ui.js'
 
 export default function HoldsFM() {
   const [status, setStatus] = useState('approved')
@@ -69,8 +69,8 @@ export default function HoldsFM() {
         <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Refresh'}</button>
       </div>
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
-      <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div style={tableWrap}>
+        <table style={table}>
           <thead>
             <tr>
               <th style={th}>ID</th>
