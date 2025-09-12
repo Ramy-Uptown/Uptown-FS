@@ -66,6 +66,25 @@ export default function Users() {
     }
   }
 
+  async function deactivateUser(u) {
+    if (!confirm('Deactivate this user? They will not be able to login, but their data will be preserved.')) return
+    setBusyId(u.id)
+    try {
+      const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${u.id}/active`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: false })
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to deactivate user')
+      await load()
+    } catch (e) {
+      alert(e.message || String(e))
+    } finally {
+      setBusyId(0)
+    }
+  }
+
   async function startEdit(u) {
     setEditingId(u.id)
     setEditEmail(u.email || '')
@@ -231,7 +250,17 @@ export default function Users() {
                     <td style={td}>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {!isEditing && <button type="button" onClick={() => startEdit(u)} disabled={busyId === u.id} style={btn}>Edit Email</button>}
-                        {!isSelf && <button type="button" onClick={() => deleteUser(u)} disabled={busyId === u.id} style={btnDanger}>Delete</button>}
+                        {!isSelf && u.active !== false && (
+                          <button
+                            type="button"
+                            onClick={() => deactivateUser(u)}
+                            disabled={busyId === u.id}
+                            style={btnDanger}
+                            title="Deactivate user (keeps data; prevents login)"
+                          >
+                            Deactivate
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
