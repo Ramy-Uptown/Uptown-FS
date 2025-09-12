@@ -96,7 +96,9 @@ export default function BrandHeader({ title, onLogout }) {
         return [
           ...base,
           { label: 'Team Proposals', href: '/deals/team-proposals' },
-          { label: 'Sales Assignments', href: '/admin/sales-assignments' }
+          { label: 'Sales Assignments', href: '/admin/sales-assignments' },
+          { label: 'Holds', href: '/admin/holds' },
+          { label: 'Workflow Logs', href: '/admin/workflow-logs' }
         ]
       case 'property_consultant':
         return [
@@ -104,8 +106,13 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'My Proposals', href: '/deals/my-proposals' }
         ]
       case 'contract_person':
-      case 'contract_manager':
         return base
+      case 'contract_manager':
+        return [
+          ...base,
+          { label: 'Workflow Logs', href: '/admin/workflow-logs' },
+          { label: 'Hold Approvals', href: '/admin/hold-approvals' }
+        ]
       case 'ceo':
       case 'chairman':
       case 'vicechairman':

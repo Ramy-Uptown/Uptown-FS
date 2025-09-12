@@ -115,7 +115,7 @@ createRoot(document.getElementById('root')).render(
         <Route
           path="/admin/holds"
           element={
-            <RoleBasedRoute allowedRoles={['financial_manager', 'admin']}>
+            <RoleBasedRoute allowedRoles={['financial_manager', 'admin', 'sales_manager', 'contract_manager']}>
               <HoldsFM />
             </RoleBasedRoute>
           }
@@ -123,7 +123,7 @@ createRoot(document.getElementById('root')).render(
         <Route
           path="/admin/hold-approvals"
           element={
-            <RoleBasedRoute allowedRoles={['ceo']}>
+            <RoleBasedRoute allowedRoles={['ceo', 'contract_manager', 'sales_manager']}>
               <HoldsCEO />
             </RoleBasedRoute>
           }
@@ -131,7 +131,7 @@ createRoot(document.getElementById('root')).render(
         <Route
           path="/admin/workflow-logs"
           element={
-            <RoleBasedRoute allowedRoles={['ceo', 'chairman', 'vicechairman', 'admin', 'superadmin']}>
+            <RoleBasedRoute allowedRoles={['ceo', 'chairman', 'vicechairman', 'admin', 'superadmin', 'sales_manager', 'contract_manager']}>
               <WorkflowLogs />
             </RoleBasedRoute>
           }
