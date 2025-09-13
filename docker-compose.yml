@@ -6,8 +6,6 @@ services:
       POSTGRESQL_USERNAME: appuser
       POSTGRESQL_PASSWORD: apppass
       POSTGRESQL_DATABASE: appdb
-    ports:
-      - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -22,7 +20,7 @@ services:
       context: ./api
       dockerfile: Dockerfile
       args:
-        NODE_VERSION: 20.18.0-alpine  # <-- locked Node
+        NODE_VERSION: 20.18.0-alpine
     container_name: app_api
     ports:
       - "3000:3000"
@@ -50,7 +48,7 @@ services:
       context: ./client
       dockerfile: Dockerfile
       args:
-        NODE_VERSION: 20.18.0-alpine  # <-- locked Node
+        NODE_VERSION: 20.18.0-alpine
     container_name: app_client
     ports:
       - "5173:5173"
