@@ -11,7 +11,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     restart: unless-stopped
-    healthcheck: # <-- ADDED THIS
+    healthcheck:
       test: ["CMD-SHELL", "pg_isready -U appuser -d appdb"]
       interval: 10s
       timeout: 5s
@@ -20,6 +20,9 @@ services:
   api:
     build:
       context: ./api
+      dockerfile: Dockerfile
+      args:
+        NODE_VERSION: 20.18.0-alpine  # <-- locked Node
     container_name: app_api
     ports:
       - "3000:3000"
@@ -37,7 +40,7 @@ services:
       - ./api:/app
       - /app/node_modules
     command: npm run dev
-    depends_on: # <-- MODIFIED THIS
+    depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
@@ -45,6 +48,9 @@ services:
   client:
     build:
       context: ./client
+      dockerfile: Dockerfile
+      args:
+        NODE_VERSION: 20.18.0-alpine  # <-- locked Node
     container_name: app_client
     ports:
       - "5173:5173"
