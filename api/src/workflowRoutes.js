@@ -118,15 +118,15 @@ router.get(
 
       if (consultant_user_id) {
         params.push(ensureNumber(consultant_user_id))
-        clauses.push(`stm.consultant_user_id = ${params.length}`)
+        clauses.push(`stm.consultant_user_id = $${params.length}`)
       }
       if (manager_user_id) {
         params.push(ensureNumber(manager_user_id))
-        clauses.push(`stm.manager_user_id = ${params.length}`)
+        clauses.push(`stm.manager_user_id = $${params.length}`)
       }
       if (typeof active === 'boolean') {
         params.push(active)
-        clauses.push(`stm.active = ${params.length}`)
+        clauses.push(`stm.active = $${params.length}`)
       }
 
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
