@@ -39,6 +39,11 @@ export async function initDb() {
     -- =============================================================
     ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
 
+    -- Add optional profile fields to users
+    ALTER TABLE IF EXISTS users
+      ADD COLUMN IF NOT EXISTS notes TEXT,
+      ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT '{}'::jsonb;
+
     -- Add/update a CHECK constraint on the user roles for data integrity
     ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
     ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN (
@@ -151,6 +156,27 @@ export async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- Sales team assignments: map manager to consultants (many-to-many)
+    CREATE TABLE IF NOT EXISTS sales_team_members (
+      id SERIAL PRIMARY KEY,
+      manager_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      consultant_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (manager_user_id, consultant_user_id)
+    );
+
+    -- Audit log for admin-initiated changes to users
+    CREATE TABLE IF NOT EXISTS user_audit_log (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      action TEXT NOT NULL, -- e.g. set_role, set_active, update_profile, set_password, create_user, deactivate_user
+      changed_by INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+      details JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     -- Trigger function
     CREATE OR REPLACE FUNCTION trigger_set_timestamp()
     RETURNS TRIGGER AS $$
@@ -213,6 +239,15 @@ export async function initDb() {
       ) THEN
         CREATE TRIGGER set_timestamp_deal_commissions
         BEFORE UPDATE ON deal_commissions
+        FOR EACH ROW
+        EXECUTE FUNCTION trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_sales_team_members'
+      ) THEN
+        CREATE TRIGGER set_timestamp_sales_team_members
+        BEFORE UPDATE ON sales_team_members
         FOR EACH ROW
         EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
