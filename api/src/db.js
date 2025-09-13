@@ -21,6 +21,7 @@ export const pool = new pg.Pool({
 })
 
 export async function initDb() {
+  console.log('[db] Initializing database schema...')
   // Schema setup
   await pool.query(`
     -- Users
@@ -231,4 +232,5 @@ export async function initDb() {
     )
     console.log(`Seeded initial admin user: ${email || 'admin@example.com'}`)
   }
+  console.log('[db] Database schema initialized.')
 }
