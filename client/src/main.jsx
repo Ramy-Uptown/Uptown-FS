@@ -69,17 +69,17 @@ createRoot(document.getElementById('root')).render(
         <Route
           path="/admin/users"
           element={
-            <AdminRoute>
+            <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
               <Users />
-            </AdminRoute>
+            </RoleBasedRoute>
           }
         />
         <Route
           path="/admin/users/:id"
           element={
-            <AdminRoute>
+            <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
               <UserEdit />
-            </AdminRoute>
+            </RoleBasedRoute>
           }
         />
         <Route
