@@ -16,6 +16,92 @@ function ensureNumber(v) {
   return Number.isFinite(n) ? n : null
 }
 
+// Resolve discount policy precedence: Project > Unit Type > Global
+async function getPolicyLimitForPlan(details) {
+  try {
+    const projectId = details?.project_id ? Number(details.project_id) : null
+    const unitTypeId = details?.unit_type_id ? Number(details.unit_type_id) : null
+
+    if (Number.isFinite(projectId)) {
+      const r = await pool.query(
+        `SELECT policy_limit_percent
+         FROM approval_policies
+         WHERE active=TRUE AND scope_type='project' AND scope_id=$1
+         ORDER BY id DESC
+         LIMIT 1`,
+        [projectId]
+      )
+      if (r.rows.length) return Number(r.rows[0].policy_limit_percent) || 5
+    }
+
+    if (Number.isFinite(unitTypeId)) {
+      const r = await pool.query(
+        `SELECT policy_limit_percent
+         FROM approval_policies
+         WHERE active=TRUE AND scope_type='unit_type' AND scope_id=$1
+         ORDER BY id DESC
+         LIMIT 1`,
+        [unitTypeId]
+      )
+      if (r.rows.length) return Number(r.rows[0].policy_limit_percent) || 5
+    }
+
+    const r = await pool.query(
+      `SELECT policy_limit_percent
+       FROM approval_policies
+       WHERE active=TRUE AND scope_type='global'
+       ORDER BY id DESC
+       LIMIT 1`
+    )
+    if (r.rows.length) return Number(r.rows[0].policy_limit_percent) || 5
+  } catch (e) {
+    console.error('getPolicyLimitForPlan error:', e)
+  }
+  return 5
+}
+
+// Resolve discount policy precedence}
+
+// Policy resolution with precedence: project > unit_type > global
+// Current DB lacks projects table; we implement unit_type > global for now.
+// If deal.unit_type matches unit_types.name (case-insensitive), we resolve by unit_type policy.
+async function resolvePolicyLimitForDeal(dealId) {
+  try {
+    const d = await pool.query('SELECT unit_type FROM deals WHERE id=$1', [dealId])
+    const utName = (d.rows[0]?.unit_type || '').trim()
+    if (utName) {
+      const type = await pool.query('SELECT id FROM unit_types WHERE name ILIKE $1 LIMIT 1', [utName])
+      if (type.rows.length > 0) {
+        const r = await pool.query(
+          `SELECT policy_limit_percent
+           FROM approval_policies
+           WHERE active=TRUE AND scope_type='unit_type' AND scope_id=$1
+           ORDER BY id DESC LIMIT 1`,
+          [type.rows[0].id]
+        )
+        if (r.rows.length > 0) {
+          const v = Number(r.rows[0].policy_limit_percent)
+          if (Number.isFinite(v) && v > 0) return v
+        }
+      }
+    }
+    // Fallback to global
+    const g = await pool.query(
+      `SELECT policy_limit_percent
+       FROM approval_policies
+       WHERE active=TRUE AND scope_type='global'
+       ORDER BY id DESC LIMIT 1`
+    )
+    if (g.rows.length > 0) {
+      const v = Number(g.rows[0].policy_limit_percent)
+      if (Number.isFinite(v) && v > 0) return v
+    }
+  } catch (e) {
+    // ignore and fall back
+  }
+  return 5
+}
+
 /**
  * SECTION 1: Standard Pricing (Financial Manager -> CEO approval)
  * - create/update by: financial_manager
@@ -340,12 +426,30 @@ router.post(
 
       // Extract discount percent from typical shapes
       const disc = Number(det?.inputs?.salesDiscountPercent ?? det?.salesDiscountPercent ?? 0) || 0
-      let status = 'pending_approval'
+      let status = 'pending_sm' // default: Sales-Manager review
+
       if (req.user?.role === 'property_consultant') {
-        if (disc > 2) return bad(res, 400, 'Sales consultants can apply a maximum discount of 2%')
+        if (disc > 2) {
+          // Still allow creation; SM will escalate to FM
+          status = 'pending_sm'
+        } else {
+          status = 'pending_sm'
+        }
+      } else if (req.user?.role === 'sales_manager') {
+        // SM can directly approve if <=2, otherwise send to FM
+        if (disc <= 2) {
+          status = 'approved'
+        } else {
+          status = 'pending_fm'
+        }
       } else if (req.user?.role === 'financial_manager') {
-        if (disc > 5) return bad(res, 400, 'Financial managers can apply a maximum discount of 5%')
-        if (disc > 2) status = 'pending_ceo_approval'
+        // FM can approve within policy limit; else escalate to TM
+        const policyLimit = await getPolicyLimitForPlan(det)
+        if (disc <= policyLimit) {
+          status = 'approved'
+        } else {
+          status = 'pending_tm'
+        }
       }
 
       const result = await pool.query(
@@ -365,7 +469,7 @@ router.post(
 router.get(
   '/payment-plans',
   authMiddleware,
-  requireRole(['property_consultant', 'financial_manager', 'admin', 'superadmin']),
+  requireRole(['property_consultant', 'financial_manager', 'sales_manager', 'admin', 'superadmin']),
   async (req, res) => {
     try {
       const { deal_id, status } = req.query || {}
@@ -373,11 +477,11 @@ router.get(
       const params = []
       if (deal_id) {
         params.push(ensureNumber(deal_id))
-        clauses.push(`deal_id = $${params.length}`)
+        clauses.push(`deal_id = ${params.length}`)
       }
       if (status) {
         params.push(String(status))
-        clauses.push(`status = $${params.length}`)
+        clauses.push(`status = ${params.length}`)
       }
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
       const result = await pool.query(`SELECT * FROM payment_plans ${where} ORDER BY id DESC`, params)
@@ -388,6 +492,37 @@ router.get(
     }
   }
 )
+
+// Queues
+router.get('/payment-plans/queue/sm', authMiddleware, requireRole(['sales_manager']), async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT * FROM payment_plans WHERE status='pending_sm' ORDER BY id DESC`)
+    return ok(res, { payment_plans: r.rows })
+  } catch (e) {
+    console.error('GET /api/workflow/payment-plans/queue/sm error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+router.get('/payment-plans/queue/fm', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT * FROM payment_plans WHERE status='pending_fm' ORDER BY id DESC`)
+    return ok(res, { payment_plans: r.rows })
+  } catch (e) {
+    console.error('GET /api/workflow/payment-plans/queue/fm error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+router.get('/payment-plans/queue/tm', authMiddleware, requireRole(['ceo', 'vice_chairman', 'chairman', 'top_management']), async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT * FROM payment_plans WHERE status='pending_tm' ORDER BY id DESC`)
+    return ok(res, { payment_plans: r.rows })
+  } catch (e) {
+    console.error('GET /api/workflow/payment-plans/queue/tm error:', e)
+    return bad(res, 500, 'Internal error')
+  _code}
+new}</)
 
 // Approvals by financial_manager
 router.patch(
@@ -402,22 +537,15 @@ router.patch(
       // Load plan to check discount and current status
       const cur = await pool.query('SELECT id, details, status FROM payment_plans WHERE id=$1', [id])
       if (cur.rows.length === 0) return bad(res, 404, 'Not found')
-      if (cur.rows[0].status !== 'pending_approval') return bad(res, 400, 'Plan not in pending_approval state')
+      if (!['pending_fm', 'pending_sm', 'pending_approval'].includes(cur.rows[0].status)) {
+        return bad(res, 400, 'Plan not in a state FM can act upon')
+      }
 
       const det = cur.rows[0].details || {}
       const disc = Number(det?.inputs?.salesDiscountPercent ?? det?.salesDiscountPercent ?? 0) || 0
+      const policyLimit = await getPolicyLimitForPlan(det)
 
-      if (disc > 2) {
-        // Move to CEO queue
-        const result = await pool.query(
-          `UPDATE payment_plans
-           SET status='pending_ceo_approval', approved_by=$1, updated_at=now()
-           WHERE id=$2
-           RETURNING *`,
-          [req.user.id, id]
-        )
-        return ok(res, { payment_plan: result.rows[0] })
-      } else {
+      if (disc <= policyLimit) {
         const result = await pool.query(
           `UPDATE payment_plans
            SET status='approved', approved_by=$1, updated_at=now()
@@ -426,9 +554,161 @@ router.patch(
           [req.user.id, id]
         )
         return ok(res, { payment_plan: result.rows[0] })
+      } else {
+        // Over policy -> escalate to Top-Management queue
+        const result = await pool.query(
+          `UPDATE payment_plans
+           SET status='pending_tm', approved_by=$1, updated_at=now()
+           WHERE id=$2
+           RETURNING *`,
+          [req.user.id, id]
+        )
+        return ok(res, { payment_plan: result.rows[0] })
       }
     } catch (e) {
       console.error('PATCH /api/workflow/payment-plans/:id/approve error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// Sales-Manager approvals (≤2% approve directly, otherwise route to FM)
+router.patch(
+  '/payment-plans/:id/approve-sm',
+  authMiddleware,
+  requireRole(['sales_manager']),
+  async (req, res) => {
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+
+      const cur = await pool.query('SELECT id, details, status FROM payment_plans WHERE id=$1', [id])
+      if (cur.rows.length === 0) return bad(res, 404, 'Not found')
+      if (!['pending_sm', 'pending_approval'].includes(cur.rows[0].status)) {
+        return bad(res, 400, 'Plan not in Sales-Manager queue')
+      }
+
+      const det = cur.rows[0].details || {}
+      const disc = Number(det?.inputs?.salesDiscountPercent ?? det?.salesDiscountPercent ?? 0) || 0
+      if (disc <= 2) {
+        const r = await pool.query(
+          `UPDATE payment_plans SET status='approved', approved_by=$1, updated_at=now() WHERE id=$2 RETURNING *`,
+          [req.user.id, id]
+        )
+        return ok(res, { payment_plan: r.rows[0] })
+      } else {
+        const r = await pool.query(
+          `UPDATE payment_plans SET status='pending_fm', updated_at=now() WHERE id=$1 RETURNING *`,
+          [id]
+        )
+        return ok(res, { payment_plan: r.rows[0] })
+      }
+    } catch (e) {
+      console.error('PATCH /api/workflow/payment-plans/:id/approve-sm error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/payment-plans/:id/reject-sm',
+  authMiddleware,
+  requireRole(['sales_manager']),
+  async (req, res) => {
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) return bad(res, 400, 'Invalid id')
+      const cur = await pool.query('SELECT id, status FROM payment_plans WHERE id=$1', [id])
+      if (cur.rows.length === 0) return bad(res, 404, 'Not found')
+      if (!['pending_sm', 'pending_approval'].includes(cur.rows[0].status)) {
+        return bad(res, 400, 'Plan not in Sales-Manager queue')
+      }
+      const r = await pool.query(
+        `UPDATE payment_plans SET status='rejected', approved_by=$1, updated_at=now() WHERE id=$2 RETURNING *`,
+        [req.user.id, id]
+      )
+      return ok(res, { payment_plan: r.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/payment-plans/:id/reject-sm error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// Top-Management dual approvals
+router.patch(
+  '/payment-plans/:id/approve-tm',
+  authMiddleware,
+  requireRole(['ceo']),
+  async (req, res) => {
+    const client = await pool.connect()
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+      await client.query('BEGIN')
+      const cur = await client.query('SELECT id, status FROM payment_plans WHERE id=$1', [id])
+      if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found') }
+      if (cur.rows[0].status !== 'pending_tm') { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Plan is not pending Top-Management') }
+      // record approval (unique per approver)
+      await client.query(
+        `INSERT INTO payment_plan_tm_approvals (payment_plan_id, approver_user_id, decision)
+         VALUES ($1, $2, 'approve')
+         ON CONFLICT (payment_plan_id, approver_user_id) DO UPDATE SET decision='approve', created_at=now()`,
+        [id, req.user.id]
+      )
+      const approvals = await client.query(
+        `SELECT COUNT(*)::int AS c FROM payment_plan_tm_approvals WHERE payment_plan_id=$1 AND decision='approve'`,
+        [id]
+      )
+      if ((approvals.rows[0]?.c || 0) >= 2) {
+        const upd = await client.query(
+          `UPDATE payment_plans SET status='approved', updated_at=now() WHERE id=$1 RETURNING *`,
+          [id]
+        )
+        await client.query('COMMIT'); client.release()
+        return ok(res, { payment_plan: upd.rows[0], approvals_required: 2, approvals_count: approvals.rows[0].c })
+      } else {
+        await client.query('COMMIT'); client.release()
+        return ok(res, { payment_plan: cur.rows[0], approvals_required: 2, approvals_count: approvals.rows[0].c })
+      }
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
+      console.error('PATCH /api/workflow/payment-plans/:id/approve-tm error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/payment-plans/:id/reject-tm',
+  authMiddleware,
+  requireRole(['ceo', 'vice_chairman', 'chairman', 'top_management']),
+  async (req, res) => {
+    const client = await pool.connect()
+    try {
+      const id = ensureNumber(req.params.id)
+      if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
+      await client.query('BEGIN')
+      const cur = await client.query('SELECT id, status FROM payment_plans WHERE id=$1', [id])
+      if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Not found') }
+      if (cur.rows[0].status !== 'pending_tm') { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Plan is not pending Top-Management') }
+      await client.query(
+        `INSERT INTO payment_plan_tm_approvals (payment_plan_id, approver_user_id, decision)
+         VALUES ($1, $2, 'reject')
+         ON CONFLICT (payment_plan_id, approver_user_id) DO UPDATE SET decision='reject', created_at=now()`,
+        [id, req.user.id]
+      )
+      const upd = await client.query(
+        `UPDATE payment_plans SET status='rejected', updated_at=now() WHERE id=$1 RETURNING *`,
+        [id]
+      )
+      await client.query('COMMIT'); client.release()
+      return ok(res, { payment_plan: upd.rows[0] })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      client.release()
+      console.error('PATCH /api/workflow/payment-plans/:id/reject-tm error:', e)
       return bad(res, 500, 'Internal error')
     }
   }
@@ -445,7 +725,7 @@ router.patch(
       const result = await pool.query(
         `UPDATE payment_plans
          SET status='rejected', approved_by=$1, updated_at=now()
-         WHERE id=$2 AND status IN ('pending_approval','pending_ceo_approval')
+         WHERE id=$2 AND status IN ('pending_approval','pending_sm','pending_fm','pending_tm')
          RETURNING *`,
         [req.user.id, id]
       )
@@ -464,22 +744,8 @@ router.patch(
   authMiddleware,
   requireRole(['ceo']),
   async (req, res) => {
-    try {
-      const id = ensureNumber(req.params.id)
-      if (!id) return bad(res, 400, 'Invalid id')
-      const result = await pool.query(
-        `UPDATE payment_plans
-         SET status='approved', approved_by=$1, updated_at=now()
-         WHERE id=$2 AND status='pending_ceo_approval'
-         RETURNING *`,
-        [req.user.id, id]
-      )
-      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending CEO approval')
-      return ok(res, { payment_plan: result.rows[0] })
-    } catch (e) {
-      console.error('PATCH /api/workflow/payment-plans/:id/approve-ceo error:', e)
-      return bad(res, 500, 'Internal error')
-    }
+    // Deprecated: use /approve-tm by Top-Management (CEO/VC/Chairman)
+    return res.status(410).json({ error: { message: 'Deprecated endpoint. Use /api/workflow/payment-plans/:id/approve-tm' } })
   }
 )
 

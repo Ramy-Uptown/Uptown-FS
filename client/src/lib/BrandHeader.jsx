@@ -26,6 +26,7 @@ export default function BrandHeader({ title, onLogout }) {
   const envLogo = import.meta.env.VITE_COMPANY_LOGO_URL || ''
   const [logoUrl, setLogoUrl] = useState('/logo.svg')
   const [user, setUser] = useState(null)
+  const [queueCount, setQueueCount] = useState(0)
 
   useEffect(() => {
     let mounted = true
@@ -59,13 +60,45 @@ export default function BrandHeader({ title, onLogout }) {
     return () => { mounted = false }
   }, [envLogo])
 
+  // Poll queue counts for approver roles
+  useEffect(() => {
+    let t
+    async function poll() {
+      try {
+        const token = localStorage.getItem('auth_token')
+        const role = JSON.parse(localStorage.getItem('auth_user') || '{}')?.role
+        let url = ''
+        if (role === 'sales_manager') url = '/api/workflow/payment-plans/queue/sm'
+        else if (role === 'financial_manager') url = '/api/workflow/payment-plans/queue/fm'
+        else if (['ceo', 'vice_chairman', 'chairman', 'top_management'].includes(role)) url = '/api/workflow/payment-plans/queue/tm'
+        if (!url) { setQueueCount(0); return }
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+        const resp = await fetch(`${API_URL}${url}`, { headers: { Authorization: `Bearer ${token}` }})
+        const data = await resp.json().catch(() => ({}))
+        if (resp.ok) {
+          setQueueCount((data?.payment_plans || []).length)
+        } else {
+          setQueueCount(0)
+        }
+      } catch {
+        setQueueCount(0)
+      } finally {
+        t = setTimeout(poll, 30000) // every 30s
+      }
+    }
+    poll()
+    return () => t && clearTimeout(t)
+  }, [])
+
   const navForRole = (role) => {
     // Map role to visible shortcuts
     const base = [{ label: 'Calculator', href: '/calculator' }, { label: 'Deals', href: '/deals' }]
+    const queuesLink = { label: `Queues${queueCount ? ` (${queueCount})` : ''}`, href: '/deals/queues' }
     switch (role) {
       case 'superadmin':
         return [
           ...base,
+          queuesLink,
           { label: 'Units', href: '/admin/units' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'Users', href: '/admin/users' },
@@ -82,6 +115,7 @@ export default function BrandHeader({ title, onLogout }) {
       case 'financial_manager':
         return [
           ...base,
+          queuesLink,
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'Holds', href: '/admin/holds' }
         ]
@@ -94,6 +128,7 @@ export default function BrandHeader({ title, onLogout }) {
       case 'sales_manager':
         return [
           ...base,
+          queuesLink,
           { label: 'Team Proposals', href: '/deals/team-proposals' },
           { label: 'Holds', href: '/admin/holds' },
           { label: 'Workflow Logs', href: '/admin/workflow-logs' }
@@ -113,9 +148,11 @@ export default function BrandHeader({ title, onLogout }) {
         ]
       case 'ceo':
       case 'chairman':
-      case 'vicechairman':
+      case 'vice_chairman':
+      case 'top_management':
         return [
           ...base,
+          queuesLink,
           { label: 'Workflow Logs', href: '/admin/workflow-logs' },
           { label: 'Hold Approvals', href: '/admin/hold-approvals' }
         ]

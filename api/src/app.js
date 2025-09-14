@@ -32,6 +32,26 @@ const libre = require('libreoffice-convert')
 
 const app = express()
 
+// Helper: fetch active approval policy limit (global fallback = 5%)
+async function getActivePolicyLimitPercent() {
+  try {
+    const r = await pool.query(
+      `SELECT policy_limit_percent
+       FROM approval_policies
+       WHERE active=TRUE AND scope_type='global'
+       ORDER BY id DESC
+       LIMIT 1`
+    )
+    if (r.rows.length > 0) {
+      const v = Number(r.rows[0].policy_limit_percent)
+      if (Number.isFinite(v) && v > 0) return v
+    }
+  } catch (e) {
+    // swallow; fall back
+  }
+  return 5
+}
+
 // Security headers
 app.use(helmet())
 
@@ -326,18 +346,20 @@ app.post('/api/calculate', async (req, res) => {
       return bad(res, 422, 'Invalid inputs', inputErrors)
     }
 
-    // Enforce role-based discount limits
+    // Role-based authority warnings only (do not block calculations)
     const role = req.user?.role
     const disc = Number(effInputs.salesDiscountPercent) || 0
-    if (role === 'property_consultant' && disc > 2) {
-      return bad(res, 403, 'Sales consultants can apply a maximum discount of 2%.')
-    }
-    if (role === 'financial_manager' && disc > 5) {
-      return bad(res, 403, 'Financial managers can apply a maximum discount of 5% (requires CEO approval in workflow if over 2%).')
-    }
+    let authorityLimit = null
+    if (role === 'property_consultant') authorityLimit = 2
+    if (role === 'financial_manager') authorityLimit = 5
+    const overAuthority = authorityLimit != null ? disc > authorityLimit : false
+
+    // Policy limit warning only (do not block; routing handled in workflow endpoints)
+    const policyLimit = await getActivePolicyLimitPercent()
+    const overPolicy = disc > policyLimit
 
     const result = calculateByMode(mode, effectiveStdPlan, effInputs)
-    return res.json({ ok: true, data: result })
+    return res.json({ ok: true, data: result, meta: { policyLimit, overPolicy, authorityLimit, overAuthority } })
   } catch (err) {
     console.error('POST /api/calculate error:', err)
     return bad(res, 500, 'Internal error during calculation')
@@ -413,6 +435,12 @@ app.post('/api/generate-plan', async (req, res) => {
     }
 
     const result = calculateByMode(mode, effectiveStdPlan, effInputs)
+
+    // NPV tolerance warning check
+    const policyLimit = await getActivePolicyLimitPercent()
+    const npvTolerancePercent = 70 // default; could be read per project/type in future
+    const toleranceValue = (Number(effectiveStdPlan.totalPrice) || 0) * (npvTolerancePercent / 100)
+    const npvWarning = (Number(result.calculatedPV) || 0) < toleranceValue
 
     const schedule = []
     const pushEntry = (label, month, amount) => {

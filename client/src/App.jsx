@@ -537,6 +537,26 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
           setPreviewError(data?.error?.message || 'Preview error')
         } else {
           setPreview(data?.data || null)
+          // surface meta warnings
+          const meta = data?.meta || {}
+          const warn = []
+          if (meta.policyLimit != null) {
+            warn.push(`Policy limit: ${meta.policyLimit}%`)
+          }
+          if (meta.overPolicy) {
+            warn.push('Selected discount exceeds current policy limit. Workflow will route to Top-Management.')
+          }
+          if (meta.authorityLimit != null) {
+            warn.push(`Your authority limit: ${meta.authorityLimit}%`)
+          }
+          if (meta.overAuthority) {
+            warn.push('Selected discount exceeds your authority. It will be escalated in workflow.')
+          }
+          if (warn.length) {
+            setPreviewError(warn.join(' '))
+          } else {
+            setPreviewError('')
+          }
         }
       } catch (err) {
         setPreview(null)
