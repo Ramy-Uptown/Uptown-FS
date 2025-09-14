@@ -46,12 +46,12 @@ router.patch('/types/:id', authMiddleware, requireRole(['financial_manager']), a
     const { name, description, active } = req.body || {}
     const fields = []
     const params = []
-    if (name != null) { params.push(String(name)); fields.push(`name=$${params.length}`) }
-    if (description !== undefined) { params.push(description === null ? null : String(description)); fields.push(`description=$${params.length}`) }
-    if (typeof active === 'boolean') { params.push(active); fields.push(`active=$${params.length}`) }
+    if (name != null) { params.push(String(name)); fields.push(`name=${params.length}`) }
+    if (description !== undefined) { params.push(description === null ? null : String(description)); fields.push(`description=${params.length}`) }
+    if (typeof active === 'boolean') { params.push(active); fields.push(`active=${params.length}`) }
     if (fields.length === 0) return bad(res, 400, 'No fields to update')
     params.push(id)
-    const r = await pool.query(`UPDATE unit_types SET ${fields.join(', ')}, updated_at=now() WHERE id=$${params.length} RETURNING *`, params)
+    const r = await pool.query(`UPDATE unit_types SET ${fields.join(', ')}, updated_at=now() WHERE id=${params.length} RETURNING *`, params)
     if (r.rows.length === 0) return bad(res, 404, 'Not found')
     return ok(res, { unit_type: r.rows[0] })
   } catch (e) {
@@ -134,8 +134,101 @@ router.patch('/types/pricing/:pricingId/reject', authMiddleware, requireRole(['c
 })
 
 //
-// Inventory (units linked to types; only financial_manager can manage; readers broader)
+// Inventory (finance-admin adds drafts; financial_manager reviews; readers broader)
 //
+
+// Finance-Admin: Add new unit as draft
+router.post('/units/draft', authMiddleware, requireRole(['financial_admin']), async (req, res) => {
+  try {
+    const {
+      project_name, building, floor_number, unit_number, area_sqft, unit_type_id,
+      view_description, orientation, special_features, description
+    } = req.body || {}
+
+    if (!project_name) return bad(res, 400, 'project_name is required')
+    if (!unit_number) return bad(res, 400, 'unit_number is required')
+    if (!area_sqft) return bad(res, 400, 'area_sqft is required')
+    if (!unit_type_id) return bad(res, 400, 'unit_type_id is required')
+
+    // Generate code unique within project (simple concat)
+    const code = `${String(project_name).trim()}-${String(unit_number).trim()}`
+
+    // Ensure uniqueness by code
+    const exists = await pool.query('SELECT 1 FROM units WHERE code=$1', [code])
+    if (exists.rows.length > 0) return bad(res, 409, 'Unit already exists for this project/unit number')
+
+    const meta = {
+      project_name, building, floor_number, unit_number, area_sqft,
+      view_description: view_description || null,
+      orientation: orientation || null,
+      special_features: special_features || null
+    }
+
+    const r = await pool.query(
+      `INSERT INTO units (code, description, unit_type_id, unit_type, base_price, currency, created_by, unit_status, available, meta)
+       VALUES ($1, $2, $3, NULL, 0, 'EGP', $4, 'INVENTORY_DRAFT', FALSE, $5::jsonb)
+       RETURNING *`,
+      [code, description || null, num(unit_type_id), req.user.id, JSON.stringify(meta)]
+    )
+    return ok(res, { unit: r.rows[0] })
+  } catch (e) {
+    console.error('POST /api/inventory/units/draft error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// Finance-Manager: list drafts to review
+router.get('/units/drafts', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT * FROM units WHERE unit_status='INVENTORY_DRAFT' ORDER BY created_at DESC`
+    )
+    return ok(res, { units: r.rows })
+  } catch (e) {
+    console.error('GET /api/inventory/units/drafts error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// Finance-Manager: approve or reject draft
+router.patch('/units/:id/review', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const id = num(req.params.id)
+    const { action, reason, standard_price, min_down_payment_percent, min_down_payment_amount, default_interest_rate, discount_policy_limit, target_npv_tolerance } = req.body || {}
+    if (!id) return bad(res, 400, 'Invalid id')
+    if (!['approve', 'reject'].includes(String(action))) return bad(res, 400, 'action must be approve|reject')
+
+    const curr = await pool.query('SELECT * FROM units WHERE id=$1', [id])
+    if (curr.rows.length === 0) return bad(res, 404, 'Unit not found')
+    if (curr.rows[0].unit_status !== 'INVENTORY_DRAFT') return bad(res, 400, 'Unit is not in draft')
+
+    if (action === 'approve') {
+      // Approve -> Available
+      const r = await pool.query(
+        `UPDATE units SET unit_status='AVAILABLE', approved_by=$1, available=TRUE, updated_at=now() WHERE id=$2 RETURNING *`,
+        [req.user.id, id]
+      )
+      return ok(res, { unit: r.rows[0] })
+    } else {
+      // Reject -> INVENTORY_REJECTED; reason stored in meta.history
+      const metaUpdate = await pool.query('SELECT meta FROM units WHERE id=$1', [id])
+      const meta = metaUpdate.rows[0]?.meta || {}
+      const history = Array.isArray(meta.history) ? meta.history : []
+      history.push({ t: new Date().toISOString(), by: req.user.id, action: 'reject', reason: reason || null })
+      meta.history = history
+      const r = await pool.query(
+        `UPDATE units SET unit_status='INVENTORY_REJECTED', approved_by=$1, available=FALSE, meta=$2::jsonb, updated_at=now() WHERE id=$3 RETURNING *`,
+        [req.user.id, JSON.stringify(meta), id]
+      )
+      return ok(res, { unit: r.rows[0] })
+    }
+  } catch (e) {
+    console.error('PATCH /api/inventory/units/:id/review error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// Existing: FM can patch unit linking to type or availability
 router.patch('/units/:id', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
   try {
     const id = num(req.params.id)
@@ -143,11 +236,11 @@ router.patch('/units/:id', authMiddleware, requireRole(['financial_manager']), a
     const { unit_type_id, available } = req.body || {}
     const fields = []
     const params = []
-    if (unit_type_id != null) { params.push(num(unit_type_id)); fields.push(`unit_type_id=$${params.length}`) }
-    if (typeof available === 'boolean') { params.push(available); fields.push(`available=$${params.length}`) }
+    if (unit_type_id != null) { params.push(num(unit_type_id)); fields.push(`unit_type_id=${params.length}`) }
+    if (typeof available === 'boolean') { params.push(available); fields.push(`available=${params.length}`) }
     if (fields.length === 0) return bad(res, 400, 'No fields to update')
     params.push(id)
-    const r = await pool.query(`UPDATE units SET ${fields.join(', ')}, updated_at=now() WHERE id=$${params.length} RETURNING *`, params)
+    const r = await pool.query(`UPDATE units SET ${fields.join(', ')}, updated_at=now() WHERE id=${params.length} RETURNING *`, params)
     if (r.rows.length === 0) return bad(res, 404, 'Unit not found')
     return ok(res, { unit: r.rows[0] })
   } catch (e) {
@@ -161,7 +254,7 @@ router.get('/units', authMiddleware, requireRole(['financial_manager','property_
     const { unit_type_id } = req.query || {}
     const clauses = ['available=TRUE']
     const params = []
-    if (unit_type_id) { params.push(num(unit_type_id)); clauses.push(`unit_type_id=$${params.length}`) }
+    if (unit_type_id) { params.push(num(unit_type_id)); clauses.push(`unit_type_id=${params.length}`) }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
     const r = await pool.query(`SELECT id, code, description, unit_type_id, unit_type, base_price, currency FROM units ${where} ORDER BY code ASC`, params)
     return ok(res, { units: r.rows })
@@ -174,7 +267,7 @@ router.get('/units', authMiddleware, requireRole(['financial_manager','property_
 // Hold requests
 router.post('/holds', authMiddleware, requireRole(['property_consultant']), async (req, res) => {
   try {
-    const { unit_id, payment_plan_id } = req.body || {}
+    const { unit_id, payment_plan_id, duration_days } = req.body || {}
     const uid = num(unit_id)
     if (!uid) return bad(res, 400, 'unit_id is required')
     const pid = payment_plan_id ? num(payment_plan_id) : null
@@ -182,11 +275,15 @@ router.post('/holds', authMiddleware, requireRole(['property_consultant']), asyn
     const u = await pool.query('SELECT id, available FROM units WHERE id=$1', [uid])
     if (u.rows.length === 0) return bad(res, 404, 'Unit not found')
     if (u.rows[0].available === false) return bad(res, 400, 'Unit is not available')
+    // Duration validation 1-7
+    let days = Number(duration_days) || 7
+    if (days < 1) days = 1
+    if (days > 7) days = 7
     const r = await pool.query(
-      `INSERT INTO holds (unit_id, payment_plan_id, requested_by, status)
-       VALUES ($1, $2, $3, 'pending_approval')
+      `INSERT INTO holds (unit_id, payment_plan_id, requested_by, status, expires_at)
+       VALUES ($1, $2, $3, 'pending_approval', now() + ($4 || ' days')::interval)
        RETURNING *`,
-      [uid, pid, req.user.id]
+      [uid, pid, req.user.id, String(days)]
     )
     return ok(res, { hold: r.rows[0] })
   } catch (e) {
@@ -219,7 +316,7 @@ router.patch('/holds/:id/approve', authMiddleware, requireRole(['financial_manag
     const cur = await client.query('SELECT * FROM holds WHERE id=$1', [id])
     if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Hold not found') }
     if (cur.rows[0].status !== 'pending_approval') { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Hold not pending') }
-    const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000)
+    const expiresAt = cur.rows[0].expires_at ? new Date(cur.rows[0].expires_at) : new Date(Date.now() + 7 * 24 * 3600 * 1000)
     const nextNotify = new Date(expiresAt.getTime())
     const upd = await client.query(
       `UPDATE holds
