@@ -1,4 +1,11 @@
 /* eslint-disable no-console */
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config();
+
 const required = [
   'DB_HOST',
   'DB_PORT',
