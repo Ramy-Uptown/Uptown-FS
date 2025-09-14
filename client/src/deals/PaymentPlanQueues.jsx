@@ -78,6 +78,37 @@ export default function PaymentPlanQueues() {
   const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
   const btn = { marginRight: 8, padding: '6px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
 
+  function StatusChip({ status }) {
+    const map = {
+      pending_sm: { color: '#9a3412', bg: '#fff7ed', label: 'Waiting for Sales Manager' }, // orange
+      pending_fm: { color: '#1e3a8a', bg: '#eff6ff', label: 'With Finance' }, // blue
+      pending_tm: { color: '#991b1b', bg: '#fef2f2', label: 'Executive Approval' }, // red
+      approved: { color: '#166534', bg: '#ecfdf5', label: 'Approved' }, // green
+      rejected: { color: '#991b1b', bg: '#fef2f2', label: 'Rejected' } // red
+    }
+    const s = map[status] || { color: '#334155', bg: '#f1f5f9', label: status }
+    return (
+      <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: 999, background: s.bg, color: s.color, fontSize: 12, fontWeight: 600 }}>
+        {s.label}
+      </span>
+    )
+  }
+
+  function DiscountCell({ details }) {
+    const disc = Number(details?.inputs?.salesDiscountPercent ?? details?.salesDiscountPercent ?? 0) || 0
+    return <span>{disc.toFixed(2)}%</span>
+  }
+
+  function rowHighlightStyle(r) {
+    // Try to infer warnings (overAuthority / overPolicy) if embedded from calculator details.meta
+    const overAuthority = !!(r.details?.meta?.overAuthority)
+    const overPolicy = !!(r.details?.meta?.overPolicy)
+    if (overPolicy || overAuthority) {
+      return { background: '#fff7ed' } // light orange
+    }
+    return {}
+  }
+
   return (
     <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -101,6 +132,7 @@ export default function PaymentPlanQueues() {
               <th style={th}>ID</th>
               <th style={th}>Deal</th>
               <th style={th}>Status</th>
+              <th style={th}>Discount %</th>
               <th style={th}>Version</th>
               <th style={th}>Accepted</th>
               <th style={th}>Created</th>
@@ -109,10 +141,11 @@ export default function PaymentPlanQueues() {
           </thead>
           <tbody>
             {rows.map(r => (
-              <tr key={r.id}>
+              <tr key={r.id} style={rowHighlightStyle(r)}>
                 <td style={td}>{r.id}</td>
                 <td style={td}>{r.deal_id}</td>
-                <td style={td}>{r.status}</td>
+                <td style={td}><StatusChip status={r.status} /></td>
+                <td style={td}><DiscountCell details={r.details} /></td>
                 <td style={td}>{r.version || 1}</td>
                 <td style={td}>{r.accepted ? 'Yes' : 'No'}</td>
                 <td style={td}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
@@ -123,7 +156,7 @@ export default function PaymentPlanQueues() {
               </tr>
             ))}
             {rows.length === 0 && !loading && (
-              <tr><td style={td} colSpan={7}>No items in queue.</td></tr>
+              <tr><td style={td} colSpan={8}>No items in queue.</td></tr>
             )}
           </tbody>
         </table>
