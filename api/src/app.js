@@ -356,14 +356,12 @@ app.post('/api/calculate', async (req, res) => {
       return bad(res, 403, 'Financial managers can apply a maximum discount of 5% (requires CEO approval in workflow if over 2%).')
     }
 
-    // Enforce policy limit boundary for requested discount
+    // Policy limit warning only (do not block; routing handled in workflow endpoints)
     const policyLimit = await getActivePolicyLimitPercent()
-    if (disc > policyLimit) {
-      return bad(res, 403, `Requested discount exceeds active policy limit (${policyLimit}%).`)
-    }
+    const overPolicy = disc > policyLimit
 
     const result = calculateByMode(mode, effectiveStdPlan, effInputs)
-    return res.json({ ok: true, data: result })
+    return res.json({ ok: true, data: result, meta: { policyLimit, overPolicy } })
   } catch (err) {
     console.error('POST /api/calculate error:', err)
     return bad(res, 500, 'Internal error during calculation')
