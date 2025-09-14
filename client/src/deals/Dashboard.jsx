@@ -75,6 +75,11 @@ export default function Dashboard() {
       try {
         const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
         const role = user?.role
+        // Respect daily dismiss
+        const todayKey = new Date().toISOString().slice(0, 10)
+        const dismissed = localStorage.getItem('approver_queue_banner_dismissed')
+        if (dismissed === todayKey) return
+
         let url = ''
         if (role === 'sales_manager') url = '/api/workflow/payment-plans/queue/sm'
         else if (role === 'financial_manager') url = '/api/workflow/payment-plans/queue/fm'
@@ -97,9 +102,22 @@ export default function Dashboard() {
       <h2 style={{ marginTop: 0 }}>All Deals</h2>
 
       {approverBanner.show && (
-        <div style={{ margin: '8px 0 12px', padding: '10px 12px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fed7aa' }}>
-          <span style={{ color: '#9a3412', marginRight: 8 }}>You have pending approvals in your queue.</span>
-          <a href={approverBanner.url} style={{ color: '#1f6feb', textDecoration: 'none', fontWeight: 600 }}>Review Now</a>
+        <div style={{ margin: '8px 0 12px', padding: '10px 12px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <span style={{ color: '#9a3412', marginRight: 8 }}>You have pending approvals in your queue.</span>
+            <a href={approverBanner.url} style={{ color: '#1f6feb', textDecoration: 'none', fontWeight: 600 }}>Review Now</a>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const todayKey = new Date().toISOString().slice(0, 10)
+              localStorage.setItem('approver_queue_banner_dismissed', todayKey)
+              setApproverBanner({ show: false, url: '' })
+            }}
+            style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer', color: '#475569' }}
+          >
+            Hide for today
+          </button>
         </div>
       )}
 

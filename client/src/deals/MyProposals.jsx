@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import StatusChip from '../components/StatusChip.jsx'
 
 export default function MyProposals() {
   const [rows, setRows] = useState([])
@@ -43,7 +44,11 @@ export default function MyProposals() {
               <tr key={r.id}>
                 <td style={td}>{r.id}</td>
                 <td style={td}>{r.deal_id}</td>
-                <td style={td}>{r.status}</td>
+                <td style={td}>
+                  {['pending_sm','pending_fm','pending_tm','approved','rejected'].includes(r.status)
+                    ? <StatusChip status={r.status} />
+                    : r.status}
+                </td>
                 <td style={td}>{r.version || 1}</td>
                 <td style={td}>{r.accepted ? 'Yes' : 'No'}</td>
                 <td style={td}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
