@@ -346,22 +346,20 @@ app.post('/api/calculate', async (req, res) => {
       return bad(res, 422, 'Invalid inputs', inputErrors)
     }
 
-    // Enforce role-based discount limits
+    // Role-based authority warnings only (do not block calculations)
     const role = req.user?.role
     const disc = Number(effInputs.salesDiscountPercent) || 0
-    if (role === 'property_consultant' && disc > 2) {
-      return bad(res, 403, 'Sales consultants can apply a maximum discount of 2%.')
-    }
-    if (role === 'financial_manager' && disc > 5) {
-      return bad(res, 403, 'Financial managers can apply a maximum discount of 5% (requires CEO approval in workflow if over 2%).')
-    }
+    let authorityLimit = null
+    if (role === 'property_consultant') authorityLimit = 2
+    if (role === 'financial_manager') authorityLimit = 5
+    const overAuthority = authorityLimit != null ? disc > authorityLimit : false
 
     // Policy limit warning only (do not block; routing handled in workflow endpoints)
     const policyLimit = await getActivePolicyLimitPercent()
     const overPolicy = disc > policyLimit
 
     const result = calculateByMode(mode, effectiveStdPlan, effInputs)
-    return res.json({ ok: true, data: result, meta: { policyLimit, overPolicy } })
+    return res.json({ ok: true, data: result, meta: { policyLimit, overPolicy, authorityLimit, overAuthority } })
   } catch (err) {
     console.error('POST /api/calculate error:', err)
     return bad(res, 500, 'Internal error during calculation')

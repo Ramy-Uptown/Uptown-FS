@@ -16,6 +16,50 @@ function ensureNumber(v) {
   return Number.isFinite(n) ? n : null
 }
 
+// Resolve discount policy precedence: Project > Unit Type > Global
+async function getPolicyLimitForPlan(details) {
+  try {
+    const projectId = details?.project_id ? Number(details.project_id) : null
+    const unitTypeId = details?.unit_type_id ? Number(details.unit_type_id) : null
+
+    if (Number.isFinite(projectId)) {
+      const r = await pool.query(
+        `SELECT policy_limit_percent
+         FROM approval_policies
+         WHERE active=TRUE AND scope_type='project' AND scope_id=$1
+         ORDER BY id DESC
+         LIMIT 1`,
+        [projectId]
+      )
+      if (r.rows.length) return Number(r.rows[0].policy_limit_percent) || 5
+    }
+
+    if (Number.isFinite(unitTypeId)) {
+      const r = await pool.query(
+        `SELECT policy_limit_percent
+         FROM approval_policies
+         WHERE active=TRUE AND scope_type='unit_type' AND scope_id=$1
+         ORDER BY id DESC
+         LIMIT 1`,
+        [unitTypeId]
+      )
+      if (r.rows.length) return Number(r.rows[0].policy_limit_percent) || 5
+    }
+
+    const r = await pool.query(
+      `SELECT policy_limit_percent
+       FROM approval_policies
+       WHERE active=TRUE AND scope_type='global'
+       ORDER BY id DESC
+       LIMIT 1`
+    )
+    if (r.rows.length) return Number(r.rows[0].policy_limit_percent) || 5
+  } catch (e) {
+    console.error('getPolicyLimitForPlan error:', e)
+  }
+  return 5
+}
+
 // Resolve discount policy precedence}
 
 // Policy resolution with precedence: project > unit_type > global
@@ -470,15 +514,15 @@ router.get('/payment-plans/queue/fm', authMiddleware, requireRole(['financial_ma
   }
 })
 
-router.get('/payment-plans/queue/tm', authMiddleware, requireRole(['ceo']), async (req, res) => {
+router.get('/payment-plans/queue/tm', authMiddleware, requireRole(['ceo', 'vice_chairman', 'chairman', 'top_management']), async (req, res) => {
   try {
     const r = await pool.query(`SELECT * FROM payment_plans WHERE status='pending_tm' ORDER BY id DESC`)
     return ok(res, { payment_plans: r.rows })
   } catch (e) {
     console.error('GET /api/workflow/payment-plans/queue/tm error:', e)
     return bad(res, 500, 'Internal error')
-  }
-})
+  _code}
+new}</)
 
 // Approvals by financial_manager
 router.patch(
@@ -639,7 +683,7 @@ router.patch(
 router.patch(
   '/payment-plans/:id/reject-tm',
   authMiddleware,
-  requireRole(['ceo']),
+  requireRole(['ceo', 'vice_chairman', 'chairman', 'top_management']),
   async (req, res) => {
     const client = await pool.connect()
     try {
@@ -681,7 +725,7 @@ router.patch(
       const result = await pool.query(
         `UPDATE payment_plans
          SET status='rejected', approved_by=$1, updated_at=now()
-         WHERE id=$2 AND status IN ('pending_approval','pending_ceo_approval')
+         WHERE id=$2 AND status IN ('pending_approval','pending_sm','pending_fm','pending_tm')
          RETURNING *`,
         [req.user.id, id]
       )
@@ -700,22 +744,8 @@ router.patch(
   authMiddleware,
   requireRole(['ceo']),
   async (req, res) => {
-    try {
-      const id = ensureNumber(req.params.id)
-      if (!id) return bad(res, 400, 'Invalid id')
-      const result = await pool.query(
-        `UPDATE payment_plans
-         SET status='approved', approved_by=$1, updated_at=now()
-         WHERE id=$2 AND status='pending_ceo_approval'
-         RETURNING *`,
-        [req.user.id, id]
-      )
-      if (result.rows.length === 0) return bad(res, 404, 'Not found or not pending CEO approval')
-      return ok(res, { payment_plan: result.rows[0] })
-    } catch (e) {
-      console.error('PATCH /api/workflow/payment-plans/:id/approve-ceo error:', e)
-      return bad(res, 500, 'Internal error')
-    }
+    // Deprecated: use /approve-tm by Top-Management (CEO/VC/Chairman)
+    return res.status(410).json({ error: { message: 'Deprecated endpoint. Use /api/workflow/payment-plans/:id/approve-tm' } })
   }
 )
 
