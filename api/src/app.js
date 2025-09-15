@@ -28,6 +28,7 @@ import inventoryRoutes from './inventoryRoutes.js'
 import reportsRoutes from './reportsRoutes.js'
 import roleManagementRoutes from './roleManagement.js'
 import offerWorkflowRoutes from './offerWorkflow.js'
+import customerRoutes from './customerRoutes.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -93,6 +94,7 @@ app.use('/api/inventory', inventoryRoutes)
 app.use('/api/reports', reportsRoutes)
 app.use('/api/roles', roleManagementRoutes)
 app.use('/api', offerWorkflowRoutes)
+app.use('/api', customerRoutes)
 
 // Block management
 import blockManagementRoutes from './blockManagement.js'
