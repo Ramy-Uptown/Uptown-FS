@@ -2,9 +2,21 @@ import express from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
+import nodemailer from 'nodemailer'
 import { pool } from './db.js'
 
 const router = express.Router()
+
+// Optional SMTP transporter for emails (password reset, etc.)
+const mailer = (process.env.SMTP_USER && process.env.SMTP_HOST) ? nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASSWORD
+  }
+}) : null
 
 const JWT_SECRET = process.env.JWT_SECRET || 'devsecretchange'
 const ACCESS_EXPIRES_IN = '1h'
@@ -181,7 +193,7 @@ router.post('/request-password-reset', async (req, res) => {
     if (!email) return res.status(400).json({ error: { message: 'Email is required' } })
     const normalizedEmail = String(email).trim().toLowerCase()
     const result = await pool.query('SELECT id FROM users WHERE email=$1', [normalizedEmail])
-    // Always respond ok to avoid user enumeration; but for dev, if found, include token
+    // Always respond ok to avoid user enumeration
     if (result.rows.length === 0) {
       return res.json({ ok: true })
     }
@@ -192,8 +204,36 @@ router.post('/request-password-reset', async (req, res) => {
       'INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)',
       [token, userId, expiresAt]
     )
-    // In production, send token via email. For development, log it to server console.
-    console.log('[password reset] token for', normalizedEmail, token, 'expiresAt:', expiresAt.toISOString())
+
+    // Build reset URL (frontend route), configurable base
+    const base = process.env.APP_BASE_URL || 'http://localhost:5173'
+    const resetUrl = `${base.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`
+
+    // Send email if SMTP configured; always log for debugging
+    console.log('[password reset] token for', normalizedEmail, token, 'expiresAt:', expiresAt.toISOString(), 'url:', resetUrl)
+    if (mailer) {
+      try {
+        await mailer.sendMail({
+          from: process.env.SMTP_USER,
+          to: normalizedEmail,
+          subject: 'Password Reset Request',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px;">
+              <h2>Password Reset</h2>
+              <p>We received a request to reset your password. Click the button below to proceed.</p>
+              <p><a href="${resetUrl}" style="background:#1890ff;color:#fff;padding:10px 16px;text-decoration:none;border-radius:4px;">Reset Password</a></p>
+              <p>Or copy this link into your browser:</p>
+              <p style="word-break: break-all;"><a href="${resetUrl}">${resetUrl}</a></p>
+              <p style="color:#666;font-size:12px;">This link expires in ${RESET_TTL_MINUTES} minutes. If you didn't request this, you can ignore this email.</p>
+            </div>
+          `
+        })
+      } catch (mailErr) {
+        console.error('Password reset email send error:', mailErr)
+        // Do not expose to client; continue to return ok
+      }
+    }
+
     return res.json({ ok: true })
   } catch (e) {
     console.error('POST /api/auth/request-password-reset error:', e)
