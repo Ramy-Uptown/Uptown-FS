@@ -27,6 +27,7 @@ import workflowRoutes from './workflowRoutes.js'
 import inventoryRoutes from './inventoryRoutes.js'
 import reportsRoutes from './reportsRoutes.js'
 import roleManagementRoutes from './roleManagement.js'
+import offerWorkflowRoutes from './offerWorkflow.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -91,6 +92,7 @@ app.use('/api/workflow', workflowRoutes)
 app.use('/api/inventory', inventoryRoutes)
 app.use('/api/reports', reportsRoutes)
 app.use('/api/roles', roleManagementRoutes)
+app.use('/api', offerWorkflowRoutes)
 
 // Simple in-process notifier for hold reminders (runs hourly)
 setInterval(async () => {
