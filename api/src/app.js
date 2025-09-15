@@ -90,6 +90,7 @@ app.use('/api/ocr', ocrRoutes)
 app.use('/api/workflow', workflowRoutes)
 app.use('/api/inventory', inventoryRoutes)
 app.use('/api/reports', reportsRoutes)
+app.use('/api/roles', roleManagementRoutes)
 
 // Simple in-process notifier for hold reminders (runs hourly)
 setInterval(async () => {
