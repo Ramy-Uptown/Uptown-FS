@@ -3,6 +3,8 @@ import { initDb, pool } from './db.js';
 import { runMigrations } from './migrate.js';
 import { recordCleanup } from './runtimeMetrics.js';
 import morgan from 'morgan';
+import http from 'http';
+import { initSocket } from './socket.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -23,8 +25,12 @@ async function start() {
   try {
     await initDb();
     await runMigrations();
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`API listening on http://0.0.0.0: ${PORT}`);
+
+    const server = http.createServer(app);
+    initSocket(server);
+
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`API listening on http://0.0.0.0:${PORT}`);
     });
 
     // Schedule periodic cleanup (every hour). First run after startup.
