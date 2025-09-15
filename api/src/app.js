@@ -26,6 +26,7 @@ import { getCleanupMetrics } from './runtimeMetrics.js'
 import workflowRoutes from './workflowRoutes.js'
 import inventoryRoutes from './inventoryRoutes.js'
 import reportsRoutes from './reportsRoutes.js'
+import roleManagementRoutes from './roleManagement.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
