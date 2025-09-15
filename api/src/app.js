@@ -26,11 +26,15 @@ import { getCleanupMetrics } from './runtimeMetrics.js'
 import workflowRoutes from './workflowRoutes.js'
 import inventoryRoutes from './inventoryRoutes.js'
 import reportsRoutes from './reportsRoutes.js'
+
+// NEW IMPORTS - Add these
 import roleManagementRoutes from './roleManagement.js'
 import offerWorkflowRoutes from './offerWorkflow.js'
+import blockManagementRoutes from './blockManagement.js'
 import customerRoutes from './customerRoutes.js'
 import notificationService from './notificationService.js'
 import dashboardRoutes from './dashboardRoutes.js'
+import { errorHandler } from './errorHandler.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -94,8 +98,11 @@ app.use('/api/ocr', ocrRoutes)
 app.use('/api/workflow', workflowRoutes)
 app.use('/api/inventory', inventoryRoutes)
 app.use('/api/reports', reportsRoutes)
+
+// NEW ROUTE REGISTRATIONS - Add these
 app.use('/api/roles', roleManagementRoutes)
 app.use('/api/offers', offerWorkflowRoutes)
+app.use('/api/blocks', blockManagementRoutes)
 app.use('/api/customers', customerRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 
@@ -145,10 +152,6 @@ app.patch('/api/notifications/mark-all-read', authLimiter, authMiddleware, async
     res.status(500).json({ error: { message: 'Internal error' } })
   }
 })
-
-// Block management
-import blockManagementRoutes from './blockManagement.js'
-app.use('/api/blocks', blockManagementRoutes)
 
 // Simple in-process notifier for hold reminders (runs hourly)
 setInterval(async () => {
@@ -555,7 +558,7 @@ app.post('/api/generate-plan', async (req, res) => {
       totalNominal: schedule.reduce((s, e) => s + e.amount, 0)
     }
 
-    return res.json({ ok: true, schedule, totals, meta: result.meta || {} })
+    return res.json({ ok: true, schedule, totals, meta: { ...result.meta, npvWarning } })
   } catch (err) {
     console.error('POST /api/generate-plan error:', err)
     return bad(res, 500, 'Internal error during plan generation')
@@ -650,8 +653,7 @@ app.post('/api/generate-document', async (req, res) => {
   }
 })
 
-import { errorHandler } from './errorHandler.js'
-
+// Global error handler
 app.use(errorHandler)
 
 export default app
