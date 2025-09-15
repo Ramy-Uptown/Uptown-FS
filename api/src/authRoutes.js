@@ -269,15 +269,13 @@ router.patch('/users/:id/role', authMiddleware, adminOnly, async (req, res) => {
     if (!VALID_ROLES.includes(role)) {
       return res.status(400).json({ error: { message: 'Invalid role specified' } })
     }
-    // Admins cannot assign superadmin
-    if (req.user.role === 'admin' && role === 'superadmin') {
-      return res.status(403).json({ error: { message: 'Admins cannot assign superadmin role' } })
-    }
-    // Prevent admins from changing superadmin accounts
+    // Allow admins to manage all roles except self-promotion
     const tgt = await pool.query('SELECT role FROM users WHERE id=$1', [id])
     if (tgt.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
-    if (req.user.role === 'admin' && tgt.rows[0].role === 'superadmin') {
-      return res.status(403).json({ error: { message: 'Admins cannot modify superadmin accounts' } })
+    if (req.user.role === 'admin' && req.user.id === id) {
+      if (role === 'superadmin' && tgt.rows[0].role !== 'superadmin') {
+        return res.status(403).json({ error: { message: 'Cannot promote yourself to superadmin' } })
+      }
     }
     const result = await pool.query('UPDATE users SET role=$1, updated_at=now() WHERE id=$2 RETURNING id, email, role, active', [role, id])
     // Audit

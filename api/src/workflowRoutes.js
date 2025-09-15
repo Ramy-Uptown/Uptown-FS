@@ -971,4 +971,10 @@ router.post(
     } catch (e) {
       try { await client.query('ROLLBACK') } catch {}
       client.release()
-      console
+      console.error('POST /api/workflow/reservation-forms error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+export default router
