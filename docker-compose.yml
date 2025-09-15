@@ -28,12 +28,12 @@ services:
       - .env
     environment:
       - NODE_ENV=development
+      # Remove JWT_SECRET from here - only from .env file
       - DB_HOST=db
       - DB_PORT=5432
       - DB_USER=appuser
-      - DB_PASSWORD=apppass
       - DB_NAME=appdb
-      - JWT_SECRET=devsecretchange
+      # Database password should come from .env file
     volumes:
       - ./api:/app
       - /app/node_modules
