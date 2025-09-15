@@ -29,6 +29,7 @@ import reportsRoutes from './reportsRoutes.js'
 import roleManagementRoutes from './roleManagement.js'
 import offerWorkflowRoutes from './offerWorkflow.js'
 import customerRoutes from './customerRoutes.js'
+import notificationService from './notificationService.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -95,6 +96,53 @@ app.use('/api/reports', reportsRoutes)
 app.use('/api/roles', roleManagementRoutes)
 app.use('/api', offerWorkflowRoutes)
 app.use('/api', customerRoutes)
+
+// Notification endpoints
+app.get('/api/notifications', authLimiter, authMiddleware, async (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 20)
+    const offset = Number(req.query.offset || 0)
+    const notifications = await notificationService.getUserNotifications(req.user.id, limit, offset)
+    res.json({ ok: true, notifications })
+  } catch (error) {
+    console.error('Get notifications error:', error)
+    res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+app.get('/api/notifications/unread-count', authLimiter, authMiddleware, async (req, res) => {
+  try {
+    const count = await notificationService.getUnreadNotificationCount(req.user.id)
+    res.json({ ok: true, count })
+  } catch (error) {
+    console.error('Get unread count error:', error)
+    res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+app.patch('/api/notifications/:id/read', authLimiter, authMiddleware, async (req, res) => {
+  try {
+    const notificationId = Number(req.params.id)
+    await notificationService.markNotificationAsRead(notificationId, req.user.id)
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('Mark as read error:', error)
+    res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+app.patch('/api/notifications/mark-all-read', authLimiter, authMiddleware, async (req, res) => {
+  try {
+    await pool.query(
+      'UPDATE notifications SET is_read = true WHERE user_id = $1 AND is_read = false',
+      [req.user.id]
+    )
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('Mark all as read error:', error)
+    res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
 
 // Block management
 import blockManagementRoutes from './blockManagement.js'
