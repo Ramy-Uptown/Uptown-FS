@@ -155,6 +155,101 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    -- Ensure units has blocked_until column for block management integration
+    ALTER TABLE IF EXISTS units
+      ADD COLUMN IF NOT EXISTS blocked_until TIMESTAMPTZ;
+
+    -- Customers
+    CREATE TABLE IF NOT EXISTS customers (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) UNIQUE,
+      phone VARCHAR(50),
+      nationality VARCHAR(100),
+      id_number VARCHAR(100),
+      id_type VARCHAR(50),
+      address TEXT,
+      date_of_birth DATE,
+      occupation VARCHAR(255),
+      company VARCHAR(255),
+      active BOOLEAN DEFAULT true,
+      created_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Offers (preliminary offers / quotations)
+    CREATE TABLE IF NOT EXISTS offers (
+      id SERIAL PRIMARY KEY,
+      title TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      total_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+      discount_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+      customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+      unit_id INTEGER REFERENCES units(id) ON DELETE SET NULL,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Offer history
+    CREATE TABLE IF NOT EXISTS offer_history (
+      id SERIAL PRIMARY KEY,
+      offer_id INTEGER NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+      action VARCHAR(50) NOT NULL,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Notifications
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type VARCHAR(50) NOT NULL,
+      ref_table VARCHAR(50),
+      ref_id INTEGER,
+      message TEXT NOT NULL,
+      is_read BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Blocks (unit blocking requests/approvals)
+    CREATE TABLE IF NOT EXISTS blocks (
+      id SERIAL PRIMARY KEY,
+      unit_id INTEGER NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+      requested_by INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+      duration_days INTEGER NOT NULL,
+      reason TEXT,
+      status TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected | expired
+      blocked_until TIMESTAMPTZ NOT NULL,
+      approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      approved_at TIMESTAMPTZ,
+      approval_reason TEXT,
+      rejected_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      rejected_at TIMESTAMPTZ,
+      rejection_reason TEXT,
+      extension_count INTEGER DEFAULT 0,
+      expiry_notified BOOLEAN DEFAULT false,
+      last_extension_reason TEXT,
+      last_extended_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      last_extended_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Ensure enhanced columns exist on offers/blocks for older deployments
+    ALTER TABLE IF EXISTS offers
+      ADD COLUMN IF NOT EXISTS discount_percent NUMERIC(5,2) DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id),
+      ADD COLUMN IF NOT EXISTS unit_id INTEGER REFERENCES units(id);
+
+    ALTER TABLE IF EXISTS blocks 
+      ADD COLUMN IF NOT EXISTS extension_count INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS expiry_notified BOOLEAN DEFAULT false,
+      ADD COLUMN IF NOT EXISTS last_extension_reason TEXT,
+      ADD COLUMN IF NOT EXISTS last_extended_by INTEGER REFERENCES users(id),
+      ADD COLUMN IF NOT EXISTS last_extended_at TIMESTAMPTZ;
 
     -- Sales team assignments: map manager to consultants (many-to-many)
     CREATE TABLE IF NOT EXISTS sales_team_members (
