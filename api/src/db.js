@@ -179,15 +179,15 @@ export async function initDb() {
 
     -- Trigger function
     CREATE OR REPLACE FUNCTION trigger_set_timestamp()
-    RETURNS TRIGGER AS $$
+    RETURNS TRIGGER AS $
     BEGIN
       NEW.updated_at = NOW();
       RETURN NEW;
     END;
-    $$ LANGUAGE plpgsql;
+    $ LANGUAGE plpgsql;
 
     -- Create triggers if they don't already exist
-    DO $$
+    DO $
     BEGIN
       IF NOT EXISTS (
         SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_users'
@@ -252,7 +252,7 @@ export async function initDb() {
         EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
     END;
-    $$
+    $
   `)
 
   // Seed initial admin if table empty
@@ -267,5 +267,26 @@ export async function initDb() {
     )
     console.log(`Seeded initial admin user: ${email || 'admin@example.com'}`)
   }
+
+  // Seed initial superadmin if none exists and env provided
+  try {
+    const sa = await pool.query("SELECT COUNT(*)::int AS c FROM users WHERE role='superadmin'")
+    const hasSA = (sa.rows[0]?.c || 0) > 0
+    const SA_EMAIL = String(process.env.SUPERADMIN_EMAIL || '').trim().toLowerCase()
+    const SA_PASSWORD = String(process.env.SUPERADMIN_PASSWORD || '')
+    if (!hasSA && SA_EMAIL && SA_PASSWORD) {
+      const hash = await bcrypt.hash(SA_PASSWORD, 10)
+      await pool.query(
+        'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3)',
+        [SA_EMAIL, hash, 'superadmin']
+      )
+      console.log(`[db] Seeded initial superadmin user: ${SA_EMAIL}`)
+    } else if (!hasSA) {
+      console.log('[db] No superadmin exists. Set SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD to seed one.')
+    }
+  } catch (e) {
+    console.error('[db] Error while seeding superadmin:', e)
+  }
+
   console.log('[db] Database schema initialized.')
 }
