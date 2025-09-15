@@ -21,8 +21,7 @@ export const pool = new pg.Pool({
 })
 
 export async function initDb() {
-  console.log('[db] Initializing database schema...')
-  // Schema setup
+  // Schema setup - COMPLETE VERSION
   await pool.query(`
     -- Users
     CREATE TABLE IF NOT EXISTS users (
@@ -30,19 +29,10 @@ export async function initDb() {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
+      active BOOLEAN DEFAULT true,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
-
-    -- =============================================================
-    -- == THIS IS THE FIX TO ENSURE THE 'active' COLUMN EXISTS    ==
-    -- =============================================================
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
-
-    -- Add optional profile fields to users
-    ALTER TABLE IF EXISTS users
-      ADD COLUMN IF NOT EXISTS notes TEXT,
-      ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT '{}'::jsonb;
 
     -- Add/update a CHECK constraint on the user roles for data integrity
     ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
@@ -83,7 +73,7 @@ export async function initDb() {
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       description TEXT,
-      rules JSONB NOT NULL DEFAULT '{}'::jsonb, -- flexible rules
+      rules JSONB NOT NULL DEFAULT '{}'::jsonb,
       active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -109,7 +99,7 @@ export async function initDb() {
       unit_type TEXT,
       sales_rep_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       policy_id INTEGER REFERENCES commission_policies(id) ON DELETE SET NULL,
-      status TEXT NOT NULL DEFAULT 'draft', -- draft | pending_approval | approved | rejected
+      status TEXT NOT NULL DEFAULT 'draft',
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -126,7 +116,7 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS deal_history (
       id SERIAL PRIMARY KEY,
       deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
-      action TEXT NOT NULL, -- create | submit | approve | reject | modify
+      action TEXT NOT NULL,
       user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -152,12 +142,11 @@ export async function initDb() {
       unit_type TEXT,
       base_price NUMERIC(18,2) NOT NULL DEFAULT 0,
       currency TEXT NOT NULL DEFAULT 'EGP',
+      available BOOLEAN DEFAULT true,
+      blocked_until TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
-    -- Ensure units has blocked_until column for block management integration
-    ALTER TABLE IF EXISTS units
-      ADD COLUMN IF NOT EXISTS blocked_until TIMESTAMPTZ;
 
     -- Customers
     CREATE TABLE IF NOT EXISTS customers (
@@ -184,7 +173,7 @@ export async function initDb() {
       title TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
       total_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
-      discount_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+      discount_percent NUMERIC(5,2) DEFAULT 0,
       customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
       unit_id INTEGER REFERENCES units(id) ON DELETE SET NULL,
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -221,7 +210,7 @@ export async function initDb() {
       requested_by INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
       duration_days INTEGER NOT NULL,
       reason TEXT,
-      status TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected | expired
+      status TEXT NOT NULL DEFAULT 'pending',
       blocked_until TIMESTAMPTZ NOT NULL,
       approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       approved_at TIMESTAMPTZ,
@@ -238,18 +227,16 @@ export async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
-    -- Ensure enhanced columns exist on offers/blocks for older deployments
-    ALTER TABLE IF EXISTS offers
-      ADD COLUMN IF NOT EXISTS discount_percent NUMERIC(5,2) DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id),
-      ADD COLUMN IF NOT EXISTS unit_id INTEGER REFERENCES units(id);
-
-    ALTER TABLE IF EXISTS blocks 
-      ADD COLUMN IF NOT EXISTS extension_count INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS expiry_notified BOOLEAN DEFAULT false,
-      ADD COLUMN IF NOT EXISTS last_extension_reason TEXT,
-      ADD COLUMN IF NOT EXISTS last_extended_by INTEGER REFERENCES users(id),
-      ADD COLUMN IF NOT EXISTS last_extended_at TIMESTAMPTZ;
+    -- Approval policies for discount limits
+    CREATE TABLE IF NOT EXISTS approval_policies (
+      id SERIAL PRIMARY KEY,
+      scope_type VARCHAR(50) NOT NULL DEFAULT 'global',
+      scope_id INTEGER,
+      policy_limit_percent NUMERIC(5,2) NOT NULL DEFAULT 5.00,
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
 
     -- Sales team assignments: map manager to consultants (many-to-many)
     CREATE TABLE IF NOT EXISTS sales_team_members (
@@ -266,7 +253,7 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS user_audit_log (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      action TEXT NOT NULL, -- e.g. set_role, set_active, update_profile, set_password, create_user, deactivate_user
+      action TEXT NOT NULL,
       changed_by INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
       details JSONB DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -282,7 +269,7 @@ export async function initDb() {
     $$ LANGUAGE plpgsql;
 
     -- Create triggers if they don't already exist
-    DO $
+    DO $$
     BEGIN
       IF NOT EXISTS (
         SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_users'
@@ -339,6 +326,51 @@ export async function initDb() {
       END IF;
 
       IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_customers'
+      ) THEN
+        CREATE TRIGGER set_timestamp_customers
+        BEFORE UPDATE ON customers
+        FOR EACH ROW
+        EXECUTE FUNCTION trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_offers'
+      ) THEN
+        CREATE TRIGGER set_timestamp_offers
+        BEFORE UPDATE ON offers
+        FOR EACH ROW
+        EXECUTE FUNCTION trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_blocks'
+      ) THEN
+        CREATE TRIGGER set_timestamp_blocks
+        BEFORE UPDATE ON blocks
+        FOR EACH ROW
+        EXECUTE FUNCTION trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_notifications'
+      ) THEN
+        CREATE TRIGGER set_timestamp_notifications
+        BEFORE UPDATE ON notifications
+        FOR EACH ROW
+        EXECUTE FUNCTION trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_approval_policies'
+      ) THEN
+        CREATE TRIGGER set_timestamp_approval_policies
+        BEFORE UPDATE ON approval_policies
+        FOR EACH ROW
+        EXECUTE FUNCTION trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
         SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_sales_team_members'
       ) THEN
         CREATE TRIGGER set_timestamp_sales_team_members
@@ -347,7 +379,7 @@ export async function initDb() {
         EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
     END;
-    $
+    $$
   `)
 
   // Seed initial admin if table empty
@@ -362,26 +394,4 @@ export async function initDb() {
     )
     console.log(`Seeded initial admin user: ${email || 'admin@example.com'}`)
   }
-
-  // Seed initial superadmin if none exists and env provided
-  try {
-    const sa = await pool.query("SELECT COUNT(*)::int AS c FROM users WHERE role='superadmin'")
-    const hasSA = (sa.rows[0]?.c || 0) > 0
-    const SA_EMAIL = String(process.env.SUPERADMIN_EMAIL || '').trim().toLowerCase()
-    const SA_PASSWORD = String(process.env.SUPERADMIN_PASSWORD || '')
-    if (!hasSA && SA_EMAIL && SA_PASSWORD) {
-      const hash = await bcrypt.hash(SA_PASSWORD, 10)
-      await pool.query(
-        'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3)',
-        [SA_EMAIL, hash, 'superadmin']
-      )
-      console.log(`[db] Seeded initial superadmin user: ${SA_EMAIL}`)
-    } else if (!hasSA) {
-      console.log('[db] No superadmin exists. Set SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD to seed one.')
-    }
-  } catch (e) {
-    console.error('[db] Error while seeding superadmin:', e)
-  }
-
-  console.log('[db] Database schema initialized.')
 }
