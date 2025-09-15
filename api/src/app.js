@@ -30,6 +30,7 @@ import roleManagementRoutes from './roleManagement.js'
 import offerWorkflowRoutes from './offerWorkflow.js'
 import customerRoutes from './customerRoutes.js'
 import notificationService from './notificationService.js'
+import dashboardRoutes from './dashboardRoutes.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -94,8 +95,9 @@ app.use('/api/workflow', workflowRoutes)
 app.use('/api/inventory', inventoryRoutes)
 app.use('/api/reports', reportsRoutes)
 app.use('/api/roles', roleManagementRoutes)
-app.use('/api', offerWorkflowRoutes)
-app.use('/api', customerRoutes)
+app.use('/api/offers', offerWorkflowRoutes)
+app.use('/api/customers', customerRoutes)
+app.use('/api/dashboard', dashboardRoutes)
 
 // Notification endpoints
 app.get('/api/notifications', authLimiter, authMiddleware, async (req, res) => {
@@ -146,7 +148,7 @@ app.patch('/api/notifications/mark-all-read', authLimiter, authMiddleware, async
 
 // Block management
 import blockManagementRoutes from './blockManagement.js'
-app.use('/api', blockManagementRoutes)
+app.use('/api/blocks', blockManagementRoutes)
 
 // Simple in-process notifier for hold reminders (runs hourly)
 setInterval(async () => {
