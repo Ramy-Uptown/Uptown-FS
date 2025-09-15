@@ -648,4 +648,8 @@ app.post('/api/generate-document', async (req, res) => {
   }
 })
 
+import { errorHandler } from './errorHandler.js'
+
+app.use(errorHandler)
+
 export default app
