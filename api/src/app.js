@@ -94,6 +94,10 @@ app.use('/api/reports', reportsRoutes)
 app.use('/api/roles', roleManagementRoutes)
 app.use('/api', offerWorkflowRoutes)
 
+// Block management
+import blockManagementRoutes from './blockManagement.js'
+app.use('/api', blockManagementRoutes)
+
 // Simple in-process notifier for hold reminders (runs hourly)
 setInterval(async () => {
   try {
