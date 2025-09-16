@@ -30,12 +30,12 @@ jobs:
             context: ./api
             file: ./api/Dockerfile
             images: |
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api
+              ghcr.io/${{ github.repository }}
+              ghcr.io/${{ github.repository }}-api
           - id: client
             context: ./client
             file: ./client/Dockerfile
-            images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-client
+            images: ghcr.io/${{ github.repository }}-client
 
     permissions:
       contents: read
