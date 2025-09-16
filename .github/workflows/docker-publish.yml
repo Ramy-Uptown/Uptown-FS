@@ -29,13 +29,15 @@ jobs:
       matrix:
         include:
           - id: api
-            image_suffix: -api
             context: ./api
             file: ./api/Dockerfile
+            images: |
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api
           - id: client
-            image_suffix: -client
             context: ./client
             file: ./client/Dockerfile
+            images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-client
 
     permissions:
       contents: read
@@ -82,7 +84,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}${{ matrix.image_suffix }}
+          images: ${{ matrix.images }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
