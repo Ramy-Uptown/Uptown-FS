@@ -52,6 +52,11 @@ export async function initDb() {
       'ceo'
     ));
 
+    -- Ensure optional profile columns exist (defensive against migration drift)
+    ALTER TABLE IF EXISTS users
+      ADD COLUMN IF NOT EXISTS notes TEXT,
+      ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT '{}'::jsonb;
+
     -- Auth tokens
     CREATE TABLE IF NOT EXISTS refresh_tokens (
       token TEXT PRIMARY KEY,
