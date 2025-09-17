@@ -102,7 +102,7 @@ createRoot(document.getElementById('root')).render(
         <Route
           path="/admin/sales"
           element={
-            <RoleBasedRoute allowedRoles={['superadmin']}>
+            <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
               <SalesTeam />
             </RoleBasedRoute>
           }

@@ -107,10 +107,11 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Commissions Report', href: '/admin/commissions' }
         ]
       case 'admin':
-        // In this context, admin manages employees only: expose Users page only.
+        // In this context, admin manages employees: expose Users and Sales Team pages.
         return [
           ...base,
-          { label: 'Users', href: '/admin/users' }
+          { label: 'Users', href: '/admin/users' },
+          { label: 'Sales Team', href: '/admin/sales' }
         ]
       case 'financial_manager':
         return [
