@@ -280,7 +280,21 @@ router.get('/me', authMiddleware, async (req, res) => {
 // User management (admin)
 router.get('/users', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, email, role, active, created_at, updated_at, notes, meta FROM users ORDER BY id ASC')
+    const result = await pool.query(`
+      SELECT 
+        u.id, u.email, u.role, u.active, u.created_at, u.updated_at, u.notes, u.meta,
+        lr.created_at AS last_role_change_at,
+        lr.changed_by AS last_role_changed_by
+      FROM users u
+      LEFT JOIN LATERAL (
+        SELECT id, created_at, changed_by
+        FROM user_audit_log
+        WHERE user_id = u.id AND action = 'set_role'
+        ORDER BY id DESC
+        LIMIT 1
+      ) lr ON true
+      ORDER BY u.id ASC
+    `)
     return res.json({ ok: true, users: result.rows })
   } catch (e) {
     console.error('GET /api/auth/users error:', e)
@@ -327,7 +341,7 @@ router.patch('/users/:id/role', authMiddleware, requireRole(['superadmin']), asy
 // Create user (admin or superadmin). Admin cannot create superadmin users.
 router.post('/users', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const { email, password, role = 'user' } = req.body || {}
+    const { email, password, role = 'user', notes, meta } = req.body || {}
     if (!email || typeof email !== 'string') return res.status(400).json({ error: { message: 'Email is required' } })
     if (!password || typeof password !== 'string' || password.length < 6) return res.status(400).json({ error: { message: 'Password must be at least 6 characters' } })
     if (role && typeof role === 'string' && !VALID_ROLES.includes(role)) return res.status(400).json({ error: { message: 'Invalid role specified' } })
@@ -342,9 +356,10 @@ router.post('/users', authMiddleware, adminOnly, async (req, res) => {
       finalRole = role || 'user'
     }
 
+    const metaObj = isObject(meta) ? meta : {}
     const insert = await pool.query(
-      'INSERT INTO users (email, password_hash, role, active) VALUES ($1, $2, $3, TRUE) RETURNING id, email, role, active',
-      [normalizedEmail, hash, finalRole]
+      'INSERT INTO users (email, password_hash, role, active, notes, meta) VALUES ($1, $2, $3, TRUE, $4, $5) RETURNING id, email, role, active, notes, meta',
+      [normalizedEmail, hash, finalRole, notes || null, JSON.stringify(metaObj)]
     )
     const created = insert.rows[0]
     await pool.query(
