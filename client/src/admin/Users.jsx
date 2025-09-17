@@ -38,6 +38,11 @@ export default function Users() {
 
     const [me, setMe] = useState(null);
 
+    // Position history modal state
+    const [historyForId, setHistoryForId] = useState(null);
+    const [historyItems, setHistoryItems] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+
     // --- Data Loading ---
     async function loadData() {
         setIsLoading(true);
@@ -133,6 +138,29 @@ export default function Users() {
             setEditingId(null);
             setEditEmail('');
         });
+    };
+
+    // Position history modal actions
+    const openHistory = async (userId) => {
+        setHistoryForId(userId);
+        setHistoryLoading(true);
+        setHistoryItems([]);
+        try {
+            const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${userId}/audit`);
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load history');
+            const items = (data.audit || []).filter(a => a.action === 'set_role');
+            setHistoryItems(items);
+        } catch (e) {
+            setError(e.message || 'Failed to load history');
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+    const closeHistory = () => {
+        setHistoryForId(null);
+        setHistoryItems([]);
+        setHistoryLoading(false);
     };
     
     const changeRole = (userId, role) => {
@@ -316,6 +344,7 @@ export default function Users() {
                                             <td className="px-6 py-4 text-xs text-gray-500">{new Date(u.updated_at).toLocaleDateString()}</td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex justify-end gap-4">
+                                                    <button onClick={() => openHistory(u.id)} disabled={isBusy} className="font-medium text-gray-700 hover:text-gray-900 disabled:text-gray-300">Position History</button>
                                                     <button onClick={() => setEditingId(u.id)} disabled={isBusy} className="font-medium text-blue-600 hover:text-blue-800 disabled:text-gray-300">Edit</button>
                                                     <button onClick={() => toggleActive(u)} disabled={isBusy || isSelf} className="font-medium text-yellow-600 hover:text-yellow-800 disabled:text-gray-300">
                                                         {u.active ? 'Deactivate' : 'Activate'}
@@ -329,6 +358,44 @@ export default function Users() {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Position History Modal */}
+                {historyForId !== null && (
+                  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl">
+                      <div className="px-5 py-3 border-b flex items-center justify-between">
+                        <h3 className="text-lg font-semibold">Position History — User #{historyForId}</h3>
+                        <button onClick={closeHistory} className="text-gray-600 hover:text-gray-900">Close</button>
+                      </div>
+                      <div className="p-4 max-h-[65vh] overflow-y-auto">
+                        {historyLoading ? (
+                          <div className="text-gray-500">Loading…</div>
+                        ) : historyItems.length === 0 ? (
+                          <div className="text-gray-500">No role changes found for this user.</div>
+                        ) : (
+                          <ul className="divide-y">
+                            {historyItems.map(item => (
+                              <li key={item.id} className="py-2 text-sm">
+                                <div className="text-gray-800">
+                                  {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
+                                </div>
+                                <div className="text-gray-600">
+                                  Changed by: {userById[item.changed_by]?.email || `id ${item.changed_by}`}
+                                </div>
+                                <div className="text-gray-500">
+                                  Details: <code className="text-xs">{item.details ? JSON.stringify(item.details) : ''}</code>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <div className="px-5 py-3 border-t text-right">
+                        <button onClick={closeHistory} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded">Close</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
             </main>
         </div>
     );
