@@ -26,6 +26,13 @@ export default function SalesTeam() {
   const [assignFor, setAssignFor] = useState(0) // sales row id currently being assigned
   const [assignManagerId, setAssignManagerId] = useState('')
 
+  function randomPassword() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
+    let s = ''
+    for (let i = 0; i < 12; i++) s += chars[Math.floor(Math.random() * chars.length)]
+    return s
+  }
+
   async function load(p = page) {
     try {
       setLoading(true)
@@ -119,6 +126,54 @@ export default function SalesTeam() {
     await load()
   }
 
+  async function copyUserIdToClipboard(uid) {
+    try {
+      await navigator.clipboard.writeText(String(uid))
+      alert('User ID copied')
+    } catch {
+      alert('Copy failed')
+    }
+  }
+
+  async function autoLinkUser(row) {
+    try {
+      if (!row.email) {
+        alert('This sales person has no email. Please set an email first.')
+        return
+      }
+      const usersResp = await fetchWithAuth(`${API_URL}/api/auth/users`)
+      const usersData = await usersResp.json()
+      if (!usersResp.ok) throw new Error(usersData?.error?.message || 'Failed to fetch users')
+      const email = String(row.email).trim().toLowerCase()
+      const match = (usersData.users || []).find(u => String(u.email || '').toLowerCase() === email)
+      let userId = match?.id
+      if (!userId) {
+        if (!confirm(`No app user found with email ${row.email}. Create one now?`)) return
+        const pw = randomPassword()
+        const createResp = await fetchWithAuth(`${API_URL}/api/auth/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: pw, role: 'user', meta: { full_name: row.name || '' } })
+        })
+        const createData = await createResp.json()
+        if (!createResp.ok) throw new Error(createData?.error?.message || 'User creation failed')
+        userId = createData.user.id
+        alert(`Created app user with id ${userId}. Temporary password generated.`)
+      }
+      // Link to sales row
+      const patchResp = await fetchWithAuth(`${API_URL}/api/sales/${row.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: Number(userId) })
+      })
+      const patchData = await patchResp.json()
+      if (!patchResp.ok) throw new Error(patchData?.error?.message || 'Failed to link user')
+      await load()
+    } catch (e) {
+      alert(e.message || String(e))
+    }
+  }
+
   // Manager assignment handlers
   function openAssign(row) {
     setAssignFor(row.id)
@@ -184,6 +239,8 @@ export default function SalesTeam() {
     u.role === 'sales_manager' || u.role === 'manager' || u.role === 'contract_manager' || u.role === 'financial_manager'
   )
 
+  const canAssign = isSuperAdmin || me?.role === 'admin'
+
   const handleLogout = async () => {
     try {
       const rt = localStorage.getItem('refresh_token')
@@ -248,6 +305,7 @@ export default function SalesTeam() {
                 <th style={th}>Email</th>
                 <th style={th}>Role</th>
                 <th style={th}>Active</th>
+                <th style={th}>App User</th>
                 <th style={th}>Manager</th>
                 <th style={th}>Actions</th>
               </tr>
@@ -267,7 +325,20 @@ export default function SalesTeam() {
                   <td style={td}>{r.active ? 'Yes' : 'No'}</td>
                   <td style={{ ...td, minWidth: 220 }}>
                     {consultantUserId ? (
-                      isAssigning && isSuperAdmin ? (
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={metaText}>#{consultantUserId}</span>
+                        <button onClick={() => copyUserIdToClipboard(consultantUserId)} style={btn}>Copy</button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={metaText}>Not linked</span>
+                        <button onClick={() => autoLinkUser(r)} style={btn}>Auto-link</button>
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ ...td, minWidth: 220 }}>
+                    {consultantUserId ? (
+                      isAssigning && canAssign ? (
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <select value={assignManagerId} onChange={e => setAssignManagerId(e.target.value)} style={ctrl}>
                             <option value="">Select manager…</option>
@@ -282,7 +353,7 @@ export default function SalesTeam() {
                       ) : (
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           <span style={metaText}>{currentManager ? `Current: ${currentManagerEmail}` : 'No manager'}</span>
-                          {isSuperAdmin ? <button onClick={() => openAssign(r)} style={btn}>Change</button> : null}
+                          {canAssign ? <button onClick={() => openAssign(r)} style={btn}>Change</button> : null}
                         </div>
                       )
                     ) : (
