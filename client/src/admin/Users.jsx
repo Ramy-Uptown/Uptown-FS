@@ -91,7 +91,7 @@ export default function Users() {
                 const errorData = await resp.json().catch(() => ({ error: { message: 'An unknown error occurred' } }));
                 throw new Error(errorData.error?.message || 'Failed to create user');
             }
-            await load(); // Refresh user list
+            await loadData(); // Refresh user list
             setCreateForm({ email: '', password: '', role: 'user' }); // Reset form
         }).finally(() => setCreating(false));
     };
@@ -164,6 +164,8 @@ export default function Users() {
     const userById = Object.fromEntries(users.map(u => [u.id, u]));
     const roleOptions = [...new Set(users.map(u => u.role).concat('user', 'admin', 'superadmin'))].sort();
 
+    const isSuperAdmin = me?.role === 'superadmin';
+
     // --- Render ---
     return (
         <div className="bg-gray-50 min-h-screen font-sans">
@@ -184,12 +186,19 @@ export default function Users() {
                                 <input id="password" type="password" placeholder="Min 6 characters" value={createForm.password} onChange={e => setCreateForm(s => ({ ...s, password: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg" required />
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-600 mb-1" htmlFor="role">Role</label>
-                            <select id="role" value={createForm.role} onChange={e => setCreateForm(s => ({ ...s, role: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg">
-                                {roleOptions.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-                            </select>
-                        </div>
+                        {isSuperAdmin ? (
+                          <div>
+                              <label className="block text-sm font-medium text-gray-600 mb-1" htmlFor="role">Role</label>
+                              <select id="role" value={createForm.role} onChange={e => setCreateForm(s => ({ ...s, role: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg">
+                                  {roleOptions.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                              </select>
+                          </div>
+                        ) : (
+                          <div>
+                              <label className="block text-sm font-medium text-gray-600 mb-1">Role</label>
+                              <input type="text" value="user" readOnly className="w-full p-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600" />
+                          </div>
+                        )}
                         <button type="submit" disabled={creating} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:bg-blue-300">
                             {creating ? 'Creating...' : 'Create User'}
                         </button>
@@ -247,13 +256,20 @@ export default function Users() {
                                                         <button onClick={() => setEditingId(null)} className="text-gray-500 hover:text-gray-700">Cancel</button>
                                                     </div>
                                                 ) : (
-                                                    <div className="font-medium text-gray-900">{u.email}</div>
+                                                    <div className="font-medium text-gray-900">
+                                                        {u.email}
+                                                        {u.meta?.full_name ? <div className="text-xs text-gray-500">{u.meta.full_name}</div> : null}
+                                                    </div>
                                                 )}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <select value={u.role} onChange={(e) => changeRole(u.id, e.target.value)} disabled={isBusy || isSelf} className="p-1 border border-gray-300 rounded-md bg-white">
-                                                    {roleOptions.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-                                                </select>
+                                                {isSuperAdmin ? (
+                                                  <select value={u.role} onChange={(e) => changeRole(u.id, e.target.value)} disabled={isBusy || isSelf} className="p-1 border border-gray-300 rounded-md bg-white">
+                                                      {roleOptions.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                                                  </select>
+                                                ) : (
+                                                  <span className="text-gray-800">{String(u.role || '').replace(/_/g, ' ')}</span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4 text-xs text-gray-600">
                                                {currentManagerId ? (userById[currentManagerId]?.email || `ID: ${currentManagerId}`) : 'N/A'}

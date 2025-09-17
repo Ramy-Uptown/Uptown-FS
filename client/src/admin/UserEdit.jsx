@@ -28,6 +28,7 @@ export default function UserEdit() {
   const [audit, setAudit] = useState([])
 
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
+  const isSuperAdmin = me?.role === 'superadmin'
 
   const roleOptions = [
     'user',
@@ -289,7 +290,7 @@ export default function UserEdit() {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <label>
               <div style={metaText}>Role</div>
-              <select value={role} onChange={e => setRole(e.target.value)} disabled={isSelf} style={ctrl}>
+              <select value={role} onChange={e => setRole(e.target.value)} disabled={isSelf || !isSuperAdmin} style={ctrl}>
                 {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </label>
@@ -311,7 +312,7 @@ export default function UserEdit() {
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button type="submit" disabled={busy} style={btnPrimary}>Save email/notes/meta</button>
-            <button type="button" onClick={saveRole} disabled={busy || isSelf} style={btn}>Save role</button>
+            <button type="button" onClick={saveRole} disabled={busy || isSelf || !isSuperAdmin} style={btn}>Save role</button>
             <button type="button" onClick={saveActive} disabled={busy || isSelf} style={btnDanger}>{active ? 'Deactivate' : 'Activate'}</button>
           </div>
         </form>

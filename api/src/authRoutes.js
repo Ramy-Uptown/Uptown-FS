@@ -301,7 +301,7 @@ router.get('/users/:id', authMiddleware, adminOnly, async (req, res) => {
   }
 })
 
-router.patch('/users/:id/role', authMiddleware, adminOnly, async (req, res) => {
+router.patch('/users/:id/role', authMiddleware, requireRole(['superadmin']), async (req, res) => {
   try {
     const { role } = req.body || {}
     const id = Number(req.params.id)
@@ -309,16 +309,10 @@ router.patch('/users/:id/role', authMiddleware, adminOnly, async (req, res) => {
     if (!VALID_ROLES.includes(role)) {
       return res.status(400).json({ error: { message: 'Invalid role specified' } })
     }
-    // Allow admins to manage all roles except self-promotion
     const tgt = await pool.query('SELECT role FROM users WHERE id=$1', [id])
     if (tgt.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
-    if (req.user.role === 'admin' && req.user.id === id) {
-      if (role === 'superadmin' && tgt.rows[0].role !== 'superadmin') {
-        return res.status(403).json({ error: { message: 'Cannot promote yourself to superadmin' } })
-      }
-    }
     const result = await pool.query('UPDATE users SET role=$1, updated_at=now() WHERE id=$2 RETURNING id, email, role, active', [role, id])
-    // Audit
+    // Audit (who and when are captured)
     await pool.query(
       'INSERT INTO user_audit_log (user_id, action, changed_by, details) VALUES ($1, $2, $3, $4)',
       [id, 'set_role', req.user.id, JSON.stringify({ new_role: role })]
@@ -336,17 +330,21 @@ router.post('/users', authMiddleware, adminOnly, async (req, res) => {
     const { email, password, role = 'user' } = req.body || {}
     if (!email || typeof email !== 'string') return res.status(400).json({ error: { message: 'Email is required' } })
     if (!password || typeof password !== 'string' || password.length < 6) return res.status(400).json({ error: { message: 'Password must be at least 6 characters' } })
-    if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: { message: 'Invalid role specified' } })
-    if (req.user.role === 'admin' && role === 'superadmin') {
-      return res.status(403).json({ error: { message: 'Admins cannot create superadmin users' } })
-    }
+    if (role && typeof role === 'string' && !VALID_ROLES.includes(role)) return res.status(400).json({ error: { message: 'Invalid role specified' } })
     const normalizedEmail = email.trim().toLowerCase()
     const existing = await pool.query('SELECT 1 FROM users WHERE email=$1', [normalizedEmail])
     if (existing.rows.length > 0) return res.status(409).json({ error: { message: 'Email already registered' } })
     const hash = await bcrypt.hash(password, 10)
+
+    // Only superadmin can choose initial role. Admins always create 'user'.
+    let finalRole = 'user'
+    if (req.user.role === 'superadmin') {
+      finalRole = role || 'user'
+    }
+
     const insert = await pool.query(
       'INSERT INTO users (email, password_hash, role, active) VALUES ($1, $2, $3, TRUE) RETURNING id, email, role, active',
-      [normalizedEmail, hash, role]
+      [normalizedEmail, hash, finalRole]
     )
     const created = insert.rows[0]
     await pool.query(
