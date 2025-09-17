@@ -12,6 +12,10 @@ export default function SalesTeam() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
 
+  // current user
+  const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
+  const isSuperAdmin = me?.role === 'superadmin'
+
   const [form, setForm] = useState({ user_id: '', name: '', email: '', role: 'sales', active: true })
   const [editingId, setEditingId] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -263,7 +267,7 @@ export default function SalesTeam() {
                   <td style={td}>{r.active ? 'Yes' : 'No'}</td>
                   <td style={{ ...td, minWidth: 220 }}>
                     {consultantUserId ? (
-                      isAssigning ? (
+                      isAssigning && isSuperAdmin ? (
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <select value={assignManagerId} onChange={e => setAssignManagerId(e.target.value)} style={ctrl}>
                             <option value="">Select manager…</option>
@@ -278,7 +282,7 @@ export default function SalesTeam() {
                       ) : (
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           <span style={metaText}>{currentManager ? `Current: ${currentManagerEmail}` : 'No manager'}</span>
-                          <button onClick={() => openAssign(r)} style={btn}>Change</button>
+                          {isSuperAdmin ? <button onClick={() => openAssign(r)} style={btn}>Change</button> : null}
                         </div>
                       )
                     ) : (

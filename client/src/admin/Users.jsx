@@ -33,7 +33,7 @@ export default function Users() {
     const [createForm, setCreateForm] = useState({ email: '', password: '', role: 'user', fullName: '' });
     const [editingId, setEditingId] = useState(null);
     const [editEmail, setEditEmail] = useState('');
-    const [filters, setFilters] = useState({ status: 'active', role: 'all', search: '' });
+    const [filters, setFilters] = useState({ status: 'active', role: 'all', search: '', onlyNoManager: false });
     const [assignMap, setAssignMap] = useState({}); // { [userId]: managerId }
 
     const [me, setMe] = useState(null);
@@ -150,7 +150,23 @@ export default function Users() {
             const data = await resp.json();
             if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load history');
             const items = (data.audit || []).filter(a => a.action === 'set_role');
-            setHistoryItems(items);
+
+            // Compute humanized from -> to by looking at previous entries
+            const parsedAsc = [...items]
+              .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
+              .map((it, idx, arr) => {
+                let toRole = ''
+                try { toRole = (it.details && typeof it.details === 'object') ? it.details.new_role : JSON.parse(it.details || '{}').new_role } catch {}
+                const prev = idx > 0 ? arr[idx - 1] : null
+                let fromRole = ''
+                if (prev) {
+                  try { fromRole = (prev.details && typeof prev.details === 'object') ? prev.details.new_role : JSON.parse(prev.details || '{}').new_role } catch {}
+                }
+                return { ...it, _fromRole: fromRole || 'unknown', _toRole: toRole || 'unknown' }
+              })
+
+            // Show newest first
+            setHistoryItems(parsedAsc.reverse());
         } catch (e) {
             setError(e.message || 'Failed to load history');
         } finally {
@@ -208,6 +224,10 @@ export default function Users() {
         if (q && !(u.email || '').toLowerCase().includes(q) && !(u.notes || '').toLowerCase().includes(q)) {
             return false;
         }
+        if (filters.onlyNoManager) {
+            const hasManager = assignMap[u.id] != null && assignMap[u.id] !== '';
+            if (hasManager) return false;
+        }
         return true;
     });
     
@@ -259,7 +279,7 @@ export default function Users() {
                 </div>
 
                 {/* Filters */}
-                <div className="bg-white p-4 rounded-lg shadow-sm mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white p-4 rounded-lg shadow-sm mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
                     <input type="text" placeholder="Search by email or notes..." value={filters.search} onChange={e => setFilters(s => ({ ...s, search: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg" />
                     <select value={filters.role} onChange={e => setFilters(s => ({ ...s, role: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg">
                         <option value="all">All Roles</option>
@@ -270,6 +290,10 @@ export default function Users() {
                         <option value="inactive">Inactive</option>
                         <option value="all">All Statuses</option>
                     </select>
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" checked={filters.onlyNoManager} onChange={e => setFilters(s => ({ ...s, onlyNoManager: e.target.checked }))} />
+                      Only without manager
+                    </label>
                 </div>
                 
                 {error && <p className="bg-red-100 text-red-700 p-3 rounded-lg mb-6 text-center">{error}</p>}
@@ -383,7 +407,7 @@ export default function Users() {
                                   Changed by: {userById[item.changed_by]?.email || `id ${item.changed_by}`}
                                 </div>
                                 <div className="text-gray-500">
-                                  Details: <code className="text-xs">{item.details ? JSON.stringify(item.details) : ''}</code>
+                                  {String(item._fromRole || '').replace(/_/g,' ') || 'unknown'} → {String(item._toRole || '').replace(/_/g,' ')}
                                 </div>
                               </li>
                             ))}
