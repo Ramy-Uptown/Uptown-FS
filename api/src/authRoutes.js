@@ -280,7 +280,21 @@ router.get('/me', authMiddleware, async (req, res) => {
 // User management (admin)
 router.get('/users', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, email, role, active, created_at, updated_at, notes, meta FROM users ORDER BY id ASC')
+    const result = await pool.query(`
+      SELECT 
+        u.id, u.email, u.role, u.active, u.created_at, u.updated_at, u.notes, u.meta,
+        lr.created_at AS last_role_change_at,
+        lr.changed_by AS last_role_changed_by
+      FROM users u
+      LEFT JOIN LATERAL (
+        SELECT id, created_at, changed_by
+        FROM user_audit_log
+        WHERE user_id = u.id AND action = 'set_role'
+        ORDER BY id DESC
+        LIMIT 1
+      ) lr ON true
+      ORDER BY u.id ASC
+    `)
     return res.json({ ok: true, users: result.rows })
   } catch (e) {
     console.error('GET /api/auth/users error:', e)
@@ -301,7 +315,7 @@ router.get('/users/:id', authMiddleware, adminOnly, async (req, res) => {
   }
 })
 
-router.patch('/users/:id/role', authMiddleware, adminOnly, async (req, res) => {
+router.patch('/users/:id/role', authMiddleware, requireRole(['superadmin']), async (req, res) => {
   try {
     const { role } = req.body || {}
     const id = Number(req.params.id)
@@ -309,16 +323,10 @@ router.patch('/users/:id/role', authMiddleware, adminOnly, async (req, res) => {
     if (!VALID_ROLES.includes(role)) {
       return res.status(400).json({ error: { message: 'Invalid role specified' } })
     }
-    // Allow admins to manage all roles except self-promotion
     const tgt = await pool.query('SELECT role FROM users WHERE id=$1', [id])
     if (tgt.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
-    if (req.user.role === 'admin' && req.user.id === id) {
-      if (role === 'superadmin' && tgt.rows[0].role !== 'superadmin') {
-        return res.status(403).json({ error: { message: 'Cannot promote yourself to superadmin' } })
-      }
-    }
     const result = await pool.query('UPDATE users SET role=$1, updated_at=now() WHERE id=$2 RETURNING id, email, role, active', [role, id])
-    // Audit
+    // Audit (who and when are captured)
     await pool.query(
       'INSERT INTO user_audit_log (user_id, action, changed_by, details) VALUES ($1, $2, $3, $4)',
       [id, 'set_role', req.user.id, JSON.stringify({ new_role: role })]
@@ -333,20 +341,25 @@ router.patch('/users/:id/role', authMiddleware, adminOnly, async (req, res) => {
 // Create user (admin or superadmin). Admin cannot create superadmin users.
 router.post('/users', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const { email, password, role = 'user' } = req.body || {}
+    const { email, password, role = 'user', notes, meta } = req.body || {}
     if (!email || typeof email !== 'string') return res.status(400).json({ error: { message: 'Email is required' } })
     if (!password || typeof password !== 'string' || password.length < 6) return res.status(400).json({ error: { message: 'Password must be at least 6 characters' } })
-    if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: { message: 'Invalid role specified' } })
-    if (req.user.role === 'admin' && role === 'superadmin') {
-      return res.status(403).json({ error: { message: 'Admins cannot create superadmin users' } })
-    }
+    if (role && typeof role === 'string' && !VALID_ROLES.includes(role)) return res.status(400).json({ error: { message: 'Invalid role specified' } })
     const normalizedEmail = email.trim().toLowerCase()
     const existing = await pool.query('SELECT 1 FROM users WHERE email=$1', [normalizedEmail])
     if (existing.rows.length > 0) return res.status(409).json({ error: { message: 'Email already registered' } })
     const hash = await bcrypt.hash(password, 10)
+
+    // Only superadmin can choose initial role. Admins always create 'user'.
+    let finalRole = 'user'
+    if (req.user.role === 'superadmin') {
+      finalRole = role || 'user'
+    }
+
+    const metaObj = isObject(meta) ? meta : {}
     const insert = await pool.query(
-      'INSERT INTO users (email, password_hash, role, active) VALUES ($1, $2, $3, TRUE) RETURNING id, email, role, active',
-      [normalizedEmail, hash, role]
+      'INSERT INTO users (email, password_hash, role, active, notes, meta) VALUES ($1, $2, $3, TRUE, $4, $5) RETURNING id, email, role, active, notes, meta',
+      [normalizedEmail, hash, finalRole, notes || null, JSON.stringify(metaObj)]
     )
     const created = insert.rows[0]
     await pool.query(
