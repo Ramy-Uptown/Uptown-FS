@@ -361,7 +361,7 @@ router.patch(
       for (const f of allowedFields) {
         if (Object.prototype.hasOwnProperty.call(req.body || {}, f)) {
           params.push(req.body[f])
-          updates.push(`${f} = $${params.length}`)
+          updates.push(`${f} = ${params.length}`)
         }
       }
       if (updates.length === 0) {
@@ -387,7 +387,7 @@ router.patch(
             status='pending_approval',
             approved_by=NULL,
             updated_at=now()
-        WHERE id=$${params.length + 1}
+        WHERE id=${params.length + 1}
         RETURNING *`
       const updateParams = params.concat([id])
       const updRes = await client.query(updateSql, updateParams)
@@ -849,7 +849,7 @@ router.patch(
 router.post(
   '/sales-teams/assign',
   authMiddleware,
-  requireRole(['sales_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, consultant_user_id } = req.body || {}
@@ -875,7 +875,7 @@ router.post(
 router.patch(
   '/sales-teams/assign',
   authMiddleware,
-  requireRole(['sales_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, consultant_user_id, active } = req.body || {}
@@ -901,7 +901,7 @@ router.patch(
 router.post(
   '/contracts-teams/assign',
   authMiddleware,
-  requireRole(['contract_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id } = req.body || {}
@@ -927,7 +927,7 @@ router.post(
 router.patch(
   '/contracts-teams/assign',
   authMiddleware,
-  requireRole(['contract_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id, active } = req.body || {}
@@ -949,11 +949,10 @@ router.patch(
   }
 )
 
-// Finance team assignments
 router.post(
   '/finance-teams/assign',
   authMiddleware,
-  requireRole(['financial_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id } = req.body || {}
@@ -979,7 +978,7 @@ router.post(
 router.patch(
   '/finance-teams/assign',
   authMiddleware,
-  requireRole(['financial_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id, active } = req.body || {}
@@ -997,6 +996,9 @@ router.patch(
     } catch (e) {
       console.error('PATCH /api/workflow/finance-teams/assign error:', e)
       return bad(res, 500, 'Internal error')
+    }
+  }
+)
     }
   }
 )
@@ -1035,7 +1037,7 @@ router.get(
       )
       const uids = team.rows.map(r => r.uid)
       if (uids.length === 0) return ok(res, { payment_plans: [] })
-      const placeholders = uids.map((_, i) => `$${i + 1}`).join(',')
+      const placeholders = uids.map((_, i) => `${i + 1}`).join(',')
       const r = await pool.query(
         `SELECT * FROM payment_plans WHERE created_by IN (${placeholders}) ORDER BY id DESC`,
         uids

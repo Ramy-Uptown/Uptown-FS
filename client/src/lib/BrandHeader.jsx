@@ -101,18 +101,23 @@ export default function BrandHeader({ title, onLogout }) {
         return [
           { label: 'Users', href: '/admin/users' },
           { label: 'Sales Team', href: '/admin/sales' },
+          { label: 'Contracts Team', href: '/admin/contracts-team' },
+          { label: 'Finance Team', href: '/admin/finance-team' },
           { label: 'Commission Policies', href: '/admin/commission-policies' }
         ]
       case 'admin':
         // Admin should only see employee management. Remove Calculator/Deals shortcuts.
         return [
           { label: 'Users', href: '/admin/users' },
-          { label: 'Sales Team', href: '/admin/sales' }
+          { label: 'Sales Team', href: '/admin/sales' },
+          { label: 'Contracts Team', href: '/admin/contracts-team' },
+          { label: 'Finance Team', href: '/admin/finance-team' }
         ]
       case 'financial_manager':
         return [
           ...base,
           queuesLink,
+          { label: 'Finance Team', href: '/admin/finance-team' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'Holds', href: '/admin/holds' }
         ]
@@ -126,6 +131,7 @@ export default function BrandHeader({ title, onLogout }) {
         return [
           ...base,
           queuesLink,
+          { label: 'Sales Team', href: '/admin/sales-team' },
           { label: 'Team Proposals', href: '/deals/team-proposals' },
           { label: 'Holds', href: '/admin/holds' },
           { label: 'Workflow Logs', href: '/admin/workflow-logs' }
@@ -142,6 +148,7 @@ export default function BrandHeader({ title, onLogout }) {
       case 'contract_manager':
         return [
           ...baseWithoutCalc,
+          { label: 'Contracts Team', href: '/admin/contracts-team' },
           { label: 'Workflow Logs', href: '/admin/workflow-logs' },
           { label: 'Hold Approvals', href: '/admin/hold-approvals' }
         ]
