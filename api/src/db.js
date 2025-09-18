@@ -424,7 +424,7 @@ export async function initDb() {
         EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
     END;
-    $;
+    $$;
   `)
 
   // Seed initial admin if table empty
