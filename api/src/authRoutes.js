@@ -207,7 +207,7 @@ router.post('/request-password-reset', async (req, res) => {
 
     // Build reset URL (frontend route), configurable base
     const base = process.env.APP_BASE_URL || 'http://localhost:5173'
-    const resetUrl = `${base.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`
+    const resetUrl = `${base.replace(/\\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`
 
     // Send email if SMTP configured; always log for debugging
     console.log('[password reset] token for', normalizedEmail, token, 'expiresAt:', expiresAt.toISOString(), 'url:', resetUrl)
@@ -298,6 +298,24 @@ router.get('/users', authMiddleware, adminOnly, async (req, res) => {
     return res.json({ ok: true, users: result.rows })
   } catch (e) {
     console.error('GET /api/auth/users error:', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Limited: list users by role (for managers to assign teams)
+router.get('/users/by-role', authMiddleware, requireRole(['admin', 'superadmin', 'sales_manager', 'contract_manager', 'financial_manager']), async (req, res) => {
+  try {
+    const role = String(req.query.role || '').trim()
+    if (!role) return res.status(400).json({ error: { message: 'role query param is required' } })
+    if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: { message: 'Invalid role' } })
+    // Only allow fetching limited fields and active users
+    const r = await pool.query(
+      `SELECT id, email, role, active, meta FROM users WHERE role=$1 AND active=TRUE ORDER BY id ASC`,
+      [role]
+    )
+    return res.json({ ok: true, users: r.rows })
+  } catch (e) {
+    console.error('GET /api/auth/users/by-role error:', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
   }
 })
@@ -419,13 +437,13 @@ router.patch('/users/:id', authMiddleware, adminOnly, async (req, res) => {
       const existing = await pool.query('SELECT id FROM users WHERE email=$1 AND id<>$2', [normalizedEmail, id])
       if (existing.rows.length > 0) return res.status(409).json({ error: { message: 'Email already in use' } })
       params.push(normalizedEmail)
-      updates.push(`email=$${params.length}`)
+      updates.push(`email=${params.length}`)
       audit.email = { from: tgt.rows[0].email, to: normalizedEmail }
     }
 
     if (notes !== undefined) {
       params.push(String(notes))
-      updates.push(`notes=$${params.length}`)
+      updates.push(`notes=${params.length}`)
       audit.notes = { from: tgt.rows[0].old_notes || null, to: String(notes) }
     }
 
@@ -435,7 +453,7 @@ router.patch('/users/:id', authMiddleware, adminOnly, async (req, res) => {
         return res.status(400).json({ error: { message: 'meta must be an object' } })
       }
       params.push(JSON.stringify(meta))
-      updates.push(`meta=$${params.length}`)
+      updates.push(`meta=${params.length}`)
       audit.meta = true
     }
 
@@ -445,7 +463,7 @@ router.patch('/users/:id', authMiddleware, adminOnly, async (req, res) => {
 
     params.push(id)
     const result = await pool.query(
-      `UPDATE users SET ${updates.join(', ')}, updated_at=now() WHERE id=$${params.length} RETURNING id, email, role, active, notes, meta`,
+      `UPDATE users SET ${updates.join(', ')}, updated_at=now() WHERE id=${params.length} RETURNING id, email, role, active, notes, meta`,
       params
     )
     await pool.query(

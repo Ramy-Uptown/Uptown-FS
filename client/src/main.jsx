@@ -10,6 +10,8 @@ import Users from './admin/Users.jsx'
 import UserEdit from './admin/UserEdit.jsx'
 import Units from './admin/Units.jsx'
 import SalesTeam from './admin/SalesTeam.jsx'
+import ContractsTeam from './admin/ContractsTeam.jsx'
+import FinanceTeam from './admin/FinanceTeam.jsx'
 import CommissionPolicies from './admin/CommissionPolicies.jsx'
 import CommissionsReport from './admin/CommissionsReport.jsx'
 import StandardPricing from './admin/StandardPricing.jsx'
@@ -42,8 +44,23 @@ function PrivateRoute({ children }) {
   return children
 }
 
-function AdminRoute({ children }) {
-  return <RoleBasedRoute allowedRoles={['admin']}>{children}</RoleBasedRoute>;
+function HomeRedirect() {
+  const token = localStorage.getItem('auth_token')
+  const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
+  if (!token) {
+    return <Navigate to="/login" replace />
+  }
+  const role = user?.role
+  // Role-based landing
+  if (role === 'superadmin') return <Navigate to="/admin/users" replace />
+  if (role === 'admin') return <Navigate to="/admin/users" replace />
+  if (role === 'property_consultant') return <Navigate to="/calculator" replace />
+  if (role === 'sales_manager') return <Navigate to="/deals/queues" replace />
+  if (role === 'financial_manager') return <Navigate to="/admin/standard-pricing" replace />
+  if (role === 'financial_admin') return <Navigate to="/admin/standard-pricing" replace />
+  if (role === 'contract_manager') return <Navigate to="/admin/hold-approvals" replace />
+  // default
+  return <Navigate to="/deals" replace />
 }
 
 createRoot(document.getElementById('root')).render(
@@ -108,6 +125,22 @@ createRoot(document.getElementById('root')).render(
           }
         />
         <Route
+          path="/admin/contracts-team"
+          element={
+            <RoleBasedRoute allowedRoles={['contract_manager', 'admin', 'superadmin']}>
+              <ContractsTeam />
+            </RoleBasedRoute>
+          }
+        />
+        <Route
+          path="/admin/finance-team"
+          element={
+            <RoleBasedRoute allowedRoles={['financial_manager', 'admin', 'superadmin']}>
+              <FinanceTeam />
+            </RoleBasedRoute>
+          }
+        />
+        <Route
           path="/admin/commission-policies"
           element={
             <RoleBasedRoute allowedRoles={['superadmin']}>
@@ -147,7 +180,7 @@ createRoot(document.getElementById('root')).render(
             </RoleBasedRoute>
           }
         />
-        <Route path="/" element={<Navigate to="/deals" replace />} />
+        <Route path="/" element={<HomeRedirect />} />
         <Route path="*" element={<Navigate to="/deals" replace />} />
       </Routes>
     </BrowserRouter>
