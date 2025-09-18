@@ -1,11 +1,11 @@
 services:
   db:
-    image: bitnami/postgresql:16
+    image: postgres:16
     container_name: app_db
     environment:
-      POSTGRESQL_USERNAME: appuser
-      POSTGRESQL_PASSWORD: apppass
-      POSTGRESQL_DATABASE: appdb
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: apppass
+      POSTGRES_DB: appdb
     volumes:
       - db_data:/var/lib/postgresql/data
     restart: unless-stopped
