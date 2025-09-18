@@ -207,6 +207,9 @@ router.post('/request-password-reset', async (req, res) => {
 
     // Build reset URL (frontend route), configurable base
     const base = process.env.APP_BASE_URL || 'http://localhost:5173'
+    // Trim trailing slashes from base before appending the path
+    const resetUrl = `${base.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`
+    const base = process.env.APP_BASE_URL || 'http://localhost:5173'
     // Trim trailing forward slashes from base before appending the path
     const resetUrl = `${base.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`
     const base = process.env.APP_BASE_URL || 'http://localhost:5173'
