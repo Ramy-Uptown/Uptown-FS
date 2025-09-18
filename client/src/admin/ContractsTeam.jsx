@@ -182,7 +182,7 @@ export default function ContractsTeam() {
                   <td style={td}>{m.member_user_id} {m.member_email ? <span style={metaText}>({m.member_email})</span> : null}</td>
                   <td style={td}>{m.active ? 'Yes' : 'No'}</td>
                   <td style={td}>
-                    {m.active ? <button onClick={() => clearMembership(m.manager_user_id, m.member_user_id)} style={btn}>Clear</button> : null}
+                    {m.active && canAssign ? <button onClick={() => clearMembership(m.manager_user_id, m.member_user_id)} style={btn}>Clear</button> : null}
                   </td>
                 </tr>
               ))}
