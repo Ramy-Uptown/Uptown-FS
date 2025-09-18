@@ -901,7 +901,7 @@ router.patch(
 router.post(
   '/contracts-teams/assign',
   authMiddleware,
-  requireRole(['contract_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id } = req.body || {}
@@ -927,7 +927,7 @@ router.post(
 router.patch(
   '/contracts-teams/assign',
   authMiddleware,
-  requireRole(['contract_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id, active } = req.body || {}
@@ -949,11 +949,10 @@ router.patch(
   }
 )
 
-// Finance team assignments
 router.post(
   '/finance-teams/assign',
   authMiddleware,
-  requireRole(['financial_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id } = req.body || {}
@@ -979,7 +978,7 @@ router.post(
 router.patch(
   '/finance-teams/assign',
   authMiddleware,
-  requireRole(['financial_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id, active } = req.body || {}
@@ -997,6 +996,9 @@ router.patch(
     } catch (e) {
       console.error('PATCH /api/workflow/finance-teams/assign error:', e)
       return bad(res, 500, 'Internal error')
+    }
+  }
+)
     }
   }
 )
