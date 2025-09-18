@@ -17,6 +17,9 @@ export default function ContractsTeam() {
   const [members, setMembers] = useState([])
   const [managers, setManagers] = useState([])
 
+  const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
+  const canAssign = me?.role === 'admin' || me?.role === 'superadmin'
+
   useEffect(() => {
     load()
     // preload lists
@@ -121,38 +124,44 @@ export default function ContractsTeam() {
       <div style={pageContainer}>
         <h2 style={pageTitle}>Contracts Team</h2>
 
-        <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input placeholder="Search member by name/email/id…" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} style={ctrl} />
-              <select value={memberId} onChange={e => setMemberId(e.target.value)} style={ctrl}>
-                <option value="">Select contract person…</option>
-                {filteredMembers.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
-                  </option>
-                ))}
-              </select>
+        {canAssign ? (
+          <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input placeholder="Search member by name/email/id…" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} style={ctrl} />
+                <select value={memberId} onChange={e => setMemberId(e.target.value)} style={ctrl}>
+                  <option value="">Select contract person…</option>
+                  {filteredMembers.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input placeholder="Search manager by name/email/id…" value={managerSearch} onChange={e => setManagerSearch(e.target.value)} style={ctrl} />
+                <select value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl}>
+                  <option value="">Select contract manager…</option>
+                  {filteredManagers.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <button type="button" onClick={assign} style={btnPrimary} disabled={!memberId || !managerId}>Assign</button>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input placeholder="Search manager by name/email/id…" value={managerSearch} onChange={e => setManagerSearch(e.target.value)} style={ctrl} />
-              <select value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl}>
-                <option value="">Select contract manager…</option>
-                {filteredManagers.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <button type="button" onClick={assign} style={btnPrimary} disabled={!memberId || !managerId}>Assign</button>
+            <div style={{ marginTop: 6 }}>
+              <span style={metaText}>Only active users are listed. Use Admin → Users to activate/deactivate accounts.</span>
             </div>
           </div>
-          <div style={{ marginTop: 6 }}>
-            <span style={metaText}>Only active users are listed. Use Admin → Users to activate/deactivate accounts.</span>
+        ) : (
+          <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
+            <span style={metaText}>Read-only view. Only Admin and Superadmin can assign members to contract managers.</span>
           </div>
-        </div>
+        )}
 
         {error ? <p style={errorText}>{error}</p> : null}
 
