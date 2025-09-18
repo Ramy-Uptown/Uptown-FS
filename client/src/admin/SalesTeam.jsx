@@ -31,6 +31,7 @@ export default function SalesTeam() {
   const [qaManagerSearch, setQaManagerSearch] = useState('')
   const [qaConsultantId, setQaConsultantId] = useState('')
   const [qaManagerId, setQaManagerId] = useState('')
+  const [qaTeam, setQaTeam] = useState('sales') // 'sales' | 'contracts' | 'finance'
 
   function randomPassword() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
@@ -242,16 +243,16 @@ export default function SalesTeam() {
 
   // Quick assign (search consultant by email/name and pick manager)
   async function saveQuickAssign() {
-    if (!qaConsultantId) return alert('Select a sales consultant')
+    if (!qaConsultantId) return alert('Select a team member')
     if (!qaManagerId) return alert('Select a manager')
     try {
-      const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
+      const cfg = TEAM_CONFIG[qaTeam] || TEAM_CONFIG.sales
+      const payload = { manager_user_id: Number(qaManagerId) }
+      payload[cfg.memberKey] = Number(qaConsultantId)
+      const resp = await fetchWithAuth(`${API_URL}${cfg.endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          manager_user_id: Number(qaManagerId),
-          consultant_user_id: Number(qaConsultantId)
-        })
+        body: JSON.stringify(payload)
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to assign')
@@ -276,13 +277,21 @@ export default function SalesTeam() {
     return (String(m.email || '').toLowerCase().includes(q) || String(m.meta?.full_name || '').toLowerCase().includes(q) || String(m.id).includes(q))
   })
   // Quick-assign candidate sets
-  const qaConsultantCandidates = allUsers.filter(u => u.role === 'property_consultant')
+  const TEAM_CONFIG = {
+    sales: { consultantRole: 'property_consultant', managerRoles: ['sales_manager'], endpoint: '/api/workflow/sales-teams/assign', memberKey: 'consultant_user_id' },
+    contracts: { consultantRole: 'contract_person', managerRoles: ['contract_manager'], endpoint: '/api/workflow/contracts-teams/assign', memberKey: 'member_user_id' },
+    finance: { consultantRole: 'financial_admin', managerRoles: ['financial_manager'], endpoint: '/api/workflow/finance-teams/assign', memberKey: 'member_user_id' }
+  }
+  const cfg = TEAM_CONFIG[qaTeam] || TEAM_CONFIG.sales
+
+  const qaConsultantCandidates = allUsers.filter(u => u.role === cfg.consultantRole)
   const qaFilteredConsultants = qaConsultantCandidates.filter(c => {
     if (!qaConsultantSearch) return true
     const q = qaConsultantSearch.toLowerCase()
     return (String(c.email || '').toLowerCase().includes(q) || String(c.meta?.full_name || '').toLowerCase().includes(q) || String(c.id).includes(q))
   })
-  const qaFilteredManagers = managerCandidates.filter(m => {
+  const qaManagerCandidates = allUsers.filter(u => cfg.managerRoles.includes(u.role))
+  const qaFilteredManagers = qaManagerCandidates.filter(m => {
     if (!qaManagerSearch) return true
     const q = qaManagerSearch.toLowerCase()
     return (String(m.email || '').toLowerCase().includes(q) || String(m.meta?.full_name || '').toLowerCase().includes(q) || String(m.id).includes(q))
@@ -316,12 +325,21 @@ export default function SalesTeam() {
 
         {/* Quick assign panel */}
         <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Quick Assign Manager to Sales Consultant</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={{ fontWeight: 600 }}>Quick Assign Manager to Team Member</div>
+            <div>
+              <select value={qaTeam} onChange={e => { setQaTeam(e.target.value); setQaConsultantId(''); setQaManagerId(''); }} style={ctrl}>
+                <option value="sales">Sales</option>
+                <option value="contracts">Contracts</option>
+                <option value="finance">Finance</option>
+              </select>
+            </div>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 6 }}>
-              <input placeholder="Search consultant by name/email/id…" value={qaConsultantSearch} onChange={e => setQaConsultantSearch(e.target.value)} style={ctrl} />
+              <input placeholder={`Search ${qaTeam === 'sales' ? 'consultant' : 'member'} by name/email/id…`} value={qaConsultantSearch} onChange={e => setQaConsultantSearch(e.target.value)} style={ctrl} />
               <select value={qaConsultantId} onChange={e => setQaConsultantId(e.target.value)} style={ctrl}>
-                <option value="">Select sales consultant…</option>
+                <option value="">{qaTeam === 'sales' ? 'Select sales consultant…' : qaTeam === 'contracts' ? 'Select contract person…' : 'Select financial admin…'}</option>
                 {qaFilteredConsultants.map(u => (
                   <option key={u.id} value={u.id}>
                     {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
@@ -332,7 +350,7 @@ export default function SalesTeam() {
             <div style={{ display: 'flex', gap: 6 }}>
               <input placeholder="Search manager by name/email/id…" value={qaManagerSearch} onChange={e => setQaManagerSearch(e.target.value)} style={ctrl} />
               <select value={qaManagerId} onChange={e => setQaManagerId(e.target.value)} style={ctrl}>
-                <option value="">Select manager…</option>
+                <option value="">{qaTeam === 'sales' ? 'Select sales manager…' : qaTeam === 'contracts' ? 'Select contract manager…' : 'Select financial manager…'}</option>
                 {qaFilteredManagers.map(u => (
                   <option key={u.id} value={u.id}>
                     {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
@@ -345,7 +363,7 @@ export default function SalesTeam() {
             </div>
           </div>
           <div style={{ marginTop: 6 }}>
-            <span style={metaText}>Tip: This panel works directly on app users even if their row is not in the Sales list below.</span>
+            <span style={metaText}>Roles are validated per team to prevent cross-department assignments.</span>
           </div>
         </div>
 

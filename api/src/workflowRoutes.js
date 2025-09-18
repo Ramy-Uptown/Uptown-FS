@@ -202,15 +202,15 @@ router.get(
 
       if (consultant_user_id) {
         params.push(ensureNumber(consultant_user_id))
-        clauses.push(`stm.consultant_user_id = $${params.length}`)
+        clauses.push(`stm.consultant_user_id = ${params.length}`)
       }
       if (manager_user_id) {
         params.push(ensureNumber(manager_user_id))
-        clauses.push(`stm.manager_user_id = $${params.length}`)
+        clauses.push(`stm.manager_user_id = ${params.length}`)
       }
       if (typeof active === 'boolean') {
         params.push(active)
-        clauses.push(`stm.active = $${params.length}`)
+        clauses.push(`stm.active = ${params.length}`)
       }
 
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
@@ -230,6 +230,104 @@ router.get(
       return ok(res, { memberships: r.rows })
     } catch (e) {
       console.error('GET /api/workflow/sales-teams/memberships error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+/**
+ * Contracts team membership listing
+ */
+router.get(
+  '/contracts-teams/memberships',
+  authMiddleware,
+  requireRole(['contract_manager', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { member_user_id, manager_user_id } = req.query || {}
+      const active = req.query.active === undefined ? true : String(req.query.active).toLowerCase() === 'true'
+      const clauses = []
+      const params = []
+
+      if (member_user_id) {
+        params.push(ensureNumber(member_user_id))
+        clauses.push(`tm.member_user_id = ${params.length}`)
+      }
+      if (manager_user_id) {
+        params.push(ensureNumber(manager_user_id))
+        clauses.push(`tm.manager_user_id = ${params.length}`)
+      }
+      if (typeof active === 'boolean') {
+        params.push(active)
+        clauses.push(`tm.active = ${params.length}`)
+      }
+
+      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+      const sql = `
+        SELECT tm.manager_user_id,
+               tm.member_user_id,
+               tm.active,
+               m.email AS manager_email,
+               c.email AS member_email
+        FROM contracts_team_members tm
+        JOIN users m ON m.id = tm.manager_user_id
+        JOIN users c ON c.id = tm.member_user_id
+        ${where}
+        ORDER BY tm.manager_user_id ASC, tm.member_user_id ASC
+      `
+      const r = await pool.query(sql, params)
+      return ok(res, { memberships: r.rows })
+    } catch (e) {
+      console.error('GET /api/workflow/contracts-teams/memberships error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+/**
+ * Finance team membership listing
+ */
+router.get(
+  '/finance-teams/memberships',
+  authMiddleware,
+  requireRole(['financial_manager', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { member_user_id, manager_user_id } = req.query || {}
+      const active = req.query.active === undefined ? true : String(req.query.active).toLowerCase() === 'true'
+      const clauses = []
+      const params = []
+
+      if (member_user_id) {
+        params.push(ensureNumber(member_user_id))
+        clauses.push(`tm.member_user_id = ${params.length}`)
+      }
+      if (manager_user_id) {
+        params.push(ensureNumber(manager_user_id))
+        clauses.push(`tm.manager_user_id = ${params.length}`)
+      }
+      if (typeof active === 'boolean') {
+        params.push(active)
+        clauses.push(`tm.active = ${params.length}`)
+      }
+
+      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+      const sql = `
+        SELECT tm.manager_user_id,
+               tm.member_user_id,
+               tm.active,
+               m.email AS manager_email,
+               c.email AS member_email
+        FROM finance_team_members tm
+        JOIN users m ON m.id = tm.manager_user_id
+        JOIN users c ON c.id = tm.member_user_id
+        ${where}
+        ORDER BY tm.manager_user_id ASC, tm.member_user_id ASC
+      `
+      const r = await pool.query(sql, params)
+      return ok(res, { memberships: r.rows })
+    } catch (e) {
+      console.error('GET /api/workflow/finance-teams/memberships error:', e)
       return bad(res, 500, 'Internal error')
     }
   }
@@ -794,6 +892,110 @@ router.patch(
       return ok(res, { membership: r.rows[0] })
     } catch (e) {
       console.error('PATCH /api/workflow/sales-teams/assign error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// Contracts team assignments
+router.post(
+  '/contracts-teams/assign',
+  authMiddleware,
+  requireRole(['contract_manager', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { manager_user_id, member_user_id } = req.body || {}
+      const mid = ensureNumber(manager_user_id)
+      const cid = ensureNumber(member_user_id)
+      if (!mid || !cid) return bad(res, 400, 'manager_user_id and member_user_id are required numbers')
+      const r = await pool.query(
+        `INSERT INTO contracts_team_members (manager_user_id, member_user_id, active)
+         VALUES ($1, $2, TRUE)
+         ON CONFLICT (manager_user_id, member_user_id)
+         DO UPDATE SET active=TRUE, updated_at=now()
+         RETURNING *`,
+        [mid, cid]
+      )
+      return ok(res, { membership: r.rows[0] })
+    } catch (e) {
+      console.error('POST /api/workflow/contracts-teams/assign error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/contracts-teams/assign',
+  authMiddleware,
+  requireRole(['contract_manager', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { manager_user_id, member_user_id, active } = req.body || {}
+      const mid = ensureNumber(manager_user_id)
+      const cid = ensureNumber(member_user_id)
+      if (!mid || !cid || typeof active !== 'boolean') return bad(res, 400, 'manager_user_id, member_user_id and active:boolean are required')
+      const r = await pool.query(
+        `UPDATE contracts_team_members SET active=$1, updated_at=now()
+         WHERE manager_user_id=$2 AND member_user_id=$3
+         RETURNING *`,
+        [active, mid, cid]
+      )
+      if (r.rows.length === 0) return bad(res, 404, 'Assignment not found')
+      return ok(res, { membership: r.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/contracts-teams/assign error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+// Finance team assignments
+router.post(
+  '/finance-teams/assign',
+  authMiddleware,
+  requireRole(['financial_manager', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { manager_user_id, member_user_id } = req.body || {}
+      const mid = ensureNumber(manager_user_id)
+      const cid = ensureNumber(member_user_id)
+      if (!mid || !cid) return bad(res, 400, 'manager_user_id and member_user_id are required numbers')
+      const r = await pool.query(
+        `INSERT INTO finance_team_members (manager_user_id, member_user_id, active)
+         VALUES ($1, $2, TRUE)
+         ON CONFLICT (manager_user_id, member_user_id)
+         DO UPDATE SET active=TRUE, updated_at=now()
+         RETURNING *`,
+        [mid, cid]
+      )
+      return ok(res, { membership: r.rows[0] })
+    } catch (e) {
+      console.error('POST /api/workflow/finance-teams/assign error:', e)
+      return bad(res, 500, 'Internal error')
+    }
+  }
+)
+
+router.patch(
+  '/finance-teams/assign',
+  authMiddleware,
+  requireRole(['financial_manager', 'admin', 'superadmin']),
+  async (req, res) => {
+    try {
+      const { manager_user_id, member_user_id, active } = req.body || {}
+      const mid = ensureNumber(manager_user_id)
+      const cid = ensureNumber(member_user_id)
+      if (!mid || !cid || typeof active !== 'boolean') return bad(res, 400, 'manager_user_id, member_user_id and active:boolean are required')
+      const r = await pool.query(
+        `UPDATE finance_team_members SET active=$1, updated_at=now()
+         WHERE manager_user_id=$2 AND member_user_id=$3
+         RETURNING *`,
+        [active, mid, cid]
+      )
+      if (r.rows.length === 0) return bad(res, 404, 'Assignment not found')
+      return ok(res, { membership: r.rows[0] })
+    } catch (e) {
+      console.error('PATCH /api/workflow/finance-teams/assign error:', e)
       return bad(res, 500, 'Internal error')
     }
   }
