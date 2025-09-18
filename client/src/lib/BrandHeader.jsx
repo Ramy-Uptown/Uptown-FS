@@ -107,9 +107,8 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Commissions Report', href: '/admin/commissions' }
         ]
       case 'admin':
-        // In this context, admin manages employees: expose Users and Sales Team pages.
+        // Admin should only see employee management. Remove Calculator/Deals shortcuts.
         return [
-          ...base,
           { label: 'Users', href: '/admin/users' },
           { label: 'Sales Team', href: '/admin/sales' }
         ]

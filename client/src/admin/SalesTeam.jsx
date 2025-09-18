@@ -25,6 +25,7 @@ export default function SalesTeam() {
   const [allUsers, setAllUsers] = useState([]) // to find manager emails
   const [assignFor, setAssignFor] = useState(0) // sales row id currently being assigned
   const [assignManagerId, setAssignManagerId] = useState('')
+  const [managerSearch, setManagerSearch] = useState('')
 
   function randomPassword() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
@@ -179,6 +180,7 @@ export default function SalesTeam() {
     setAssignFor(row.id)
     const currentMgr = row.user_id ? memberships[row.user_id] : ''
     setAssignManagerId(currentMgr || '')
+    setManagerSearch('')
   }
 
   async function saveAssign(row) {
@@ -238,6 +240,11 @@ export default function SalesTeam() {
   const managerCandidates = allUsers.filter(u =>
     u.role === 'sales_manager' || u.role === 'manager' || u.role === 'contract_manager' || u.role === 'financial_manager'
   )
+  const filteredManagerCandidates = managerCandidates.filter(m => {
+    if (!managerSearch) return true
+    const q = managerSearch.toLowerCase()
+    return (String(m.email || '').toLowerCase().includes(q) || String(m.meta?.full_name || '').toLowerCase().includes(q) || String(m.id).includes(q))
+  })
 
   const canAssign = isSuperAdmin || me?.role === 'admin'
 
@@ -339,13 +346,23 @@ export default function SalesTeam() {
                   <td style={{ ...td, minWidth: 220 }}>
                     {consultantUserId ? (
                       isAssigning && canAssign ? (
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          <select value={assignManagerId} onChange={e => setAssignManagerId(e.target.value)} style={ctrl}>
-                            <option value="">Select manager…</option>
-                            {managerCandidates.map(m => (
-                              <option key={m.id} value={m.id}>{m.email} (id {m.id})</option>
-                            ))}
-                          </select>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 6, alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <input
+                              placeholder="Search manager by name/email/id…"
+                              value={managerSearch}
+                              onChange={e => setManagerSearch(e.target.value)}
+                              style={{ ...ctrl, minWidth: 180 }}
+                            />
+                            <select value={assignManagerId} onChange={e => setAssignManagerId(e.target.value)} style={ctrl}>
+                              <option value="">Select manager…</option>
+                              {filteredManagerCandidates.map(m => (
+                                <option key={m.id} value={m.id}>
+                                  {m.email}{m.meta?.full_name ? ` — ${m.meta.full_name}` : ''} (id {m.id})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                           <button onClick={() => saveAssign(r)} style={btn}>Save</button>
                           <button onClick={() => clearAssign(r)} style={btn}>Clear</button>
                           <button onClick={() => setAssignFor(0)} style={btn}>Cancel</button>
@@ -368,7 +385,7 @@ export default function SalesTeam() {
               )})}
               {list.length === 0 && !loading && (
                 <tr>
-                  <td style={td} colSpan={7}>No sales people.</td>
+                  <td style={td} colSpan={8}>No sales people.</td>
                 </tr>
               )}
             </tbody>
