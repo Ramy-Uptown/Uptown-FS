@@ -26,6 +26,11 @@ export default function SalesTeam() {
   const [assignFor, setAssignFor] = useState(0) // sales row id currently being assigned
   const [assignManagerId, setAssignManagerId] = useState('')
   const [managerSearch, setManagerSearch] = useState('')
+  // Quick-assign panel state
+  const [qaConsultantSearch, setQaConsultantSearch] = useState('')
+  const [qaManagerSearch, setQaManagerSearch] = useState('')
+  const [qaConsultantId, setQaConsultantId] = useState('')
+  const [qaManagerId, setQaManagerId] = useState('')
 
   function randomPassword() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
@@ -235,6 +240,31 @@ export default function SalesTeam() {
     }
   }
 
+  // Quick assign (search consultant by email/name and pick manager)
+  async function saveQuickAssign() {
+    if (!qaConsultantId) return alert('Select a sales consultant')
+    if (!qaManagerId) return alert('Select a manager')
+    try {
+      const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manager_user_id: Number(qaManagerId),
+          consultant_user_id: Number(qaConsultantId)
+        })
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to assign')
+      setQaConsultantId('')
+      setQaManagerId('')
+      setQaConsultantSearch('')
+      setQaManagerSearch('')
+      await load()
+    } catch (e) {
+      alert(e.message || String(e))
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const userById = Object.fromEntries(allUsers.map(u => [u.id, u]))
   const managerCandidates = allUsers.filter(u =>
@@ -243,6 +273,18 @@ export default function SalesTeam() {
   const filteredManagerCandidates = managerCandidates.filter(m => {
     if (!managerSearch) return true
     const q = managerSearch.toLowerCase()
+    return (String(m.email || '').toLowerCase().includes(q) || String(m.meta?.full_name || '').toLowerCase().includes(q) || String(m.id).includes(q))
+  })
+  // Quick-assign candidate sets
+  const qaConsultantCandidates = allUsers.filter(u => u.role === 'property_consultant')
+  const qaFilteredConsultants = qaConsultantCandidates.filter(c => {
+    if (!qaConsultantSearch) return true
+    const q = qaConsultantSearch.toLowerCase()
+    return (String(c.email || '').toLowerCase().includes(q) || String(c.meta?.full_name || '').toLowerCase().includes(q) || String(c.id).includes(q))
+  })
+  const qaFilteredManagers = managerCandidates.filter(m => {
+    if (!qaManagerSearch) return true
+    const q = qaManagerSearch.toLowerCase()
     return (String(m.email || '').toLowerCase().includes(q) || String(m.meta?.full_name || '').toLowerCase().includes(q) || String(m.id).includes(q))
   })
 
@@ -271,6 +313,41 @@ export default function SalesTeam() {
       <BrandHeader onLogout={handleLogout} />
       <div style={pageContainer}>
         <h2 style={pageTitle}>Sales Team</h2>
+
+        {/* Quick assign panel */}
+        <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Quick Assign Manager to Sales Consultant</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input placeholder="Search consultant by name/email/id…" value={qaConsultantSearch} onChange={e => setQaConsultantSearch(e.target.value)} style={ctrl} />
+              <select value={qaConsultantId} onChange={e => setQaConsultantId(e.target.value)} style={ctrl}>
+                <option value="">Select sales consultant…</option>
+                {qaFilteredConsultants.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input placeholder="Search manager by name/email/id…" value={qaManagerSearch} onChange={e => setQaManagerSearch(e.target.value)} style={ctrl} />
+              <select value={qaManagerId} onChange={e => setQaManagerId(e.target.value)} style={ctrl}>
+                <option value="">Select manager…</option>
+                {qaFilteredManagers.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <button type="button" onClick={saveQuickAssign} style={btnPrimary} disabled={!qaConsultantId || !qaManagerId}>Assign</button>
+            </div>
+          </div>
+          <div style={{ marginTop: 6 }}>
+            <span style={metaText}>Tip: This panel works directly on app users even if their row is not in the Sales list below.</span>
+          </div>
+        </div>
 
         <form onSubmit={save} style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
           <input placeholder="User ID (optional)" value={form.user_id} onChange={e => setForm(s => ({ ...s, user_id: e.target.value }))} style={ctrl} />
