@@ -10,6 +10,7 @@ import Users from './admin/Users.jsx'
 import UserEdit from './admin/UserEdit.jsx'
 import Units from './admin/Units.jsx'
 import SalesTeam from './admin/SalesTeam.jsx'
+import SalesManagerTeam from './admin/SalesManagerTeam.jsx'
 import ContractsTeam from './admin/ContractsTeam.jsx'
 import FinanceTeam from './admin/FinanceTeam.jsx'
 import CommissionPolicies from './admin/CommissionPolicies.jsx'
@@ -59,6 +60,9 @@ function HomeRedirect() {
   if (role === 'financial_manager') return <Navigate to="/admin/standard-pricing" replace />
   if (role === 'financial_admin') return <Navigate to="/admin/standard-pricing" replace />
   if (role === 'contract_manager') return <Navigate to="/admin/hold-approvals" replace />
+  if (role === 'ceo' || role === 'chairman' || role === 'vice_chairman' || role === 'top_management') {
+    return <Navigate to="/deals/queues" replace />
+  }
   // default
   return <Navigate to="/deals" replace />
 }
@@ -121,6 +125,14 @@ createRoot(document.getElementById('root')).render(
           element={
             <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
               <SalesTeam />
+            </RoleBasedRoute>
+          }
+        />
+        <Route
+          path="/admin/sales-team"
+          element={
+            <RoleBasedRoute allowedRoles={['sales_manager', 'admin', 'superadmin']}>
+              <SalesManagerTeam />
             </RoleBasedRoute>
           }
         />

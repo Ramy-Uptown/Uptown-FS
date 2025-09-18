@@ -131,6 +131,7 @@ export default function BrandHeader({ title, onLogout }) {
         return [
           ...base,
           queuesLink,
+          { label: 'Sales Team', href: '/admin/sales-team' },
           { label: 'Team Proposals', href: '/deals/team-proposals' },
           { label: 'Holds', href: '/admin/holds' },
           { label: 'Workflow Logs', href: '/admin/workflow-logs' }
