@@ -322,7 +322,7 @@ router.get(
         JOIN users m ON m.id = tm.manager_user_id
         JOIN users c ON c.id = tm.member_user_id
         ${where}
-        ORDER BY tm.manager_user_id ASC, tm.member_user_id ASC
+        ORDER by tm.manager_user_id ASC, tm.member_user_id ASC
       `
       const r = await pool.query(sql, params)
       return ok(res, { memberships: r.rows })
@@ -532,7 +532,7 @@ router.post(
           status = 'pending_sm'
         }
       } else if (req.user?.role === 'sales_manager') {
-        // SM can directly approve if <=2, otherwise send to FM
+        // SM can directly approve if ≤2, otherwise send to FM
         if (disc <= 2) {
           status = 'approved'
         } else {
@@ -996,9 +996,6 @@ router.patch(
     } catch (e) {
       console.error('PATCH /api/workflow/finance-teams/assign error:', e)
       return bad(res, 500, 'Internal error')
-    }
-  }
-)
     }
   }
 )

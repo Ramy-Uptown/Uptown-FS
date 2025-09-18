@@ -209,13 +209,6 @@ router.post('/request-password-reset', async (req, res) => {
     const base = process.env.APP_BASE_URL || 'http://localhost:5173'
     // Trim trailing slashes from base before appending the path
     const resetUrl = `${base.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`
-    const base = process.env.APP_BASE_URL || 'http://localhost:5173'
-    // Trim trailing forward slashes from base before appending the path
-    const resetUrl = `${base.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`
-    const base = process.env.APP_BASE_URL || 'http://localhost:5173'
-    // Trim trailing slashes from base before appending the path
-    const resetUrl = `${base.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`
-    const resetUrl = `${base.replace(/\\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`
 
     // Send email if SMTP configured; always log for debugging
     console.log('[password reset] token for', normalizedEmail, token, 'expiresAt:', expiresAt.toISOString(), 'url:', resetUrl)
