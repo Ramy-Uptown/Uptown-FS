@@ -361,7 +361,7 @@ router.patch(
       for (const f of allowedFields) {
         if (Object.prototype.hasOwnProperty.call(req.body || {}, f)) {
           params.push(req.body[f])
-          updates.push(`${f} = $${params.length}`)
+          updates.push(`${f} = ${params.length}`)
         }
       }
       if (updates.length === 0) {
@@ -387,7 +387,7 @@ router.patch(
             status='pending_approval',
             approved_by=NULL,
             updated_at=now()
-        WHERE id=$${params.length + 1}
+        WHERE id=${params.length + 1}
         RETURNING *`
       const updateParams = params.concat([id])
       const updRes = await client.query(updateSql, updateParams)
@@ -1035,7 +1035,7 @@ router.get(
       )
       const uids = team.rows.map(r => r.uid)
       if (uids.length === 0) return ok(res, { payment_plans: [] })
-      const placeholders = uids.map((_, i) => `$${i + 1}`).join(',')
+      const placeholders = uids.map((_, i) => `${i + 1}`).join(',')
       const r = await pool.query(
         `SELECT * FROM payment_plans WHERE created_by IN (${placeholders}) ORDER BY id DESC`,
         uids
