@@ -96,15 +96,11 @@ export default function BrandHeader({ title, onLogout }) {
     const queuesLink = { label: `Queues${queueCount ? ` (${queueCount})` : ''}`, href: '/deals/queues' }
     switch (role) {
       case 'superadmin':
+        // For superadmin, show only the essential admin links requested.
         return [
-          ...base,
-          queuesLink,
-          { label: 'Units', href: '/admin/units' },
-          { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'Users', href: '/admin/users' },
           { label: 'Sales Team', href: '/admin/sales' },
-          { label: 'Commission Policies', href: '/admin/commission-policies' },
-          { label: 'Commissions Report', href: '/admin/commissions' }
+          { label: 'Commission Policies', href: '/admin/commission-policies' }
         ]
       case 'admin':
         // Admin should only see employee management. Remove Calculator/Deals shortcuts.
