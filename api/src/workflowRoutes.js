@@ -849,7 +849,7 @@ router.patch(
 router.post(
   '/sales-teams/assign',
   authMiddleware,
-  requireRole(['sales_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, consultant_user_id } = req.body || {}
@@ -875,7 +875,7 @@ router.post(
 router.patch(
   '/sales-teams/assign',
   authMiddleware,
-  requireRole(['sales_manager', 'admin', 'superadmin']),
+  requireRole(['admin', 'superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, consultant_user_id, active } = req.body || {}

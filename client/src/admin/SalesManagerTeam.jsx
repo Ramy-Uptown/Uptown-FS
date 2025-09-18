@@ -18,15 +18,14 @@ export default function SalesManagerTeam() {
   const [managers, setManagers] = useState([])
 
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
+  const canAssign = me?.role === 'admin' || me?.role === 'superadmin'
 
   useEffect(() => {
     load()
     // preload lists
     loadUsers('property_consultant', setConsultants)
     loadUsers('sales_manager', setManagers)
-    if (me?.id) {
-      setManagerId(String(me.id)) // default to self
-    }
+    // Do NOT default manager to self; sales managers are not authorized to assign.
   }, [])
 
   async function load() {
@@ -127,38 +126,41 @@ export default function SalesManagerTeam() {
       <div style={pageContainer}>
         <h2 style={pageTitle}>Sales Team (Manager View)</h2>
 
-        <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input placeholder="Search consultant by name/email/id…" value={consultantSearch} onChange={e => setConsultantSearch(e.target.value)} style={ctrl} />
-              <select value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl}>
-                <option value="">Select sales consultant…</option>
-                {filteredConsultants.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input placeholder="Search manager by name/email/id…" value={managerSearch} onChange={e => setManagerSearch(e.target.value)} style={ctrl} />
-              <select value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl}>
-                <option value="">Select sales manager…</option>
-                {filteredManagers.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <button type="button" onClick={assign} style={btnPrimary} disabled={!consultantId || !managerId}>Assign</button>
+        {canAssign ? (
+          <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input placeholder="Search consultant by name/email/id…" value={consultantSearch} onChange={e => setConsultantSearch(e.target.value)} style={ctrl} />
+                <select value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl}>
+                  <option value="">Select sales consultant…</option>
+                  {filteredConsultants.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input placeholder="Search manager by name/email/id…" value={managerSearch} onChange={e => setManagerSearch(e.target.value)} style={ctrl} />
+                <select value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl}>
+                  <option value="">Select sales manager…</option>
+                  {filteredManagers.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <button type="button" onClick={assign} style={btnPrimary} disabled={!consultantId || !managerId}>Assign</button>
+              </div>
             </div>
           </div>
-          <div style={{ marginTop: 6 }}>
-            <span style={metaText}>Tip: your user id is {me?.id}. You can keep the manager pre-selected to assign multiple consultants to yourself.</span>
+        ) : (
+          <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
+            <span style={metaText}>Read-only view. Only Admin and Superadmin can assign consultants to managers.</span>
           </div>
-        </div>
+        )}
 
         {error ? <p style={errorText}>{error}</p> : null}
 
