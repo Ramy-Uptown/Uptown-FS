@@ -254,6 +254,28 @@ export async function initDb() {
       UNIQUE (manager_user_id, consultant_user_id)
     );
 
+    -- Contracts team assignments: contract_manager -> contract_person
+    CREATE TABLE IF NOT EXISTS contracts_team_members (
+      id SERIAL PRIMARY KEY,
+      manager_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      member_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (manager_user_id, member_user_id)
+    );
+
+    -- Finance team assignments: financial_manager -> financial_admin
+    CREATE TABLE IF NOT EXISTS finance_team_members (
+      id SERIAL PRIMARY KEY,
+      manager_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      member_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (manager_user_id, member_user_id)
+    );
+
     -- Audit log for admin-initiated changes to users
     CREATE TABLE IF NOT EXISTS user_audit_log (
       id SERIAL PRIMARY KEY,
@@ -383,8 +405,26 @@ export async function initDb() {
         FOR EACH ROW
         EXECUTE FUNCTION trigger_set_timestamp();
       END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_contracts_team_members'
+      ) THEN
+        CREATE TRIGGER set_timestamp_contracts_team_members
+        BEFORE UPDATE ON contracts_team_members
+        FOR EACH ROW
+        EXECUTE FUNCTION trigger_set_timestamp();
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_finance_team_members'
+      ) THEN
+        CREATE TRIGGER set_timestamp_finance_team_members
+        BEFORE UPDATE ON finance_team_members
+        FOR EACH ROW
+        EXECUTE FUNCTION trigger_set_timestamp();
+      END IF;
     END;
-    $$
+    $
   `)
 
   // Seed initial admin if table empty

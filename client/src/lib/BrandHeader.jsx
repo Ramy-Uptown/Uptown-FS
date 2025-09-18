@@ -93,23 +93,19 @@ export default function BrandHeader({ title, onLogout }) {
   const navForRole = (role) => {
     // Map role to visible shortcuts
     const base = [{ label: 'Calculator', href: '/calculator' }, { label: 'Deals', href: '/deals' }]
+    const baseWithoutCalc = [{ label: 'Deals', href: '/deals' }]
     const queuesLink = { label: `Queues${queueCount ? ` (${queueCount})` : ''}`, href: '/deals/queues' }
     switch (role) {
       case 'superadmin':
+        // For superadmin, show only the essential admin links requested.
         return [
-          ...base,
-          queuesLink,
-          { label: 'Units', href: '/admin/units' },
-          { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'Users', href: '/admin/users' },
           { label: 'Sales Team', href: '/admin/sales' },
-          { label: 'Commission Policies', href: '/admin/commission-policies' },
-          { label: 'Commissions Report', href: '/admin/commissions' }
+          { label: 'Commission Policies', href: '/admin/commission-policies' }
         ]
       case 'admin':
-        // In this context, admin manages employees: expose Users and Sales Team pages.
+        // Admin should only see employee management. Remove Calculator/Deals shortcuts.
         return [
-          ...base,
           { label: 'Users', href: '/admin/users' },
           { label: 'Sales Team', href: '/admin/sales' }
         ]
@@ -140,10 +136,12 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'My Proposals', href: '/deals/my-proposals' }
         ]
       case 'contract_person':
-        return base
+        return [
+          ...baseWithoutCalc
+        ]
       case 'contract_manager':
         return [
-          ...base,
+          ...baseWithoutCalc,
           { label: 'Workflow Logs', href: '/admin/workflow-logs' },
           { label: 'Hold Approvals', href: '/admin/hold-approvals' }
         ]
@@ -152,7 +150,7 @@ export default function BrandHeader({ title, onLogout }) {
       case 'vice_chairman':
       case 'top_management':
         return [
-          ...base,
+          ...baseWithoutCalc,
           queuesLink,
           { label: 'Workflow Logs', href: '/admin/workflow-logs' },
           { label: 'Hold Approvals', href: '/admin/hold-approvals' }
