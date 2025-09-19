@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import BrandHeader from '../lib/BrandHeader.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { ctrl, btn, btnPrimary, pageContainer, pageTitle, tableWrap, table, th, td, metaText, errorText } from '../lib/ui.js'
@@ -118,11 +119,18 @@ export default function FinanceTeam() {
     }
   }
 
+  const navigate = useNavigate()
+
   return (
     <div>
       <BrandHeader onLogout={handleLogout} />
       <div style={pageContainer}>
-        <h2 style={pageTitle}>Finance Team</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={pageTitle}>Finance Team</h2>
+          <div>
+            <button type="button" onClick={() => navigate('/admin/unit-models')} style={btn}>Unit Models</button>
+          </div>
+        </div>
 
         {canAssign ? (
           <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
