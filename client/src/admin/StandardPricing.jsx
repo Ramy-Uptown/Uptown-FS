@@ -120,11 +120,18 @@ export default function StandardPricing() {
       <div style={pageContainer}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={pageTitle}>Standard Pricing</h2>
-          {role === 'financial_manager' ? (
-            <a href="/admin/unit-models" style={{ ...btnPrimary, textDecoration: 'none', display: 'inline-block' }}>
-              Manage Unit Models
-            </a>
-          ) : null}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {role === 'financial_manager' ? (
+              <a href="/admin/unit-models" style={{ ...btnPrimary, textDecoration: 'none', display: 'inline-block' }}>
+                Manage Unit Models
+              </a>
+            ) : null}
+            {(role === 'ceo' || role === 'chairman' || role === 'vice_chairman') ? (
+              <a href="/admin/unit-model-changes" style={{ ...btnPrimary, textDecoration: 'none', display: 'inline-block' }}>
+                Review Unit Model Changes
+              </a>
+            ) : null}
+          </div>
         </div>
 
         {role === 'financial_manager' && (

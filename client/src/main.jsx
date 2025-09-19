@@ -14,6 +14,7 @@ import SalesManagerTeam from './admin/SalesManagerTeam.jsx'
 import ContractsTeam from './admin/ContractsTeam.jsx'
 import FinanceTeam from './admin/FinanceTeam.jsx'
 import UnitModels from './admin/UnitModels.jsx'
+import UnitModelChanges from './admin/UnitModelChanges.jsx'
 import CommissionPolicies from './admin/CommissionPolicies.jsx'
 import CommissionsReport from './admin/CommissionsReport.jsx'
 import StandardPricing from './admin/StandardPricing.jsx'
@@ -158,6 +159,14 @@ createRoot(document.getElementById('root')).render(
           element={
             <RoleBasedRoute allowedRoles={['financial_manager']}>
               <UnitModels />
+            </RoleBasedRoute>
+          }
+        />
+        <Route
+          path="/admin/unit-model-changes"
+          element={
+            <RoleBasedRoute allowedRoles={['financial_manager', 'ceo', 'chairman', 'vice_chairman']}>
+              <UnitModelChanges />
             </RoleBasedRoute>
           }
         />

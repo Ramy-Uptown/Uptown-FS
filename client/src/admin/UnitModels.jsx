@@ -216,6 +216,13 @@ export default function UnitModels() {
           {editingId ? <button type="button" onClick={resetForm} style={btn}>New</button> : null}
         </div>
 
+        <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 10, marginBottom: 10, background: '#fff' }}>
+          <span style={metaText}>
+            Note: All create/update/delete requests require approval from Top Management before they take effect.
+            You can track status under <a href="/admin/unit-model-changes">Unit Model Changes</a>.
+          </span>
+        </div>
+
         <form onSubmit={save} style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
           <input placeholder="Model Name" value={form.model_name} onChange={e => setForm(s => ({ ...s, model_name: e.target.value }))} style={ctrl} required />
           <input type="number" placeholder="Area (m²)" value={form.area} onChange={e => setForm(s => ({ ...s, area: e.target.value }))} style={ctrl} required />
@@ -228,7 +235,7 @@ export default function UnitModels() {
           </label>
           <input type="number" placeholder="Garden Area (m²)" value={form.garden_area} onChange={e => setForm(s => ({ ...s, garden_area: e.target.value }))} style={ctrl} disabled={!form.has_garden} />
           <div>
-            <button type="submit" disabled={saving} style={btnPrimary}>{saving ? 'Saving…' : (editingId ? 'Update' : 'Add')}</button>
+            <button type="submit" disabled={saving} style={btnPrimary}>{saving ? 'Submit Change…' : (editingId ? 'Submit Update' : 'Submit Create')}</button>
             {editingId ? <button type="button" onClick={resetForm} style={btn}>Cancel</button> : null}
           </div>
 
