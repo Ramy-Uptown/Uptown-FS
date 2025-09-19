@@ -65,6 +65,15 @@ export default function UnitModels() {
     setEditingId(0)
   }
 
+  function friendlyError(e, fallback) {
+    const msg = (e && e.message) ? e.message : String(e || '')
+    if (!navigator.onLine) return 'You appear to be offline.'
+    if (/Failed to fetch|NetworkError|TypeError/i.test(msg)) {
+      return 'Cannot reach the API server. Please ensure containers are running.'
+    }
+    return msg || fallback
+  }
+
   async function load(p = page) {
     try {
       setLoading(true)
@@ -79,7 +88,7 @@ export default function UnitModels() {
       setItems(data.items || data.models || [])
       setTotal(data.pagination?.total || data.total || 0)
     } catch (e) {
-      setError(e.message || String(e))
+      setError(friendlyError(e, 'Failed to load models'))
     } finally {
       setLoading(false)
     }
@@ -121,7 +130,7 @@ export default function UnitModels() {
       resetForm()
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      alert(friendlyError(e, 'Save failed'))
     } finally {
       setSaving(false)
     }
@@ -151,7 +160,7 @@ export default function UnitModels() {
       if (!resp.ok) throw new Error(data?.error?.message || 'Delete failed')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      alert(friendlyError(e, 'Delete failed'))
     }
   }
 
@@ -196,7 +205,7 @@ export default function UnitModels() {
       })
       setHistoryItems(merged)
     } catch (e) {
-      alert(e.message || String(e))
+      alert(friendlyError(e, 'Failed to load history'))
     } finally {
       setHistoryLoading(false)
     }
