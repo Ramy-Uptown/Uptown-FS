@@ -175,6 +175,24 @@ export default function StandardPricing() {
     return calculatePV(total, dpPercent, Number(years), frequency, annualRate);
   }, [stdPrice, dpPercent, years, frequency, annualRate]);
 
+  const installmentsCount = useMemo(() => {
+    const y = Number(years) || 0;
+    switch (frequency) {
+      case 'monthly': return y * 12;
+      case 'quarterly': return y * 4;
+      case 'bi-annually': return y * 2;
+      case 'annually': return y * 1;
+      default: return 0;
+    }
+  }, [years, frequency]);
+
+  const pricePerSqM = useMemo(() => {
+    const total = Number(stdPrice) || 0;
+    const area = Number(selectedModel?.area) || 0;
+    if (!total || !area) return 0;
+    return total / area;
+  }, [stdPrice, selectedModel]);
+
   async function openPricingHistory(id) {
     setHistoryPricingId(id);
     setHistoryLoading(true);
@@ -328,9 +346,21 @@ export default function StandardPricing() {
               </div>
             </div>
 
-            <div style={{ marginTop: 10 }}>
-              <div style={metaText}>Calculated PV</div>
-              <div style={{ fontWeight: 600 }}>{Number(pv || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP</div>
+            <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              <div>
+                <div style={metaText}>Calculated PV</div>
+                <div style={{ fontWeight: 600 }}>{Number(pv || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP</div>
+              </div>
+              <div>
+                <div style={metaText}>Calculated Installments</div>
+                <div style={{ fontWeight: 600 }}>{installmentsCount || 0}</div>
+              </div>
+              <div>
+                <div style={metaText}>Price per m²</div>
+                <div style={{ fontWeight: 600 }}>
+                  {Number(pricePerSqM || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP/m²
+                </div>
+              </div>
             </div>
 
             <div style={{ marginTop: 12 }}>
