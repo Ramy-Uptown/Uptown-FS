@@ -28,6 +28,10 @@ export default function BrandHeader({ title, onLogout }) {
   const [user, setUser] = useState(null)
   const [queueCount, setQueueCount] = useState(0)
 
+  // API health banner state
+  const [apiHealthy, setApiHealthy] = useState(null) // null = unknown, true/false
+  const [apiHealthMsg, setApiHealthMsg] = useState('')
+
   useEffect(() => {
     let mounted = true
     const candidates = [
@@ -87,6 +91,31 @@ export default function BrandHeader({ title, onLogout }) {
       }
     }
     poll()
+    return () => t && clearTimeout(t)
+  }, [])
+
+  // API health check banner
+  useEffect(() => {
+    let t
+    async function check() {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+        const resp = await fetch(`${API_URL}/api/health`, { cache: 'no-store' })
+        if (!resp.ok) {
+          setApiHealthy(false)
+          setApiHealthMsg(`API responded with ${resp.status}`)
+        } else {
+          setApiHealthy(true)
+          setApiHealthMsg('')
+        }
+      } catch (e) {
+        setApiHealthy(false)
+        setApiHealthMsg('Failed to reach API')
+      } finally {
+        t = setTimeout(check, 30000)
+      }
+    }
+    check()
     return () => t && clearTimeout(t)
   }, [])
 
@@ -205,46 +234,60 @@ export default function BrandHeader({ title, onLogout }) {
   }
 
   return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 1000, background: BRAND.primary, color: '#fff', borderBottom: `4px solid ${BRAND.primaryDark}` }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {logoUrl ? (
-            <img src={logoUrl} alt="Company Logo" style={{ height: 36, width: 'auto', objectFit: 'contain' }} />
-          ) : (
-            <div style={{ height: 36, width: 36, borderRadius: 6, background: '#fff', color: BRAND.primary, display: 'grid', placeItems: 'center', fontWeight: 800 }}>U</div>
-          )}
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1 }}>{appTitle}</div>
-            <div style={{ fontSize: 12, opacity: 0.9 }}>
-              Welcome {user?.email || ''} {user?.role ? `(${user.role})` : ''} • Shortcuts:
+    <div style={{ position: 'sticky', top: 0, zIndex: 1000 }}>
+      <div style={{ background: BRAND.primary, color: '#fff', borderBottom: `4px solid ${BRAND.primaryDark}` }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {logoUrl ? (
+              <img src={logoUrl} alt="Company Logo" style={{ height: 36, width: 'auto', objectFit: 'contain' }} />
+            ) : (
+              <div style={{ height: 36, width: 36, borderRadius: 6, background: '#fff', color: BRAND.primary, display: 'grid', placeItems: 'center', fontWeight: 800 }}>U</div>
+            )}
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1 }}>{appTitle}</div>
+              <div style={{ fontSize: 12, opacity: 0.9 }}>
+                Welcome {user?.email || ''} {user?.role ? `(${user.role})` : ''} • Shortcuts:
+              </div>
             </div>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {shortcuts.map((s, idx) => {
-            const isActive = pathname && (pathname === s.href || pathname.startsWith(s.href + '/'))
-            return (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {shortcuts.map((s, idx) => {
+              const isActive = pathname && (pathname === s.href || pathname.startsWith(s.href + '/'))
+              return (
+                <HoverButton
+                  key={idx}
+                  onClick={() => { window.location.href = s.href }}
+                  style={{ ...baseBtnStyle, ...(isActive ? activeBtnStyle : null) }}
+                  hoverStyle={isActive ? activeHoverStyle : hoverBtnStyle}
+                >
+                  {s.label}
+                </HoverButton>
+              )
+            })}
+            {onLogout && (
               <HoverButton
-                key={idx}
-                onClick={() => { window.location.href = s.href }}
-                style={{ ...baseBtnStyle, ...(isActive ? activeBtnStyle : null) }}
-                hoverStyle={isActive ? activeHoverStyle : hoverBtnStyle}
+                onClick={onLogout}
+                style={baseBtnStyle}
+                hoverStyle={hoverBtnStyle}
               >
-                {s.label}
+                Logout
               </HoverButton>
-            )
-          })}
-          {onLogout && (
-            <HoverButton
-              onClick={onLogout}
-              style={baseBtnStyle}
-              hoverStyle={hoverBtnStyle}
-            >
-              Logout
-            </HoverButton>
-          )}
+            )}
+          </div>
         </div>
       </div>
+      {apiHealthy === false && (
+        <div style={{ background: '#991b1b', color: '#fff', padding: '6px 12px', borderBottom: '1px solid #7f1d1d' }}>
+          <div style={{ maxWidth: 1200, margin: '0 auto', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>
+              API unreachable. {apiHealthMsg ? `(${apiHealthMsg}) ` : ''}Please ensure containers are running.
+            </span>
+            <a href={`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/health`} target="_blank" rel="noreferrer" style={{ color: '#fff', textDecoration: 'underline' }}>
+              Check /api/health
+            </a>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
