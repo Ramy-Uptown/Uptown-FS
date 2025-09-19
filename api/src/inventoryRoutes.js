@@ -712,7 +712,7 @@ router.patch('/holds/:id/override-unblock', authMiddleware, requireRole(['financ
 router.get('/notifications', authMiddleware, requireRole(['financial_manager', 'admin', 'superadmin']), async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT * FROM notifications WHERE user_id=$1 AND read=FALSE ORDER BY id DESC`,
+      `SELECT * FROM notifications WHERE user_id=$1 AND is_read=FALSE ORDER BY id DESC`,
       [req.user.id]
     )
     return ok(res, { notifications: r.rows })

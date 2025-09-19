@@ -43,8 +43,7 @@ export default function UnitModels() {
     garden_area: '',
     has_roof: false,
     roof_area: '',
-    garage_area: '',
-    garage_standard_code: ''
+    garage_area: ''
   })
 
   // History modal
@@ -61,8 +60,7 @@ export default function UnitModels() {
       garden_area: '',
       has_roof: false,
       roof_area: '',
-      garage_area: '',
-      garage_standard_code: ''
+      garage_area: ''
     })
     setEditingId(0)
   }
@@ -102,8 +100,7 @@ export default function UnitModels() {
         garden_area: form.has_garden ? (Number(form.garden_area) || 0) : 0,
         has_roof: !!form.has_roof,
         roof_area: form.has_roof ? (Number(form.roof_area) || 0) : 0,
-        garage_area: Number(form.garage_area) || 0,
-        garage_standard_code: (form.garage_standard_code || '').trim()
+        garage_area: Number(form.garage_area) || 0
       }
       let resp
       if (editingId) {
@@ -141,8 +138,7 @@ export default function UnitModels() {
       garden_area: String(item.garden_area ?? ''),
       has_roof: !!item.has_roof,
       roof_area: String(item.roof_area ?? ''),
-      garage_area: String(item.garage_area ?? ''),
-      garage_standard_code: item.garage_standard_code || ''
+      garage_area: String(item.garage_area ?? '')
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -277,7 +273,6 @@ export default function UnitModels() {
           </label>
           <input type="number" placeholder="Roof Area (m²)" value={form.roof_area} onChange={e => setForm(s => ({ ...s, roof_area: e.target.value }))} style={ctrl} disabled={!form.has_roof} />
           <input type="number" placeholder="Garage Area (m²)" value={form.garage_area} onChange={e => setForm(s => ({ ...s, garage_area: e.target.value }))} style={ctrl} />
-          <input placeholder="Garage Standard Code" value={form.garage_standard_code} onChange={e => setForm(s => ({ ...s, garage_standard_code: e.target.value }))} style={ctrl} />
           <div style={{ gridColumn: '1 / span 6' }}>
             <span style={metaText}>
               You can mark both Garden and Roof if applicable. Areas are optional when unchecked.
@@ -307,9 +302,9 @@ export default function UnitModels() {
                 <th style={th}>Orientation</th>
                 <th style={th}>Garden</th>
                 <th style={th}>Roof</th>
-                <th style={th}>Garage Area</th>
-                <th style={th}>Garage Std Code</th>
-                <th style={th}>Created</th>
+                <th style={th}>Garage Ar</</th>
+               <<th style={th}>Creat</Stth>
+               < th style={th}>Updat</>Cthated</th>
                 <th style={th}>Updated</th>
                 <th style={th}>Actions</th>
               </tr>
@@ -324,7 +319,6 @@ export default function UnitModels() {
                   <td style={td}>{it.has_garden ? `Yes${it.garden_area ? ` (${it.garden_area} m²)` : ''}` : 'No'}</td>
                   <td style={td}>{it.has_roof ? `Yes${it.roof_area ? ` (${it.roof_area} m²)` : ''}` : 'No'}</td>
                   <td style={td}>{it.garage_area || 0}</td>
-                  <td style={td}>{it.garage_standard_code || ''}</td>
                   <td style={td}>{it.created_at ? new Date(it.created_at).toLocaleString() : '—'}</td>
                   <td style={td}>{it.updated_at ? new Date(it.updated_at).toLocaleString() : '—'}</td>
                   <td style={td}>
@@ -336,7 +330,7 @@ export default function UnitModels() {
               ))}
               {items.length === 0 && !loading && (
                 <tr>
-                  <td style={td} colSpan={11}>No models.</td>
+                  <td style={td} colSpan={10}>No models.</td>
                 </tr>
               )}
             </tbody>

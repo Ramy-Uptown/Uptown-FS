@@ -17,7 +17,7 @@ CREATE INDEX IF NOT EXISTS idx_holds_unit ON holds(unit_id);
 CREATE INDEX IF NOT EXISTS idx_holds_status ON holds(status);
 CREATE INDEX IF NOT EXISTS idx_holds_next_notify ON holds(next_notify_at);
 
-DO $$
+DO $
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_holds') THEN
     CREATE TRIGGER set_timestamp_holds
@@ -26,9 +26,10 @@ BEGIN
     EXECUTE FUNCTION trigger_set_timestamp();
   END IF;
 END;
-$$;
+$;
 
 -- Simple notifications queue
+-- Align column names with existing schema (is_read) to avoid conflicts with initDb.
 CREATE TABLE IF NOT EXISTS notifications (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -36,8 +37,9 @@ CREATE TABLE IF NOT EXISTS notifications (
   ref_table TEXT,
   ref_id INTEGER,
   message TEXT NOT NULL,
-  read BOOLEAN NOT NULL DEFAULT FALSE,
+  is_read BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read);
+-- Create composite index using is_read for fast unread lookups per user
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
