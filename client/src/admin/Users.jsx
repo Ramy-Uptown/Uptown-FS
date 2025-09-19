@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth, API_URL } from '../lib/apiClient';
 import BrandHeader from '../lib/BrandHeader';
 
@@ -22,6 +23,7 @@ const ROLE_OPTIONS = [
 // --- Main Component ---
 
 export default function Users() {
+    const navigate = useNavigate();
     // --- State Management ---
     const [users, setUsers] = useState([]);
     const [error, setError] = useState('');
@@ -369,7 +371,7 @@ export default function Users() {
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex justify-end gap-4">
                                                     <button onClick={() => openHistory(u.id)} disabled={isBusy} className="font-medium text-gray-700 hover:text-gray-900 disabled:text-gray-300">Position History</button>
-                                                    <button onClick={() => setEditingId(u.id)} disabled={isBusy} className="font-medium text-blue-600 hover:text-blue-800 disabled:text-gray-300">Edit</button>
+                                                    <button onClick={() => navigate(`/admin/users/${u.id}`)} disabled={isBusy} className="font-medium text-blue-600 hover:text-blue-800 disabled:text-gray-300">Edit</button>
                                                     <button onClick={() => toggleActive(u)} disabled={isBusy || isSelf} className="font-medium text-yellow-600 hover:text-yellow-800 disabled:text-gray-300">
                                                         {u.active ? 'Deactivate' : 'Activate'}
                                                     </button>
