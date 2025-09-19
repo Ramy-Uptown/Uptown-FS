@@ -510,19 +510,7 @@ router.patch('/holds/:id/override-approve', authMiddleware, requireRole(['ceo'])
   }
 })
 
-router.patch('/holds/:id/override-unblock', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
-  const client = await pool.connect()
-  try {
-    const id = num(req.params.id)
-    if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
-    await client AND ')}` : ''
-    const r = await pool.query(`SELECT * FROM holds ${where} ORDER BY id DESC`, params)
-    return ok(res, { holds: r.rows })
-  } catch (e) {
-    console.error('GET /api/inventory/holds error:', e)
-    return bad(res, 500, 'Internal error')
-  }
-})
+// (duplicate/invalid block removed)
 
 router.patch('/holds/:id/approve', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
   const client = await pool.connect()
@@ -716,7 +704,7 @@ router.patch('/holds/:id/override-unblock', authMiddleware, requireRole(['financ
     try { await client.query('ROLLBACK') } catch {}
     client.release()
     console.error('PATCH /api/inventory/holds/:id/override-unblock error:', e)
-    return bad(res, 500, 'Internal error'
+    return bad(res, 500, 'Internal error')
   }
 })
 
@@ -730,7 +718,7 @@ router.get('/notifications', authMiddleware, requireRole(['financial_manager', '
     return ok(res, { notifications: r.rows })
   } catch (e) {
     console.error('GET /api/inventory/notifications error:', e)
-    return bad(res, 500, 'Internal error'
+    return bad(res, 500, 'Internal error')
   }
 })
 
