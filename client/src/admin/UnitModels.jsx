@@ -21,6 +21,7 @@ import { th, td, ctrl, btn, btnPrimary, btnDanger, tableWrap, table, pageContain
     POST   /api/inventory/unit-models
     PATCH  /api/inventory/unit-models/:id
     DELETE /api/inventory/unit-models/:id
+    GET    /api/inventory/unit-models/:id/audit   (for history)
 */
 
 export default function UnitModels() {
@@ -45,6 +46,11 @@ export default function UnitModels() {
     garage_area: '',
     garage_standard_code: ''
   })
+
+  // History modal
+  const [historyForId, setHistoryForId] = useState(null)
+  const [historyItems, setHistoryItems] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   function resetForm() {
     setForm({
@@ -152,6 +158,29 @@ export default function UnitModels() {
     }
   }
 
+  async function openHistory(id) {
+    setHistoryForId(id)
+    setHistoryLoading(true)
+    setHistoryItems([])
+    try {
+      const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/${id}/audit`)
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load history')
+      const items = data.audit || data.items || []
+      setHistoryItems(items)
+    } catch (e) {
+      alert(e.message || String(e))
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  function closeHistory() {
+    setHistoryForId(null)
+    setHistoryItems([])
+    setHistoryLoading(false)
+  }
+
   const orientationOptions = [
     { value: 'left', label: 'Left' },
     { value: 'right', label: 'Right' },
@@ -241,6 +270,8 @@ export default function UnitModels() {
                 <th style={th}>Roof</th>
                 <th style={th}>Garage Area</th>
                 <th style={th}>Garage Std Code</th>
+                <th style={th}>Created</th>
+                <th style={th}>Updated</th>
                 <th style={th}>Actions</th>
               </tr>
             </thead>
@@ -255,15 +286,18 @@ export default function UnitModels() {
                   <td style={td}>{it.has_roof ? `Yes${it.roof_area ? ` (${it.roof_area} m²)` : ''}` : 'No'}</td>
                   <td style={td}>{it.garage_area || 0}</td>
                   <td style={td}>{it.garage_standard_code || ''}</td>
+                  <td style={td}>{it.created_at ? new Date(it.created_at).toLocaleString() : '—'}</td>
+                  <td style={td}>{it.updated_at ? new Date(it.updated_at).toLocaleString() : '—'}</td>
                   <td style={td}>
                     <button onClick={() => startEdit(it)} style={btn}>Edit</button>
+                    <button onClick={() => openHistory(it.id)} style={btn}>History</button>
                     <button onClick={() => remove(it.id)} style={btnDanger}>Delete</button>
                   </td>
                 </tr>
               ))}
               {items.length === 0 && !loading && (
                 <tr>
-                  <td style={td} colSpan={9}>No models.</td>
+                  <td style={td} colSpan={11}>No models.</td>
                 </tr>
               )}
             </tbody>
@@ -281,6 +315,39 @@ export default function UnitModels() {
             <button onClick={() => setPage(totalPages)} disabled={page >= totalPages} style={btn}>Last</button>
           </div>
         </div>
+
+        {historyForId !== null && (
+          <div className="fixed inset-0" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+            <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 800 }}>
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Change History — Model #{historyForId}</h3>
+                <button onClick={closeHistory} style={btn}>Close</button>
+              </div>
+              <div style={{ padding: 12, maxHeight: '65vh', overflowY: 'auto' }}>
+                {historyLoading ? (
+                  <div style={metaText}>Loading…</div>
+                ) : historyItems.length === 0 ? (
+                  <div style={metaText}>No history found.</div>
+                ) : (
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {historyItems.map(h => (
+                      <li key={h.id} style={{ borderBottom: '1px solid #f2f5fa', padding: '8px 0' }}>
+                        <div><strong>{h.action || 'update'}</strong> — {h.created_at ? new Date(h.created_at).toLocaleString() : ''}</div>
+                        <div style={metaText}>By: {h.changed_by_email || h.changed_by || ''}</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                          {h.details ? (typeof h.details === 'string' ? h.details : JSON.stringify(h.details, null, 2)) : ''}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div style={{ padding: '10px 14px', borderTop: '1px solid #e5e7eb', textAlign: 'right' }}>
+                <button onClick={closeHistory} style={btn}>Close</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

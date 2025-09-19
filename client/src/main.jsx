@@ -156,7 +156,7 @@ createRoot(document.getElementById('root')).render(
         <Route
           path="/admin/unit-models"
           element={
-            <RoleBasedRoute allowedRoles={['financial_manager', 'admin', 'superadmin']}>
+            <RoleBasedRoute allowedRoles={['financial_manager']}>
               <UnitModels />
             </RoleBasedRoute>
           }

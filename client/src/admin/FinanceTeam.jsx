@@ -20,6 +20,7 @@ export default function FinanceTeam() {
 
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const canAssign = me?.role === 'admin' || me?.role === 'superadmin'
+  const isFinancialManager = me?.role === 'financial_manager'
 
   useEffect(() => {
     load()
@@ -128,7 +129,9 @@ export default function FinanceTeam() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={pageTitle}>Finance Team</h2>
           <div>
-            <button type="button" onClick={() => navigate('/admin/unit-models')} style={btn}>Unit Models</button>
+            {isFinancialManager ? (
+              <button type="button" onClick={() => navigate('/admin/unit-models')} style={btn}>Unit Models</button>
+            ) : null}
           </div>
         </div>
 
