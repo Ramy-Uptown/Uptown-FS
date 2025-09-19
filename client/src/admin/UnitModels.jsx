@@ -302,9 +302,8 @@ export default function UnitModels() {
                 <th style={th}>Orientation</th>
                 <th style={th}>Garden</th>
                 <th style={th}>Roof</th>
-                <th style={th}>Garage Ar</</th>
-               <<th style={th}>Creat</Stth>
-               < th style={th}>Updat</>Cthated</th>
+                <th style={th}>Garage Area</th>
+                <th style={th}>Created</th>
                 <th style={th}>Updated</th>
                 <th style={th}>Actions</th>
               </tr>
