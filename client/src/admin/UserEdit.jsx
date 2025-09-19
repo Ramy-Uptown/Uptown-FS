@@ -125,10 +125,14 @@ export default function UserEdit() {
         const existing = (user && user.meta && user.meta.full_name) || ''
         metaObj.full_name = existing
       }
+      const payload = { notes, meta: metaObj }
+      // Only superadmin can change email
+      payload.email = isSuperAdmin ? email : (user?.email || email)
+
       const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${uid}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, notes, meta: metaObj })
+        body: JSON.stringify(payload)
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to save')
@@ -298,7 +302,8 @@ export default function UserEdit() {
         <form onSubmit={saveBasics} style={{ display: 'grid', gap: 10, marginBottom: 20 }}>
           <label>
             <div style={metaText}>Email</div>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={ctrl} required />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={ctrl} required disabled={!isSuperAdmin} />
+            {!isSuperAdmin && <div style={{ ...metaText, marginTop: 4 }}>Only Superadmin can edit email</div>}
           </label>
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
