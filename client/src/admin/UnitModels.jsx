@@ -134,6 +134,7 @@ export default function UnitModels() {
     setEditingId(item.id)
     setForm({
       model_name: item.model_name || '',
+      model_code: item.model_code || '',
       area: String(item.area ?? ''),
       orientation: item.orientation || 'left',
       has_garden: !!item.has_garden,
@@ -255,6 +256,7 @@ export default function UnitModels() {
 
         <form onSubmit={save} style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
           <input placeholder="Model Name" value={form.model_name} onChange={e => setForm(s => ({ ...s, model_name: e.target.value }))} style={ctrl} required />
+          <input placeholder="Model Code" value={form.model_code || ''} onChange={e => setForm(s => ({ ...s, model_code: e.target.value }))} style={ctrl} />
           <input type="number" placeholder="Area (m²)" value={form.area} onChange={e => setForm(s => ({ ...s, area: e.target.value }))} style={ctrl} required />
           <select value={form.orientation} onChange={e => setForm(s => ({ ...s, orientation: e.target.value }))} style={ctrl}>
             {orientationOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}

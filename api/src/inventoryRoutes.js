@@ -580,7 +580,7 @@ router.post('/unit-models', authMiddleware, requireRole(['financial_manager']), 
   const client = await pool.connect()
   try {
     const {
-      model_name, area, orientation,
+      model_name, model_code, area, orientation,
       has_garden, garden_area,
       has_roof, roof_area,
       garage_area, garage_standard_code
@@ -593,6 +593,7 @@ router.post('/unit-models', authMiddleware, requireRole(['financial_manager']), 
 
     const payload = {
       model_name: String(model_name).trim(),
+      model_code: model_code ? String(model_code).trim() : null,
       area: Number(area) || 0,
       orientation: String(orientation || 'left'),
       has_garden: !!has_garden,
@@ -622,7 +623,7 @@ router.patch('/unit-models/:id', authMiddleware, requireRole(['financial_manager
     const cur = await client.query('SELECT * FROM unit_models WHERE id=$1', [id])
     if (cur.rows.length === 0) { client.release(); return bad(res, 404, 'Not found') }
 
-    const allow = ['model_name','area','orientation','has_garden','garden_area','has_roof','roof_area','garage_area','garage_standard_code']
+    const allow = ['model_name','model_code','area','orientation','has_garden','garden_area','has_roof','roof_area','garage_area','garage_standard_code']
     const payload = {}
     for (const k of allow) {
       if (Object.prototype.hasOwnProperty.call(req.body, k)) {
