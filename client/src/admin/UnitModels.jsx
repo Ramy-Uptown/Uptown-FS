@@ -163,11 +163,41 @@ export default function UnitModels() {
     setHistoryLoading(true)
     setHistoryItems([])
     try {
-      const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/${id}/audit`)
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load history')
-      const items = data.audit || data.items || []
-      setHistoryItems(items)
+      // Fetch applied audit entries
+      const [auditResp, pendingResp, rejectedResp] = await Promise.all([
+        fetchWithAuth(`${API_URL}/api/inventory/unit-models/${id}/audit`),
+        fetchWithAuth(`${API_URL}/api/inventory/unit-models/changes?status=pending_approval`),
+        fetchWithAuth(`${API_URL}/api/inventory/unit-models/changes?status=rejected`)
+      ])
+      const auditData = await auditResp.json().catch(() => ({}))
+      if (!auditResp.ok) throw new Error(auditData?.error?.message || 'Failed to load history')
+      const auditItems = (auditData.audit || []).map(a => ({ ...a, _kind: 'audit' }))
+
+      // Fetch pending and rejected change requests and filter for this model
+      const pendingData = await pendingResp.json().catch(() => ({}))
+      const rejectedData = await rejectedResp.json().catch(() => ({}))
+      const byStatus = (src, status) => (src?.changes || []).filter(ch => Number(ch.model_id) === Number(id)).map(ch => ({
+        id: `change-${ch.id}`,
+        action: ch.action,
+        changed_by: ch.requested_by,
+        changed_by_email: ch.requested_by_email,
+        created_at: ch.created_at,
+        details: { status, payload: ch.payload, reason: ch.reason || null },
+        _kind: 'change',
+        _status: status
+      }))
+      const changeItems = [
+        ...byStatus(pendingData, 'pending_approval'),
+        ...byStatus(rejectedData, 'rejected')
+      ]
+
+      // Merge and sort by created_at desc
+      const merged = [...auditItems, ...changeItems].sort((a, b) => {
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0
+        return tb - ta
+      })
+      setHistoryItems(merged)
     } catch (e) {
       alert(e.message || String(e))
     } finally {
@@ -339,7 +369,19 @@ export default function UnitModels() {
                   <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {historyItems.map(h => (
                       <li key={h.id} style={{ borderBottom: '1px solid #f2f5fa', padding: '8px 0' }}>
-                        <div><strong>{h.action || 'update'}</strong> — {h.created_at ? new Date(h.created_at).toLocaleString() : ''}</div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <strong>{h.action || 'update'}</strong>
+                          {h._kind === 'change' ? (
+                            <span style={{ fontSize: 12, padding: '2px 6px', borderRadius: 6, background: h._status === 'rejected' ? '#fee2e2' : '#fef3c7', color: '#374151' }}>
+                              {h._status}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 12, padding: '2px 6px', borderRadius: 6, background: '#dcfce7', color: '#065f46' }}>
+                              applied
+                            </span>
+                          )}
+                          <span style={metaText}>— {h.created_at ? new Date(h.created_at).toLocaleString() : ''}</span>
+                        </div>
                         <div style={metaText}>By: {h.changed_by_email || h.changed_by || ''}</div>
                         <div style={{ fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
                           {h.details ? (typeof h.details === 'string' ? h.details : JSON.stringify(h.details, null, 2)) : ''}
