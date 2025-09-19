@@ -7,75 +7,123 @@ const router = express.Router();
 // Middleware to ensure authentication for all pricing routes
 router.use(authMiddleware);
 
-// Create a new standard pricing (Financial Manager only)
-router.post('/standard', requireRole(['financial_manager']), async (req, res) => {
+/**
+ * Unit Model Pricing
+ * One pricing row per model_id (unique). FM can create or update price which will be pending_approval.
+ * Top-Management (ceo, chairman, vice_chairman) can approve or reject.
+ */
+
+// Upsert pricing for a unit model (FM)
+router.post('/unit-model', requireRole(['financial_manager']), async (req, res) => {
   try {
-    const { unit_id, price } = req.body;
-    const created_by = req.user.id;
-
-    if (!unit_id || !price) {
-      return res.status(400).json({ error: { message: 'unit_id and price are required' } });
+    const { model_id, price } = req.body || {};
+    if (!model_id || !Number.isFinite(Number(price))) {
+      return res.status(400).json({ error: { message: 'model_id and numeric price are required' } });
     }
-
-    const result = await pool.query(
-      'INSERT INTO standard_pricing (unit_id, price, created_by) VALUES ($1, $2, $3) RETURNING *',
-      [unit_id, price, created_by]
+    const pid = Number(model_id);
+    const pr = Number(price);
+    // Upsert behavior: if exists -> update price and set status pending_approval; else insert new
+    const existing = await pool.query('SELECT * FROM unit_model_pricing WHERE model_id=$1', [pid]);
+    let out;
+    if (existing.rows.length > 0) {
+      const r = await pool.query(
+        `UPDATE unit_model_pricing
+         SET price=$1, status='pending_approval', approved_by=NULL, updated_at=now()
+         WHERE model_id=$2
+         RETURNING *`,
+        [pr, pid]
+      );
+      out = r.rows[0];
+    } else {
+      const r = await pool.query(
+        `INSERT INTO unit_model_pricing (model_id, price, status, created_by)
+         VALUES ($1, $2, 'pending_approval', $3)
+         RETURNING *`,
+        [pid, pr, req.user.id]
+      );
+      out = r.rows[0];
+    }
+    // Audit
+    await pool.query(
+      `INSERT INTO unit_model_pricing_audit (pricing_id, action, changed_by, details)
+       VALUES ($1, 'upsert', $2, $3::jsonb)`,
+      [out.id, req.user.id, JSON.stringify({ price: pr, model_id: pid })]
     );
-
-    res.status(201).json({ ok: true, pricing: result.rows[0] });
+    return res.status(201).json({ ok: true, pricing: out });
   } catch (e) {
-    console.error('POST /api/pricing/standard error:', e);
+    console.error('POST /api/pricing/unit-model error:', e);
     res.status(500).json({ error: { message: 'Internal error' } });
   }
 });
 
-// Update the status of a standard pricing (CEO only)
-router.put('/standard/:id/status', requireRole(['ceo']), async (req, res) => {
+// Approve/reject (Top Management)
+router.patch('/unit-model/:id/status', requireRole(['ceo','chairman','vice_chairman']), async (req, res) => {
   try {
-    const { id } = req.params;
-    const { status } = req.body;
-    const approved_by = req.user.id;
-
-    if (!status || !['approved', 'rejected'].includes(status)) {
+    const id = Number(req.params.id);
+    const { status, reason } = req.body || {};
+    if (!id) return res.status(400).json({ error: { message: 'Invalid id' } });
+    if (!status || !['approved', 'rejected'].includes(String(status))) {
       return res.status(400).json({ error: { message: 'status must be "approved" or "rejected"' } });
     }
-
-    const result = await pool.query(
-      'UPDATE standard_pricing SET status = $1, approved_by = $2 WHERE id = $3 RETURNING *',
-      [status, approved_by, id]
+    const r = await pool.query(
+      `UPDATE unit_model_pricing SET status=$1, approved_by=$2, updated_at=now() WHERE id=$3 RETURNING *`,
+      [String(status), req.user.id, id]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: { message: 'Pricing not found' } });
-    }
-
-    res.json({ ok: true, pricing: result.rows[0] });
+    if (r.rows.length === 0) return res.status(404).json({ error: { message: 'Not found' } });
+    // Audit
+    await pool.query(
+      `INSERT INTO unit_model_pricing_audit (pricing_id, action, changed_by, details)
+       VALUES ($1, $2, $3, $4::jsonb)`,
+      [id, status === 'approved' ? 'approve' : 'reject', req.user.id, JSON.stringify({ reason: reason || null })]
+    );
+    return res.json({ ok: true, pricing: r.rows[0] });
   } catch (e) {
-    console.error('PUT /api/pricing/standard/:id/status error:', e);
+    console.error('PATCH /api/pricing/unit-model/:id/status error:', e);
     res.status(500).json({ error: { message: 'Internal error' } });
   }
 });
 
-// Get all standard pricings (Financial Manager and CEO)
-router.get('/standard', requireRole(['financial_manager', 'ceo']), async (req, res) => {
+// List pricing (FM + Top Management)
+router.get('/unit-model', requireRole(['financial_manager','ceo','chairman','vice_chairman']), async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT
-        sp.*,
-        u.code AS unit_code,
-        u.description AS unit_description,
-        creator.email AS created_by_email,
-        approver.email AS approved_by_email
-      FROM standard_pricing sp
-      JOIN units u ON sp.unit_id = u.id
-      JOIN users creator ON sp.created_by = creator.id
-      LEFT JOIN users approver ON sp.approved_by = approver.id
-      ORDER BY sp.created_at DESC
-    `);
-
-    res.json({ ok: true, pricings: result.rows });
+    const r = await pool.query(
+      `SELECT
+         p.*,
+         m.model_name,
+         m.model_code,
+         m.area,
+         m.orientation,
+         creator.email AS created_by_email,
+         approver.email AS approved_by_email
+       FROM unit_model_pricing p
+       JOIN unit_models m ON m.id = p.model_id
+       LEFT JOIN users creator ON creator.id = p.created_by
+       LEFT JOIN users approver ON approver.id = p.approved_by
+       ORDER BY p.updated_at DESC`
+    );
+    return res.json({ ok: true, pricings: r.rows });
   } catch (e) {
-    console.error('GET /api/pricing/standard error:', e);
+    console.error('GET /api/pricing/unit-model error:', e);
+    res.status(500).json({ error: { message: 'Internal error' } });
+  }
+});
+
+// Pricing audit history
+router.get('/unit-model/:id/audit', requireRole(['financial_manager','ceo','chairman','vice_chairman']), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: { message: 'Invalid id' } });
+    const r = await pool.query(
+      `SELECT a.*, u.email AS changed_by_email
+       FROM unit_model_pricing_audit a
+       LEFT JOIN users u ON u.id = a.changed_by
+       WHERE a.pricing_id=$1
+       ORDER BY a.id DESC`,
+      [id]
+    );
+    return res.json({ ok: true, audit: r.rows });
+  } catch (e) {
+    console.error('GET /api/pricing/unit-model/:id/audit error:', e);
     res.status(500).json({ error: { message: 'Internal error' } });
   }
 });

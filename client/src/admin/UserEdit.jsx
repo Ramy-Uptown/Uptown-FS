@@ -17,6 +17,7 @@ export default function UserEdit() {
   const [role, setRole] = useState('user')
   const [active, setActive] = useState(true)
   const [notes, setNotes] = useState('')
+  const [fullName, setFullName] = useState('') // extracted from meta.full_name
   const [metaTextState, setMetaTextState] = useState('{}')
   const [pw1, setPw1] = useState('')
   const [pw2, setPw2] = useState('')
@@ -29,6 +30,7 @@ export default function UserEdit() {
 
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const isSuperAdmin = me?.role === 'superadmin'
+  const isAdmin = me?.role === 'admin'
 
   const roleOptions = [
     'user',
@@ -79,6 +81,7 @@ export default function UserEdit() {
       setRole(uData.user.role || 'user')
       setActive(uData.user.active !== false)
       setNotes(uData.user.notes || '')
+      setFullName((uData.user.meta && uData.user.meta.full_name) || '')
       setMetaTextState(JSON.stringify(uData.user.meta || {}, null, 2))
 
       const listData = await listResp.json()
@@ -114,14 +117,29 @@ export default function UserEdit() {
         alert('Metadata must be valid JSON')
         return
       }
+      // Enforce name edit permissions: only superadmin can change full_name
+      if (isSuperAdmin) {
+        metaObj.full_name = fullName
+      } else {
+        // keep existing full_name; prevent admin from altering name through JSON
+        const existing = (user && user.meta && user.meta.full_name) || ''
+        metaObj.full_name = existing
+      }
+      const payload = { notes, meta: metaObj }
+      // Only superadmin can change email
+      payload.email = isSuperAdmin ? email : (user?.email || email)
+
       const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${uid}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, notes, meta: metaObj })
+        body: JSON.stringify(payload)
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to save')
       setUser(data.user)
+      // refresh local fields from server
+      setFullName((data.user.meta && data.user.meta.full_name) || '')
+      setMetaTextState(JSON.stringify(data.user.meta || {}, null, 2))
       alert('Saved.')
     } catch (e) {
       alert(e.message || String(e))
@@ -284,7 +302,8 @@ export default function UserEdit() {
         <form onSubmit={saveBasics} style={{ display: 'grid', gap: 10, marginBottom: 20 }}>
           <label>
             <div style={metaText}>Email</div>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={ctrl} required />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={ctrl} required disabled={!isSuperAdmin} />
+            {!isSuperAdmin && <div style={{ ...metaText, marginTop: 4 }}>Only Superadmin can edit email</div>}
           </label>
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -301,6 +320,12 @@ export default function UserEdit() {
           </div>
 
           <label>
+            <div style={metaText}>Full Name</div>
+            <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} style={ctrl} disabled={!isSuperAdmin} placeholder="Employee full name" />
+            {!isSuperAdmin && <div style={{ ...metaText, marginTop: 4 }}>Only Superadmin can edit name</div>}
+          </label>
+
+          <label>
             <div style={metaText}>Notes</div>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} style={{ ...ctrl, minHeight: 80 }} placeholder="Internal notes..." />
           </label>
@@ -308,6 +333,7 @@ export default function UserEdit() {
           <label>
             <div style={metaText}>Metadata (JSON)</div>
             <textarea value={metaTextState} onChange={e => setMetaTextState(e.target.value)} rows={6} style={{ ...ctrl, fontFamily: 'monospace', minHeight: 120 }} placeholder='{"key":"value"}' />
+            {!isSuperAdmin && <div style={{ ...metaText, marginTop: 4 }}>Note: Name is managed separately and cannot be changed by Admin.</div>}
           </label>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
