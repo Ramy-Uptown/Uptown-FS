@@ -118,7 +118,14 @@ export default function StandardPricing() {
     <div>
       <BrandHeader onLogout={handleLogout} />
       <div style={pageContainer}>
-        <h2 style={pageTitle}>Standard Pricing</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={pageTitle}>Standard Pricing</h2>
+          {role === 'financial_manager' ? (
+            <a href="/admin/unit-models" style={{ ...btnPrimary, textDecoration: 'none', display: 'inline-block' }}>
+              Manage Unit Models
+            </a>
+          ) : null}
+        </div>
 
         {role === 'financial_manager' && (
           <form onSubmit={handleCreatePricing} style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 2px 6px rgba(21,24,28,0.04)' }}>
