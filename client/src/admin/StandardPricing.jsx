@@ -80,24 +80,18 @@ export default function StandardPricing() {
       try {
         setLoading(true);
         const reqs = [fetchWithAuth(`${API_URL}/api/pricing/unit-model`)];
-        // Only FM can list models (our endpoint is restricted); CEOs will still see pricing list
-        if (role === 'financial_manager') {
-          reqs.push(fetchWithAuth(`${API_URL}/api/inventory/unit-models`));
-        }
-        const resps = await Promise.all(reqs);
-        const pricingRes = resps[0];
+        // Allow both FM and Top-Management to view models (endpoint updated to allow read)
+        reqs.push(fetchWithAuth(`${API_URL}/api/inventory/unit-models`));
+        const [pricingRes, modelsRes] = await Promise.all(reqs);
         const pricingData = await pricingRes.json();
         if (!pricingRes.ok) throw new Error(pricingData?.error?.message || 'Failed to fetch pricing');
 
         setPricings(pricingData.pricings || []);
 
-        if (role === 'financial_manager') {
-          const modelsRes = resps[1];
-          const modelsData = await modelsRes.json();
-          if (!modelsRes.ok) throw new Error(modelsData?.error?.message || 'Failed to fetch models');
-          const items = modelsData.items || modelsData.models || [];
-          setModels(items);
-        }
+        const modelsData = await modelsRes.json();
+        if (!modelsRes.ok) throw new Error(modelsData?.error?.message || 'Failed to fetch models');
+        const items = modelsData.items || modelsData.models || [];
+        setModels(items);
       } catch (e) {
         setError(e.message || 'An error occurred');
       } finally {
@@ -155,12 +149,12 @@ export default function StandardPricing() {
     }
   };
 
-  const handleApproveStatus = async (id, status) => {
+  const handleApproveStatus = async (id, status, reason) => {
     try {
       const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status, reason: reason || null })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || 'Failed to update status');
@@ -170,10 +164,37 @@ export default function StandardPricing() {
     }
   };
 
+  // Pricing history modal state
+  const [historyPricingId, setHistoryPricingId] = useState(null);
+  const [historyItems, setHistoryItems] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [rejectReasons, setRejectReasons] = useState({});
+
   const pv = useMemo(() => {
     const total = Number(stdPrice) || 0;
     return calculatePV(total, dpPercent, Number(years), frequency, annualRate);
   }, [stdPrice, dpPercent, years, frequency, annualRate]);
+
+  async function openPricingHistory(id) {
+    setHistoryPricingId(id);
+    setHistoryLoading(true);
+    setHistoryItems([]);
+    try {
+      const resp = await fetchWithAuth(`${API_URL}/api/pricing/unit-model/${id}/audit`);
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load history');
+      setHistoryItems(data.audit || []);
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+  function closePricingHistory() {
+    setHistoryPricingId(null);
+    setHistoryItems([]);
+    setHistoryLoading(false);
+  }
 
   const handleLogout = async () => {
     try {
@@ -344,14 +365,25 @@ export default function StandardPricing() {
                   <td style={td}>{p.created_by_email || ''}</td>
                   <td style={td}>{p.approved_by_email || ''}</td>
                   <td style={td}>
-                    {(role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval' ? (
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <button onClick={() => handleApproveStatus(p.id, 'approved')} style={btnSuccess}>Approve</button>
-                        <button onClick={() => handleApproveStatus(p.id, 'rejected')} style={btnDanger}>Reject</button>
-                      </div>
-                    ) : (
-                      <span style={metaText}>—</span>
-                    )}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button onClick={() => openPricingHistory(p.id)} style={btn}>History</button>
+                      {(role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval' ? (
+                        <>
+                          <button onClick={() => handleApproveStatus(p.id, 'approved')} style={btnSuccess}>Approve</button>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <input
+                              placeholder="Reason (for rejection)"
+                              value={rejectReasons[p.id] || ''}
+                              onChange={e => setRejectReasons(s => ({ ...s, [p.id]: e.target.value }))}
+                              style={ctrl}
+                            />
+                            <button onClick={() => handleApproveStatus(p.id, 'rejected', rejectReasons[p.id])} style={btnDanger}>Reject</button>
+                          </div>
+                        </>
+                      ) : (
+                        <span style={metaText}>—</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -363,6 +395,83 @@ export default function StandardPricing() {
             </tbody>
           </table>
         </div>
+
+        {(role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && (
+          <div style={{ marginTop: 16, border: '1px solid #e6eaf0', borderRadius: 12, padding: 12 }}>
+            <h3 style={{ marginTop: 0 }}>Unit Models (Read-only)</h3>
+            <div style={tableWrap}>
+              <table style={table}>
+                <thead>
+                  <tr>
+                    <th style={th}>ID</th>
+                    <th style={th}>Name</th>
+                    <th style={th}>Code</th>
+                    <th style={th}>Area</th>
+                    <th style={th}>Orientation</th>
+                    <th style={th}>Garden</th>
+                    <th style={th}>Roof</th>
+                    <th style={th}>Created</th>
+                    <th style={th}>Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {models.map(m => (
+                    <tr key={m.id}>
+                      <td style={td}>{m.id}</td>
+                      <td style={td}>{m.model_name}</td>
+                      <td style={td}>{m.model_code || ''}</td>
+                      <td style={td}>{m.area}</td>
+                      <td style={td}>{String(m.orientation || '').replace(/_/g,' ')}</td>
+                      <td style={td}>{m.has_garden ? (m.garden_area ? `Yes (${m.garden_area} m²)` : 'Yes') : 'No'}</td>
+                      <td style={td}>{m.has_roof ? (m.roof_area ? `Yes (${m.roof_area} m²)` : 'Yes') : 'No'}</td>
+                      <td style={td}>{m.created_at ? new Date(m.created_at).toLocaleString() : ''}</td>
+                      <td style={td}>{m.updated_at ? new Date(m.updated_at).toLocaleString() : ''}</td>
+                    </tr>
+                  ))}
+                  {models.length === 0 && (
+                    <tr>
+                      <td style={td} colSpan={9}><span style={metaText}>No models.</span></td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Pricing history modal */}
+        {historyPricingId != null && (
+          <div className="fixed inset-0" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+            <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 800 }}>
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Pricing History — #{historyPricingId}</h3>
+                <button onClick={closePricingHistory} style={btn}>Close</button>
+              </div>
+              <div style={{ padding: 12, maxHeight: '65vh', overflowY: 'auto' }}>
+                {historyLoading ? (
+                  <div style={metaText}>Loading…</div>
+                ) : historyItems.length === 0 ? (
+                  <div style={metaText}>No history found.</div>
+                ) : (
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {historyItems.map(h => (
+                      <li key={h.id} style={{ borderBottom: '1px solid #f2f5fa', padding: '8px 0' }}>
+                        <div><strong>{h.action}</strong> — {h.created_at ? new Date(h.created_at).toLocaleString() : ''}</div>
+                        <div style={metaText}>By: {h.changed_by_email || h.changed_by || ''}</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                          {h.details ? (typeof h.details === 'string' ? h.details : JSON.stringify(h.details, null, 2)) : ''}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div style={{ padding: '10px 14px', borderTop: '1px solid #e5e7eb', textAlign: 'right' }}>
+                <button onClick={closePricingHistory} style={btn}>Close</button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
