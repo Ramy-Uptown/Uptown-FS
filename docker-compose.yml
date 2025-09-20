@@ -55,6 +55,9 @@ services:
     environment:
       - NODE_ENV=development
       - VITE_API_URL=http://localhost:3000
+      # Ensure the browser connects HMR to the externally reachable host/port.
+      - HMR_HOST=localhost
+      - HMR_CLIENT_PORT=5173
     volumes:
       - ./client:/app
       - /app/node_modules
