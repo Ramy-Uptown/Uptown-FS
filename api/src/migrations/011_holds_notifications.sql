@@ -25,7 +25,7 @@ BEGIN
     FOR EACH ROW
     EXECUTE FUNCTION trigger_set_timestamp();
   END IF;
-END;
+END;$$;
 
 -- Simple notifications queue
 -- Align column names with existing schema (is_read) to avoid conflicts with initDb.

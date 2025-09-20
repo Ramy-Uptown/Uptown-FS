@@ -1,3 +1,12 @@
+-- Create the generic updated_at trigger function (used by multiple tables)
+CREATE OR REPLACE FUNCTION trigger_set_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Audit log for admin-initiated changes to users
 CREATE TABLE IF NOT EXISTS user_audit_log (
   id SERIAL PRIMARY KEY,
