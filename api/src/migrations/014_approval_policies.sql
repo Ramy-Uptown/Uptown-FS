@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS approval_policies (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_approval_policies') THEN
     CREATE TRIGGER set_timestamp_approval_policies
@@ -24,10 +24,10 @@ BEGIN
     EXECUTE FUNCTION trigger_set_timestamp();
   END IF;
 END;
-$;
+
 
 -- Ensure a single active global policy exists (default 5%)
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM approval_policies WHERE scope_type='global' AND active=TRUE
@@ -36,6 +36,5 @@ BEGIN
     VALUES ('global', NULL, 5.00, 2.01, 25.00, 70.00, TRUE, 'Default global discount policy');
   END IF;
 END;
-$;
 
 CREATE INDEX IF NOT EXISTS idx_approval_policies_scope ON approval_policies(scope_type, scope_id, active);

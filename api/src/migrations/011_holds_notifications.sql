@@ -17,7 +17,7 @@ CREATE INDEX IF NOT EXISTS idx_holds_unit ON holds(unit_id);
 CREATE INDEX IF NOT EXISTS idx_holds_status ON holds(status);
 CREATE INDEX IF NOT EXISTS idx_holds_next_notify ON holds(next_notify_at);
 
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_holds') THEN
     CREATE TRIGGER set_timestamp_holds
@@ -26,7 +26,6 @@ BEGIN
     EXECUTE FUNCTION trigger_set_timestamp();
   END IF;
 END;
-$;
 
 -- Simple notifications queue
 -- Align column names with existing schema (is_read) to avoid conflicts with initDb.
