@@ -1,153 +1,130 @@
-import React, { useEffect, useState } from 'react'
-import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { Link } from 'react-router-dom'
-import StatusChip from '../components/StatusChip.jsx'
+import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
+import { fetchWithAuth } from '../lib/apiClient.js';
 
-export default function PaymentPlanQueues() {
-  const [rows, setRows] = useState([])
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [role, setRole] = useState('')
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+export default function UnitModelQueues() {
+  const [approvals, setApprovals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const fetchApprovals = async () => {
+    setLoading(true);
+    try {
+      // This is the correct endpoint from your backend inventoryRoutes.js file
+      const response = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/changes`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || 'Failed to fetch data');
+      }
+      
+      setApprovals(data.changes);
+    } catch (err) {
+      setError('Failed to load unit model approvals.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    try {
-      const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
-      setRole(user?.role || '')
-    } catch {}
-  }, [])
+    fetchApprovals();
+  }, []);
 
-  async function load() {
-    try {
-      setLoading(true)
-      setError('')
-      let url = ''
-      if (role === 'sales_manager') {
-        url = `${API_URL}/api/workflow/payment-plans/queue/sm`
-      } else if (role === 'financial_manager') {
-        url = `${API_URL}/api/workflow/payment-plans/queue/fm`
-      } else if (['ceo', 'vice_chairman', 'chairman', 'top_management'].includes(role)) {
-        url = `${API_URL}/api/workflow/payment-plans/queue/tm`
-      } else {
-        setError('Your role does not have an approval queue.')
-        setRows([])
-        return
+  const handleApprove = async (id) => {
+    if (window.confirm('Are you sure you want to approve this change?')) {
+      try {
+        const response = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/changes/${id}/approve`, { method: 'PATCH' });
+         if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error?.message || 'Approval failed');
+        }
+        toast.success('Change approved successfully!');
+        fetchApprovals(); // Refresh the list
+      } catch (err) {
+        toast.error(err.message || 'Failed to approve change.');
+        console.error(err);
       }
-      const resp = await fetchWithAuth(url)
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load queue')
-      setRows(data.payment_plans || [])
-    } catch (e) {
-      setError(e.message || String(e))
-    } finally {
-      setLoading(false)
     }
-  }
+  };
 
-  useEffect(() => {
-    if (role) load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role])
-
-  async function takeAction(id, action) {
-    try {
-      setLoading(true)
-      setError('')
-      let endpoint = ''
-      if (role === 'sales_manager') {
-        if (action === 'approve') endpoint = `${API_URL}/api/workflow/payment-plans/${id}/approve-sm`
-        else endpoint = `${API_URL}/api/workflow/payment-plans/${id}/reject-sm`
-      } else if (role === 'financial_manager') {
-        if (action === 'approve') endpoint = `${API_URL}/api/workflow/payment-plans/${id}/approve`
-        else endpoint = `${API_URL}/api/workflow/payment-plans/${id}/reject`
-      } else {
-        // Top-Management
-        if (action === 'approve') endpoint = `${API_URL}/api/workflow/payment-plans/${id}/approve-tm`
-        else endpoint = `${API_URL}/api/workflow/payment-plans/${id}/reject-tm`
+  const handleReject = async (id) => {
+    const reason = prompt('Please provide a reason for rejection:');
+    if (reason) {
+      try {
+        const response = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/changes/${id}/reject`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason })
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error?.message || 'Rejection failed');
+        }
+        toast.warn('Change rejected.');
+        fetchApprovals(); // Refresh the list
+      } catch (err) {
+        toast.error(err.message || 'Failed to reject change.');
+        console.error(err);
       }
-      const resp = await fetchWithAuth(endpoint, { method: 'PATCH' })
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Action failed')
-      setRows(rows => rows.filter(r => r.id !== id))
-    } catch (e) {
-      alert(e.message || String(e))
-    } finally {
-      setLoading(false)
     }
-  }
+  };
 
-  const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-  const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
-  const btn = { marginRight: 8, padding: '6px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
-
-  // StatusChip now reused component
-
-  function DiscountCell({ details }) {
-    const disc = Number(details?.inputs?.salesDiscountPercent ?? details?.salesDiscountPercent ?? 0) || 0
-    return <span>{disc.toFixed(2)}%</span>
-  }
-
-  function rowHighlightStyle(r) {
-    // Try to infer warnings (overAuthority / overPolicy) if embedded from calculator details.meta
-    const overAuthority = !!(r.details?.meta?.overAuthority)
-    const overPolicy = !!(r.details?.meta?.overPolicy)
-    if (overPolicy || overAuthority) {
-      return { background: '#fff7ed' } // light orange
-    }
-    return {}
-  }
+  const renderPayload = (payload) => (
+    <ul className="list-disc pl-5 text-xs">
+      {Object.entries(payload).map(([key, value]) => (
+        <li key={key}>
+          <strong>{key}:</strong> {JSON.stringify(value)}
+        </li>
+      ))}
+    </ul>
+  );
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <h2 style={{ marginTop: 0 }}>Payment Plan Approval Queue</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Link to="/deals" style={{ textDecoration: 'none', color: '#1f6feb' }}>Deals Dashboard</Link>
-          <Link to="/deals/create" style={{ textDecoration: 'none', color: '#1f6feb' }}>Create Deal</Link>
-        </div>
-      </div>
-      <p style={{ color: '#64748b' }}>
-        Role: <strong>{role || 'unknown'}</strong>
-        {' '}— Showing: {role === 'sales_manager' ? 'Sales-Manager queue (pending_sm)' :
-          role === 'financial_manager' ? 'Finance-Manager queue (pending_fm)' :
-          (['ceo', 'vice_chairman', 'chairman', 'top_management'].includes(role) ? 'Top-Management queue (pending_tm)' : 'None')}
-      </p>
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
-      <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={th}>ID</th>
-              <th style={th}>Deal</th>
-              <th style={th}>Status</th>
-              <th style={th}>Discount %</th>
-              <th style={th}>Version</th>
-              <th style={th}>Accepted</th>
-              <th style={th}>Created</th>
-              <th style={th}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id} style={rowHighlightStyle(r)}>
-                <td style={td}>{r.id}</td>
-                <td style={td}>{r.deal_id}</td>
-                <td style={td}><StatusChip status={r.status} /></td>
-                <td style={td}><DiscountCell details={r.details} /></td>
-                <td style={td}>{r.version || 1}</td>
-                <td style={td}>{r.accepted ? 'Yes' : 'No'}</td>
-                <td style={td}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
-                <td style={td}>
-                  <button disabled={loading} onClick={() => takeAction(r.id, 'approve')} style={btn}>Approve</button>
-                  <button disabled={loading} onClick={() => takeAction(r.id, 'reject')} style={btn}>Reject</button>
-                </td>
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4">Unit Model Approval Queue</h1>
+      {loading && <p>Loading...</p>}
+      {error && <p className="text-red-500">{error}</p>}
+      {!loading && !error && (
+        approvals.length === 0 ? <p>No items are currently waiting for approval.</p> :
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white border border-gray-200 shadow-sm rounded-lg">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requested By</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
-            ))}
-            {rows.length === 0 && !loading && (
-              <tr><td style={td} colSpan={8}>No items in queue.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {approvals.map((item) => (
+                <tr key={item.id}>
+                  <td className="px-4 py-4 whitespace-nowrap capitalize font-semibold">{item.action}</td>
+                  <td className="px-4 py-4">{renderPayload(item.payload)}</td>
+                  <td className="px-4 py-4 whitespace-nowrap">{item.requested_by_email}</td>
+                  <td className="px-4 py-4 whitespace-nowrap space-x-2">
+                    <button
+                      onClick={() => handleApprove(item.id)}
+                      className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-3 rounded text-sm"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleReject(item.id)}
+                      className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-3 rounded text-sm"
+                    >
+                      Reject
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
-  )
-}
+  );
+};
