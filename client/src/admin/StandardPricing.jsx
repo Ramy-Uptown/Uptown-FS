@@ -69,6 +69,11 @@ export default function StandardPricing() {
   const [years, setYears] = useState(5);
   const [frequency, setFrequency] = useState('monthly');
   const [annualRate, setAnnualRate] = useState(12);
+  const [maintenancePrice, setMaintenancePrice] = useState('');
+  const [garagePrice, setGaragePrice] = useState('');
+  const [gardenPrice, setGardenPrice] = useState('');
+  const [roofPrice, setRoofPrice] = useState('');
+  const [storagePrice, setStoragePrice] = useState('');
 
   const selectedModel = useMemo(() => {
     const id = Number(selectedModelId);
@@ -136,7 +141,15 @@ export default function StandardPricing() {
       const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_id: Number(selectedModelId), price: Number(stdPrice) })
+        body: JSON.stringify({
+          model_id: Number(selectedModelId),
+          price: Number(stdPrice),
+          maintenance_price: maintenancePrice === '' ? 0 : Number(maintenancePrice),
+          garage_price: garagePrice === '' ? 0 : Number(garagePrice),
+          garden_price: gardenPrice === '' ? 0 : Number(gardenPrice),
+          roof_price: roofPrice === '' ? 0 : Number(roofPrice),
+          storage_price: storagePrice === '' ? 0 : Number(storagePrice)
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || 'Failed to save pricing');
@@ -318,11 +331,34 @@ export default function StandardPricing() {
             ) : null}
 
             <h3 style={{ marginTop: 16 }}>Standard Price & Terms</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
               <div>
-                <div style={metaText}>Standard Price (EGP)</div>
+                <div style={metaText}>Base Unit Price (EGP)</div>
                 <input type="number" value={stdPrice} onChange={e => setStdPrice(e.target.value)} style={ctrl} placeholder="e.g. 3,500,000" />
               </div>
+              <div>
+                <div style={metaText}>Garden Price (EGP)</div>
+                <input type="number" value={gardenPrice} onChange={e => setGardenPrice(e.target.value)} style={ctrl} placeholder="e.g. 120,000" />
+              </div>
+              <div>
+                <div style={metaText}>Roof Price (EGP)</div>
+                <input type="number" value={roofPrice} onChange={e => setRoofPrice(e.target.value)} style={ctrl} placeholder="e.g. 180,000" />
+              </div>
+              <div>
+                <div style={metaText}>Storage Price (EGP)</div>
+                <input type="number" value={storagePrice} onChange={e => setStoragePrice(e.target.value)} style={ctrl} placeholder="e.g. 75,000" />
+              </div>
+              <div>
+                <div style={metaText}>Garage Price (EGP)</div>
+                <input type="number" value={garagePrice} onChange={e => setGaragePrice(e.target.value)} style={ctrl} placeholder="e.g. 200,000" />
+              </div>
+              <div>
+                <div style={metaText}>Maintenance Price (EGP) — excluded from PV</div>
+                <input type="number" value={maintenancePrice} onChange={e => setMaintenancePrice(e.target.value)} style={ctrl} placeholder="e.g. 150,000" />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 8 }}>
               <div>
                 <div style={metaText}>Down Payment (%)</div>
                 <input type="number" value={dpPercent} onChange={e => setDpPercent(e.target.value)} style={ctrl} />
@@ -331,6 +367,12 @@ export default function StandardPricing() {
                 <div style={metaText}>Plan Duration (years)</div>
                 <input type="number" value={years} onChange={e => setYears(e.target.value)} style={ctrl} />
               </div>
+              <div>
+                <div style={metaText}>Annual Financial Rate (%)</div>
+                <input type="number" value={annualRate} onChange={e => setAnnualRate(e.target.value)} style={ctrl} />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 8 }}>
               <div>
                 <div style={metaText}>Installment Frequency</div>
                 <select value={frequency} onChange={e => setFrequency(e.target.value)} style={ctrl}>
@@ -341,8 +383,8 @@ export default function StandardPricing() {
                 </select>
               </div>
               <div>
-                <div style={metaText}>Annual Financial Rate (%)</div>
-                <input type="number" value={annualRate} onChange={e => setAnnualRate(e.target.value)} style={ctrl} />
+                <div style={metaText}>Total Price used for PV (auto)</div>
+                <input readOnly style={ctrl} value={Number(stdPrice || 0) + Number(gardenPrice || 0) + Number(roofPrice || 0) + Number(storagePrice || 0) + Number(garagePrice || 0)} />
               </div>
             </div>
 
@@ -378,6 +420,11 @@ export default function StandardPricing() {
                 <th style={th}>Code</th>
                 <th style={th}>Area</th>
                 <th style={th}>Price (EGP)</th>
+                <th style={th}>Garden</th>
+                <th style={th}>Roof</th>
+                <th style={th}>Storage</th>
+                <th style={th}>Garage</th>
+                <th style={th}>Maintenance</th>
                 <th style={th}>Status</th>
                 <th style={th}>Created By</th>
                 <th style={th}>Approved By</th>
@@ -391,6 +438,11 @@ export default function StandardPricing() {
                   <td style={td}>{p.model_code || ''}</td>
                   <td style={td}>{Number(p.area || 0).toLocaleString()}</td>
                   <td style={td}>{Number(p.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td style={td}>{Number(p.garden_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td style={td}>{Number(p.roof_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td style={td}>{Number(p.storage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td style={td}>{Number(p.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td style={td}>{Number(p.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td style={td}>{p.status}</td>
                   <td style={td}>{p.created_by_email || ''}</td>
                   <td style={td}>{p.approved_by_email || ''}</td>

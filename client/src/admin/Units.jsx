@@ -12,8 +12,15 @@ export default function Units() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
 
+  // unit models for linking (financial_admin)
+  const [models, setModels] = useState([])
+  const [modelsError, setModelsError] = useState('')
+
+  // current user role
+  const role = JSON.parse(localStorage.getItem('auth_user') || '{}')?.role
+
   // form state
-  const [form, setForm] = useState({ code: '', description: '', unit_type: '', base_price: '', currency: 'EGP' })
+  const [form, setForm] = useState({ code: '', description: '', unit_type: '', base_price: '', currency: 'EGP', model_id: '' })
   const [editingId, setEditingId] = useState(0)
   const [saving, setSaving] = useState(false)
 
@@ -37,11 +44,30 @@ export default function Units() {
     }
   }
 
+  // Load models for financial_admin linking
+  useEffect(() => {
+    if (role !== 'financial_admin') return
+    let abort = false
+    async function run() {
+      try {
+        setModelsError('')
+        const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models?page=1&pageSize=200`)
+        const data = await resp.json()
+        if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load unit models')
+        if (!abort) setModels(data.items || [])
+      } catch (e) {
+        if (!abort) setModelsError(e.message || String(e))
+      }
+    }
+    run()
+    return () => { abort = true }
+  }, [role])
+
   useEffect(() => { load(1) }, [search, pageSize])
   useEffect(() => { load(page) }, [page])
 
   function resetForm() {
-    setForm({ code: '', description: '', unit_type: '', base_price: '', currency: 'EGP' })
+    setForm({ code: '', description: '', unit_type: '', base_price: '', currency: 'EGP', model_id: '' })
     setEditingId(0)
   }
 
@@ -49,8 +75,15 @@ export default function Units() {
     e && e.preventDefault()
     try {
       setSaving(true)
-      const body = { ...form, base_price: Number(form.base_price) || 0, currency: (form.currency || 'EGP').toUpperCase() }
+      const body = {
+        ...form,
+        base_price: Number(form.base_price) || 0,
+        currency: (form.currency || 'EGP').toUpperCase(),
+        // Never send model_id directly when financial_admin (server will reject); use link-request below
+        ...(role !== 'financial_admin' && form.model_id ? { model_id: Number(form.model_id) } : {})
+      }
       let resp
+      let createdOrEditedId = editingId
       if (editingId) {
         resp = await fetchWithAuth(`${API_URL}/api/units/${editingId}`, {
           method: 'PATCH',
@@ -66,6 +99,23 @@ export default function Units() {
       }
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
+      createdOrEditedId = editingId || data?.unit?.id
+
+      // If Financial Admin selected a model, submit a link-request
+      if (role === 'financial_admin' && form.model_id && createdOrEditedId) {
+        const lr = await fetchWithAuth(`${API_URL}/api/inventory/units/${createdOrEditedId}/link-request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_id: Number(form.model_id) })
+        })
+        const ld = await lr.json()
+        if (!lr.ok) {
+          alert(ld?.error?.message || 'Link request failed')
+        } else {
+          alert('Link request submitted for approval.')
+        }
+      }
+
       resetForm()
       await load()
     } catch (e) {
@@ -82,7 +132,8 @@ export default function Units() {
       description: u.description || '',
       unit_type: u.unit_type || '',
       base_price: String(u.base_price ?? ''),
-      currency: u.currency || 'EGP'
+      currency: u.currency || 'EGP',
+      model_id: u.model_id ? String(u.model_id) : ''
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -140,6 +191,28 @@ export default function Units() {
           </div>
         </form>
 
+        {role === 'financial_admin' && (
+          <div style={{ border: '1px solid #e6eaf0', borderRadius: 10, padding: 10, marginBottom: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div>
+                <div style={metaText}>Link to Unit Model (optional)</div>
+                <select value={form.model_id} onChange={e => setForm(s => ({ ...s, model_id: e.target.value }))} style={ctrl}>
+                  <option value="">— No model —</option>
+                  {models.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.model_code ? `${m.model_code} — ` : ''}{m.model_name} {m.area ? `(${m.area} m²)` : ''}
+                    </option>
+                  ))}
+                </select>
+                {modelsError ? <div style={errorText}>{modelsError}</div> : null}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'end' }}>
+                <span style={metaText}>If a model is chosen, this unit will be linked for pricing and reporting.</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <input placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} style={ctrl} />
           <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} style={ctrl}>
@@ -162,6 +235,7 @@ export default function Units() {
                 <th style={th}>Unit Type</th>
                 <th style={th}>Base Price</th>
                 <th style={th}>Currency</th>
+                <th style={th}>Model</th>
                 <th style={th}>Actions</th>
               </tr>
             </thead>
@@ -174,6 +248,7 @@ export default function Units() {
                   <td style={td}>{u.unit_type || ''}</td>
                   <td style={{ ...td, textAlign: 'right' }}>{Number(u.base_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                   <td style={td}>{u.currency}</td>
+                  <td style={td}>{u.model_id ? u.model_id : ''}</td>
                   <td style={td}>
                     <button onClick={() => edit(u)} style={btn}>Edit</button>
                     <button onClick={() => remove(u.id)} style={btn}>Delete</button>
@@ -182,7 +257,7 @@ export default function Units() {
               ))}
               {units.length === 0 && !loading && (
                 <tr>
-                  <td style={td} colSpan={7}>No units.</td>
+                  <td style={td} colSpan={8}>No units.</td>
                 </tr>
               )}
             </tbody>

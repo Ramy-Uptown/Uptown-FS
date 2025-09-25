@@ -1,0 +1,5 @@
+-- Add component prices to units for propagation/display
+ALTER TABLE IF EXISTS units
+  ADD COLUMN IF NOT EXISTS garden_price NUMERIC(18,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS roof_price NUMERIC(18,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS storage_price NUMERIC(18,2) NOT NULL DEFAULT 0;
