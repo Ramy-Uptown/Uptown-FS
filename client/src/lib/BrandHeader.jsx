@@ -131,6 +131,7 @@ export default function BrandHeader({ title, onLogout }) {
         return [
           ...base,
           queuesLink,
+          { label: 'Rejected Requests', href: '/admin/rejected-pricings' },
           { label: 'Finance Team', href: '/admin/finance-team' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'Unit Models', href: '/admin/unit-models' },
