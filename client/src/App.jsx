@@ -1320,6 +1320,7 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
                   <tr>
                     <th style={styles.th}>#</th>
                     <th style={styles.th}>Month</th>
+                    <th style={styles.th}>Date</th>
                     <th style={styles.th}>Label</th>
                     <th style={{ ...styles.th, textAlign: 'right' }}>Amount</th>
                     <th style={{ ...styles.th, textAlign: language === 'ar' ? 'right' : 'left' }}>Written Amount</th>
@@ -1330,6 +1331,7 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
                     <tr key={idx}>
                       <td style={styles.td}>{idx + 1}</td>
                       <td style={styles.td}>{row.month}</td>
+                      <td style={styles.td}>{row.date || ''}</td>
                       <td style={styles.td}>{row.label}</td>
                       <td style={{ ...styles.td, textAlign: 'right' }}>
                         {Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
