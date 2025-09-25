@@ -1,0 +1,13 @@
+-- Extend units with model-derived features and extra prices
+
+ALTER TABLE IF EXISTS units
+  ADD COLUMN IF NOT EXISTS area NUMERIC(12,2),
+  ADD COLUMN IF NOT EXISTS orientation TEXT,
+  ADD COLUMN IF NOT EXISTS has_garden BOOLEAN,
+  ADD COLUMN IF NOT EXISTS garden_area NUMERIC(12,2),
+  ADD COLUMN IF NOT EXISTS has_roof BOOLEAN,
+  ADD COLUMN IF NOT EXISTS roof_area NUMERIC(12,2),
+  ADD COLUMN IF NOT EXISTS maintenance_price NUMERIC(18,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS garage_price NUMERIC(18,2) DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_units_area ON units(area);

@@ -188,6 +188,15 @@ export default function App(props) {
     zone: '',
     garden_details: ''
   })
+  const [unitPricingBreakdown, setUnitPricingBreakdown] = useState({
+    base: 0,
+    garden: 0,
+    roof: 0,
+    storage: 0,
+    garage: 0,
+    maintenance: 0,
+    totalExclMaintenance: 0
+  })
   // Units catalog (typeahead)
   const [unitsCatalog, setUnitsCatalog] = useState([])
   const [unitQuery, setUnitQuery] = useState('')
@@ -200,6 +209,14 @@ export default function App(props) {
     reservation_payment_date: '',
     maintenance_fee: '',
     delivery_period: ''
+  })
+
+  // Additional fees schedule (not part of PV calc)
+  const [feeSchedule, setFeeSchedule] = useState({
+    maintenancePaymentAmount: '',
+    maintenancePaymentMonth: '',
+    garagePaymentAmount: '',
+    garagePaymentMonth: ''
   })
   const [customNotes, setCustomNotes] = useState({
     dp_explanation: '',
@@ -300,7 +317,7 @@ export default function App(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unitInfo.unit_type])
 
-function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCurrency }) {
+function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCurrency, setFeeSchedule, setUnitPricingBreakdown })
   const [types, setTypes] = useState([])
   const [selectedTypeId, setSelectedTypeId] = useState('')
   const [units, setUnits] = useState([])
@@ -348,19 +365,80 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
       <div>
         <select
           value=""
-          onChange={e => {
+          onChange={async e => {
             const id = Number(e.target.value)
             const u = units.find(x => x.id === id)
             if (!u) return
-            setStdPlan(s => ({ ...s, totalPrice: Number(u.base_price) || s.totalPrice }))
+            // Compute total price excluding maintenance (PV base)
+            const base = Number(u.base_price || 0)
+            const garden = Number(u.garden_price || 0)
+            const roof = Number(u.roof_price || 0)
+            const storage = Number(u.storage_price || 0)
+            const garage = Number(u.garage_price || 0)
+            const maintenance = Number(u.maintenance_price || 0)
+            const total = base + garden + roof + storage + garage
+
+            setStdPlan(s => ({ ...s, totalPrice: total }))
             setCurrency(u.currency || 'EGP')
-            setInputs(s => ({ ...s, planDurationYears: s.planDurationYears || 5 }))
             setUnitInfo(s => ({
               ...s,
               unit_type: u.unit_type || s.unit_type,
               unit_code: u.code || s.unit_code,
               description: u.description || s.description,
             }))
+            if (setFeeSchedule) {
+              setFeeSchedule(fs => ({
+                ...fs,
+                maintenancePaymentAmount: maintenance || '',
+                // leave months empty for consultant to choose
+              }))
+            }
+            if (setUnitPricingBreakdown) {
+              setUnitPricingBreakdown({
+                base, garden, roof, storage, garage, maintenance,
+                totalExclMaintenance: total
+              })
+            }
+            // Pull standard financials by unit type and set defaults
+            try {
+              const ut = encodeURIComponent(u.unit_type || '')
+              if (ut) {
+                const resp = await fetchWithAuth(`${API_URL}/api/workflow/standard-pricing/approved-by-type/${ut}`)
+                const data = await resp.json()
+                if (resp.ok && data?.standard_pricing) {
+                  const sp = data.standard_pricing
+                  setStdPlan(s => ({
+                    ...s,
+                    financialDiscountRate: Number(sp.std_financial_rate_percent ?? s.financialDiscountRate) || s.financialDiscountRate,
+                    calculatedPV: Number(sp.price) || Number(sp.calculated_pv) || s.calculatedPV
+                  }))
+                  setInputs(s => ({
+                    ...s,
+                    planDurationYears: s.planDurationYears || Number(sp.plan_duration_years) || s.planDurationYears || 5,
+                    installmentFrequency: s.installmentFrequency || sp.installment_frequency || s.installmentFrequency || 'monthly',
+                    dpType: 'percentage',
+                    downPaymentValue: s.downPaymentValue || 20 // default 20% down payment
+                  }))
+                } else {
+                  // fallback defaults
+                  setInputs(s => ({
+                    ...s,
+                    planDurationYears: s.planDurationYears || 5,
+                    installmentFrequency: s.installmentFrequency || 'monthly',
+                    dpType: 'percentage',
+                    downPaymentValue: s.downPaymentValue || 20
+                  }))
+                }
+              }
+            } catch {
+              setInputs(s => ({
+                ...s,
+                planDurationYears: s.planDurationYears || 5,
+                installmentFrequency: s.installmentFrequency || 'monthly',
+                dpType: 'percentage',
+                downPaymentValue: s.downPaymentValue || 20
+              }))
+            }
           }}
           style={styles.select()}
           disabled={!selectedTypeId || loadingUnits || units.length === 0}
@@ -377,9 +455,9 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
 
   // Persist on change
   useEffect(() => {
-    const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes }
+    const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes, feeSchedule }
     localStorage.setItem(LS_KEY, JSON.stringify(snapshot))
-  }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes])
+  }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes, feeSchedule])
 
   // Expose imperative APIs for embedding contexts
   useEffect(() => {
@@ -578,7 +656,20 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
     setGenError('')
     setGenResult(null)
     try {
-      const body = { ...payload, language, currency }
+      const body = {
+        ...payload,
+        language,
+        currency,
+        // base date for absolute due dates on schedule; prefer contract date, fallback to reservation form date
+        inputs: {
+          ...payload.inputs,
+          baseDate: contractInfo.contract_date || contractInfo.reservation_form_date || null,
+          maintenancePaymentAmount: Number(feeSchedule.maintenancePaymentAmount) || 0,
+          maintenancePaymentMonth: Number(feeSchedule.maintenancePaymentMonth) || 0,
+          garagePaymentAmount: Number(feeSchedule.garagePaymentAmount) || 0,
+          garagePaymentMonth: Number(feeSchedule.garagePaymentMonth) || 0
+        }
+      }
       const resp = await fetchWithAuth(`${API_URL}/api/generate-plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -931,6 +1022,17 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
               <label style={styles.label}>Std Total Price</label>
               <input type="number" value={stdPlan.totalPrice} onChange={e => setStdPlan(s => ({ ...s, totalPrice: e.target.value }))} style={styles.input(errors.std_totalPrice)} />
               {errors.std_totalPrice && <small style={styles.error}>{errors.std_totalPrice}</small>}
+              {/* Unit total breakdown */}
+              <div style={{ marginTop: 6, fontSize: 12, color: '#4b5563', background: '#fbfaf7', border: '1px dashed #ead9bd', borderRadius: 8, padding: 8 }}>
+                <div><strong>Unit Breakdown</strong></div>
+                <div>Base: {Number(unitPricingBreakdown.base || 0).toLocaleString()}</div>
+                <div>Garden: {Number(unitPricingBreakdown.garden || 0).toLocaleString()}</div>
+                <div>Roof: {Number(unitPricingBreakdown.roof || 0).toLocaleString()}</div>
+                <div>Storage: {Number(unitPricingBreakdown.storage || 0).toLocaleString()}</div>
+                <div>Garage: {Number(unitPricingBreakdown.garage || 0).toLocaleString()}</div>
+                <div style={{ marginTop: 4 }}><strong>Total (excl. maintenance): {Number(unitPricingBreakdown.totalExclMaintenance || 0).toLocaleString()}</strong></div>
+                <div>Maintenance (scheduled separately): {Number(unitPricingBreakdown.maintenance || 0).toLocaleString()}</div>
+              </div>
             </div>
             <div>
               <label style={styles.label}>Std Financial Rate (%)</label>
@@ -1147,6 +1249,7 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
                 setStdPlan={setStdPlan}
                 setInputs={setInputs}
                 setCurrency={setCurrency}
+                setFeeSchedule={setFeeSchedule}
               />
               <small style={styles.metaText}>
                 Choose a type to view available inventory. Selecting a unit will set price and details automatically.
@@ -1219,6 +1322,29 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
               <input dir="auto" style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
             </div>
           </div>
+
+          <div style={{ marginTop: 12, borderTop: '1px dashed #ead9bd', paddingTop: 12 }}>
+            <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Additional Fees Schedule (not included in PV)</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+              <div>
+                <label style={styles.label}>Maintenance Amount</label>
+                <input type="number" style={styles.input()} value={feeSchedule.maintenancePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentAmount: e.target.value }))} placeholder="e.g. 150000" />
+              </div>
+              <div>
+                <label style={styles.label}>Maintenance Due Month (from contract date)</label>
+                <input type="number" min="0" style={styles.input()} value={feeSchedule.maintenancePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentMonth: e.target.value }))} placeholder="e.g. 0 for at contract" />
+              </div>
+              <div>
+                <label style={styles.label}>Garage Amount</label>
+                <input type="number" style={styles.input()} value={feeSchedule.garagePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentAmount: e.target.value }))} placeholder="e.g. 200000" />
+              </div>
+              <div>
+                <label style={styles.label}>Garage Due Month (from contract date)</label>
+                <input type="number" min="0" style={styles.input()} value={feeSchedule.garagePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentMonth: e.target.value }))} placeholder="e.g. 12" />
+              </div>
+            </div>
+            <small style={styles.metaText}>These fees will be appended to the generated schedule with dates based on the contract date (or reservation form date if contract date is empty). They are not part of PV calculation.</small>
+          </div>
         </section>
 
         <section style={styles.section}>
@@ -1276,6 +1402,7 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
                   <tr>
                     <th style={styles.th}>#</th>
                     <th style={styles.th}>Month</th>
+                    <th style={styles.th}>Date</th>
                     <th style={styles.th}>Label</th>
                     <th style={{ ...styles.th, textAlign: 'right' }}>Amount</th>
                     <th style={{ ...styles.th, textAlign: language === 'ar' ? 'right' : 'left' }}>Written Amount</th>
@@ -1286,6 +1413,7 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
                     <tr key={idx}>
                       <td style={styles.td}>{idx + 1}</td>
                       <td style={styles.td}>{row.month}</td>
+                      <td style={styles.td}>{row.date || ''}</td>
                       <td style={styles.td}>{row.label}</td>
                       <td style={{ ...styles.td, textAlign: 'right' }}>
                         {Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

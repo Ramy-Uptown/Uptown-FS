@@ -139,6 +139,7 @@ export default function BrandHeader({ title, onLogout }) {
       case 'financial_admin':
         return [
           ...base,
+          { label: 'Inventory', href: '/admin/units' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'My Proposals', href: '/deals/my-proposals' }
         ]

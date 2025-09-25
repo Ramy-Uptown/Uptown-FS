@@ -10,30 +10,44 @@ router.use(authMiddleware);
 // Upsert pricing for a unit model (FM)
 router.post('/unit-model', requireRole(['financial_manager']), async (req, res) => {
   try {
-    const { model_id, price } = req.body || {};
+    const {
+      model_id,
+      price,
+      maintenance_price,
+      garage_price,
+      garden_price,
+      roof_price,
+      storage_price
+    } = req.body || {};
     if (!model_id || !Number.isFinite(Number(price))) {
       return res.status(400).json({ error: { message: 'model_id and numeric price are required' } });
     }
     const pid = Number(model_id);
     const pr = Number(price);
+    const mp = Number(maintenance_price ?? 0);
+    const gp = Number(garage_price ?? 0);
+    const gdp = Number(garden_price ?? 0);
+    const rfp = Number(roof_price ?? 0);
+    const stp = Number(storage_price ?? 0);
 
     const existing = await pool.query('SELECT * FROM unit_model_pricing WHERE model_id=$1', [pid]);
     let out;
     if (existing.rows.length > 0) {
       const r = await pool.query(
         `UPDATE unit_model_pricing
-         SET price=$1, status='pending_approval', approved_by=NULL, updated_at=now()
-         WHERE model_id=$2
+         SET price=$1, maintenance_price=$2, garage_price=$3, garden_price=$4, roof_price=$5, storage_price=$6,
+             status='pending_approval', approved_by=NULL, updated_at=now()
+         WHERE model_id=$7
          RETURNING *`,
-        [pr, pid]
+        [pr, mp, gp, gdp, rfp, stp, pid]
       );
       out = r.rows[0];
     } else {
       const r = await pool.query(
-        `INSERT INTO unit_model_pricing (model_id, price, status, created_by)
-         VALUES ($1, $2, 'pending_approval', $3)
+        `INSERT INTO unit_model_pricing (model_id, price, maintenance_price, garage_price, garden_price, roof_price, storage_price, status, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending_approval', $8)
          RETURNING *`,
-        [pid, pr, req.user.id]
+        [pid, pr, mp, gp, gdp, rfp, stp, req.user.id]
       );
       out = r.rows[0];
     }
@@ -41,7 +55,7 @@ router.post('/unit-model', requireRole(['financial_manager']), async (req, res) 
     await pool.query(
       `INSERT INTO unit_model_pricing_audit (pricing_id, action, changed_by, details)
        VALUES ($1, $2, $3, $4)`,
-      [out.id, 'upsert', req.user.id, JSON.stringify({ price: pr, model_id: pid })]
+      [out.id, 'upsert', req.user.id, JSON.stringify({ price: pr, maintenance_price: mp, garage_price: gp, garden_price: gdp, roof_price: rfp, storage_price: stp, model_id: pid })]
     );
 
     return res.status(201).json({ ok: true, pricing: out });
@@ -72,6 +86,40 @@ router.patch('/unit-model/:id/status', requireRole(['ceo', 'chairman', 'vice_cha
       [id, status === 'approved' ? 'approve' : 'reject', req.user.id, JSON.stringify({ reason: reason || null })]
     );
 
+    // If approved, propagate prices to all linked units and log an audit entry (with count)
+    if (String(status) === 'approved') {
+      const approved = r.rows[0];
+      const modelId = approved.model_id;
+      const price = Number(approved.price) || 0;
+      const mp = Number(approved.maintenance_price ?? 0) || 0;
+      const gp = Number(approved.garage_price ?? 0) || 0;
+      const gdp = Number(approved.garden_price ?? 0) || 0;
+      const rfp = Number(approved.roof_price ?? 0) || 0;
+      const stp = Number(approved.storage_price ?? 0) || 0;
+
+      const upd = await pool.query(
+        `UPDATE units
+         SET base_price=$1, maintenance_price=$2, garage_price=$3, garden_price=$4, roof_price=$5, storage_price=$6, updated_at=now()
+         WHERE model_id=$7`,
+        [price, mp, gp, gdp, rfp, stp, modelId]
+      );
+
+      await pool.query(
+        `INSERT INTO unit_model_pricing_audit (pricing_id, action, changed_by, details)
+         VALUES ($1, 'propagate', $2, $3)`,
+        [id, req.user.id, JSON.stringify({
+          propagated_to_units: upd.rowCount || 0,
+          model_id: modelId,
+          new_price: price,
+          maintenance_price: mp,
+          garage_price: gp,
+          garden_price: gdp,
+          roof_price: rfp,
+          storage_price: stp
+        })]
+      );
+    }
+
     return res.json({ ok: true, pricing: r.rows[0] });
   } catch (e) {
     console.error('PATCH /api/pricing/unit-model/:id/status error:', e);
@@ -84,7 +132,7 @@ router.get('/unit-model', requireRole(['financial_manager', 'ceo', 'chairman', '
   try {
     const r = await pool.query(
       `SELECT
-         p.id, p.model_id, p.price, p.status, p.created_at, p.updated_at,
+         p.id, p.model_id, p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price, p.status, p.created_at, p.updated_at,
          m.model_name,
          m.model_code,
          m.area,
@@ -108,7 +156,7 @@ router.get('/unit-model/pending', requireRole(['ceo', 'chairman', 'vice_chairman
   try {
     const r = await pool.query(
       `SELECT
-         p.id, p.model_id, p.price, p.status,
+         p.id, p.model_id, p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price, p.status,
          m.model_name,
          m.model_code,
          creator.email AS created_by_email
