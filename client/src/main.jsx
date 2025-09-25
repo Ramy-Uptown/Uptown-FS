@@ -126,14 +126,14 @@ createRoot(document.getElementById('root')).render(
           }
         />
         {/* --- END OF NEW ROUTE --- */}
-       < Route
+        <Route
           path="/admin/standard-pricing-rejected"
           element={
-           < RoleBasedRoute allowedRoles={['financial_manager']}>
-             < RejectedPricings />
-          </  RoleBasedRoute>
+            <RoleBasedRoute allowedRoles={['financial_manager']}>
+              <RejectedPricings />
+            </RoleBasedRoute>
           }
-      _code  new/</>
+        />
         <Route
           path="/admin/inventory"
           element={
