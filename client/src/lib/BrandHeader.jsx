@@ -137,12 +137,12 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Holds', href: '/admin/holds' }
         ]
       case 'financial_admin':
-        return [
-          ...base,
-          { label: 'Inventory', href: '/admin/units' },
-          { label: 'Standard Pricing', href: '/admin/standard-pricing' },
-          { label: 'My Proposals', href: '/deals/my-proposals' }
-        ]
+        return [
+          ...base,
+          { label: 'Inventory', href: '/admin/inventory' },
+          { label: 'Standard Pricing', href: '/admin/standard-pricing' },
+          { label: 'My Proposals', href: '/deals/my-proposals' }
+        ]
       case 'sales_manager':
         return [
           ...base,

@@ -125,6 +125,14 @@ createRoot(document.getElementById('root')).render(
           }
         />
         {/* --- END OF NEW ROUTE --- */}
+        <Route
+          path="/admin/inventory"
+          element={
+            <RoleBasedRoute allowedRoles={['financial_admin', 'superadmin']}>
+              <Units />
+            </RoleBasedRoute>
+          }
+        />
         <Route
           path="/admin/units"
           element={
