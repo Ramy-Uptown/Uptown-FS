@@ -49,7 +49,7 @@ router.get('/unit-models', authMiddleware, requireRole(['financial_manager', 'fi
     if (search) {
       const s = `%${String(search).toLowerCase()}%`
       params.push(s)
-      // Reuse same param index for both LIKEs
+      // Reuse same param index for both LIKEs with proper placeholders
       clauses.push(`(LOWER(model_name) LIKE ${params.length} OR LOWER(COALESCE(model_code, '')) LIKE ${params.length})`)
     }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''

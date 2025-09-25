@@ -16,6 +16,7 @@ router.get('/', authMiddleware, async (req, res) => {
     const params = []
     if (search) {
       params.push(`%${search}%`)
+      // Use positional parameter placeholders ($1, $2, ...) correctly
       where.push(`(LOWER(code) LIKE ${params.length} OR LOWER(description) LIKE ${params.length})`)
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
@@ -23,6 +24,7 @@ router.get('/', authMiddleware, async (req, res) => {
     const countRes = await pool.query(`SELECT COUNT(*)::int AS c FROM units ${whereSql}`, params)
     const total = countRes.rows[0]?.c || 0
 
+    // Add LIMIT/OFFSET as bound parameters and reference them with placeholders
     params.push(pageSize)
     params.push(offset)
     const listSql = `
