@@ -133,11 +133,30 @@ export default function StandardPricing() {
     }
   }, [selectedModelCode, models]);
 
+  // When selected model has no garden/roof, clear corresponding prices and keep inputs disabled
+  useEffect(() => {
+    const hasGarden = !!selectedModel?.has_garden;
+    const hasRoof = !!selectedModel?.has_roof;
+    if (!hasGarden && gardenPrice) setGardenPrice('');
+    if (!hasRoof && roofPrice) setRoofPrice('');
+  }, [selectedModel, gardenPrice, roofPrice]);
+
   const handleUpsertPricing = async (e) => {
     e.preventDefault();
     try {
       if (!selectedModelId) throw new Error('Select a Unit Model first');
       if (!stdPrice) throw new Error('Enter standard price');
+
+      // Enforce garden/roof constraints: if the model has no garden/roof, price must be N.A/empty (treated as 0)
+      const hasGarden = !!selectedModel?.has_garden;
+      const hasRoof = !!selectedModel?.has_roof;
+      if (!hasGarden && Number(gardenPrice || 0) > 0) {
+        throw new Error('This unit model has no garden. Garden price must be N.A or empty.');
+      }
+      if (!hasRoof && Number(roofPrice || 0) > 0) {
+        throw new Error('This unit model has no roof. Roof price must be N.A or empty.');
+      }
+
       const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -337,12 +356,29 @@ export default function StandardPricing() {
                 <input type="number" value={stdPrice} onChange={e => setStdPrice(e.target.value)} style={ctrl} placeholder="e.g. 3,500,000" />
               </div>
               <div>
-                <div style={metaText}>Garden Price (EGP)</div>
-                <input type="number" value={gardenPrice} onChange={e => setGardenPrice(e.target.value)} style={ctrl} placeholder="e.g. 120,000" />
-              </div>
+               <<div style={metaText}>Garden Price (E)</</div>
+               <<input
+                  type="number"
+                  value={gardenPrice}
+                  onChange={e => setGardenPrice(e.target.value)}
+                  style={ctrl}
+                  placeholder={selectedModel?.has_garden ? "e.g. 120,000" : "N.A (no garden)"}
+                  disabled={!selectedModel?.has_garden}
+                />
+                {!selectedModel?.has_garden  <?div style={metaText}>This model has no garden. Price must be N.</.Adiv> : null}
+            </  _codedinewv</>
+   </div>
               <div>
                 <div style={metaText}>Roof Price (EGP)</div>
-                <input type="number" value={roofPrice} onChange={e => setRoofPrice(e.target.value)} style={ctrl} placeholder="e.g. 180,000" />
+                <input
+                  type="number"
+                  value={roofPrice}
+                  onChange={e => setRoofPrice(e.target.value)}
+                  style={ctrl}
+                  placeholder={selectedModel?.has_roof ? "e.g. 180,000" : "N.A (no roof)"}
+                  disabled={!selectedModel?.has_roof}
+                />
+                {!selectedModel?.has_roof ? <div style={metaText}>This model has no roof. Price must be N.A.</div> : null}
               </div>
               <div>
                 <div style={metaText}>Storage Price (EGP)</div>
@@ -384,7 +420,17 @@ export default function StandardPricing() {
               </div>
               <div>
                 <div style={metaText}>Total Price used for PV (auto)</div>
-                <input readOnly style={ctrl} value={Number(stdPrice || 0) + Number(gardenPrice || 0) + Number(roofPrice || 0) + Number(storagePrice || 0) + Number(garagePrice || 0)} />
+                <input
+                  readOnly
+                  style={ctrl}
+                  value={
+                    Number(stdPrice || 0)
+                    + (selectedModel?.has_garden ? Number(gardenPrice || 0) : 0)
+                    + (selectedModel?.has_roof ? Number(roofPrice || 0) : 0)
+                    + Number(storagePrice || 0)
+                    + Number(garagePrice || 0)
+                  }
+                />
               </div>
             </div>
 
