@@ -92,6 +92,7 @@ export default function StandardPricingApprovals() {
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Garage (EGP)</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Maintenance (EGP)</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total (EGP)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price / m² (EGP)</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requested By</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                                 </tr>
@@ -105,6 +106,8 @@ export default function StandardPricingApprovals() {
                                       + (showRoof ? Number(item.roof_price || 0) : 0)
                                       + Number(item.storage_price || 0)
                                       + Number(item.garage_price || 0);
+                                    const area = Number(item.area || 0);
+                                    const pricePerSqM = area > 0 ? (total / area) : 0;
                                     return (
                                     <tr key={item.id}>
                                         <td className="px-4 py-4 whitespace-nowrap font-semibold">{item.model_name}</td>
@@ -117,6 +120,7 @@ export default function StandardPricingApprovals() {
                                         <td className="px-4 py-4 whitespace-nowrap">{fmt(item.garage_price)}</td>
                                         <td className="px-4 py-4 whitespace-nowrap">{fmt(item.maintenance_price)}</td>
                                         <td className="px-4 py-4 whitespace-nowrap">{fmt(total)}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{fmt(pricePerSqM)}</td>
                                         <td className="px-4 py-4 whitespace-nowrap">{item.created_by_email}</td>
                                         <td className="px-4 py-4 whitespace-nowrap space-x-2">
                                             <button
