@@ -806,6 +806,14 @@ router.patch('/unit-link-requests/:id/approve', authMiddleware, requireRole(['fi
       [req.user.id, id]
     )
 
+    // Mark unit as AVAILABLE and set approved_by timestamp/user
+    await client.query(
+      `UPDATE units
+       SET unit_status='AVAILABLE', approved_by=$1, updated_at=now()
+       WHERE id=$2`,
+      [req.user.id, link.unit_id]
+    )
+
     await client.query(
       `INSERT INTO unit_model_inventory_link_audit (link_id, action, changed_by, details)
        VALUES ($1, 'approve', $2, $3)`,

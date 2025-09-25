@@ -75,34 +75,26 @@ export default function Units() {
     e && e.preventDefault()
     try {
       setSaving(true)
-      const body = {
-        ...form,
-        base_price: Number(form.base_price) || 0,
-        currency: (form.currency || 'EGP').toUpperCase(),
-        // Never send model_id directly when financial_admin (server will reject); use link-request below
-        ...(role !== 'financial_admin' && form.model_id ? { model_id: Number(form.model_id) } : {})
-      }
       let resp
       let createdOrEditedId = editingId
-      if (editingId) {
-        resp = await fetchWithAuth(`${API_URL}/api/units/${editingId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        })
-      } else {
+
+      if (role === 'financial_admin') {
+        // FA: require model selection and create unit with code only (draft)
+        if (!form.model_id) {
+          throw new Error('Please select a unit model to link. It is required.')
+        }
+        const faBody = { code: String(form.code || '').trim() }
+        if (!faBody.code) throw new Error('Code is required')
         resp = await fetchWithAuth(`${API_URL}/api/units`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
+          body: JSON.stringify(faBody)
         })
-      }
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
-      createdOrEditedId = editingId || data?.unit?.id
+        const data = await resp.json()
+        if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
+        createdOrEditedId = data?.unit?.id
 
-      // If Financial Admin selected a model, submit a link-request
-      if (role === 'financial_admin' && form.model_id && createdOrEditedId) {
+        // submit mandatory link-request
         const lr = await fetchWithAuth(`${API_URL}/api/inventory/units/${createdOrEditedId}/link-request`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -110,10 +102,33 @@ export default function Units() {
         })
         const ld = await lr.json()
         if (!lr.ok) {
-          alert(ld?.error?.message || 'Link request failed')
+          throw new Error(ld?.error?.message || 'Link request failed')
         } else {
           alert('Link request submitted for approval.')
         }
+      } else {
+        const body = {
+          ...form,
+          base_price: Number(form.base_price) || 0,
+          currency: (form.currency || 'EGP').toUpperCase(),
+          ...(form.model_id ? { model_id: Number(form.model_id) } : {})
+        }
+        if (editingId) {
+          resp = await fetchWithAuth(`${API_URL}/api/units/${editingId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          })
+        } else {
+          resp = await fetchWithAuth(`${API_URL}/api/units`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          })
+        }
+        const data = await resp.json()
+        if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
+        createdOrEditedId = editingId || data?.unit?.id
       }
 
       resetForm()
@@ -174,17 +189,21 @@ export default function Units() {
 
         <form onSubmit={saveUnit} style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
           <input placeholder="Code" value={form.code} onChange={e => setForm(s => ({ ...s, code: e.target.value }))} style={ctrl} required />
-          <input placeholder="Description" value={form.description} onChange={e => setForm(s => ({ ...s, description: e.target.value }))} style={ctrl} />
-          <input placeholder="Unit Type" value={form.unit_type} onChange={e => setForm(s => ({ ...s, unit_type: e.target.value }))} style={ctrl} />
-          <input type="number" placeholder="Base Price" value={form.base_price} onChange={e => setForm(s => ({ ...s, base_price: e.target.value }))} style={ctrl} />
-          <select value={form.currency} onChange={e => setForm(s => ({ ...s, currency: e.target.value }))} style={ctrl}>
-            <option value="EGP">EGP</option>
-            <option value="USD">USD</option>
-            <option value="SAR">SAR</option>
-            <option value="EUR">EUR</option>
-            <option value="AED">AED</option>
-            <option value="KWD">KWD</option>
-          </select>
+          {role !== 'financial_admin' && (
+            <>
+              <input placeholder="Description" value={form.description} onChange={e => setForm(s => ({ ...s, description: e.target.value }))} style={ctrl} />
+              <input placeholder="Unit Type" value={form.unit_type} onChange={e => setForm(s => ({ ...s, unit_type: e.target.value }))} style={ctrl} />
+              <input type="number" placeholder="Base Price" value={form.base_price} onChange={e => setForm(s => ({ ...s, base_price: e.target.value }))} style={ctrl} />
+              <select value={form.currency} onChange={e => setForm(s => ({ ...s, currency: e.target.value }))} style={ctrl}>
+                <option value="EGP">EGP</option>
+                <option value="USD">USD</option>
+                <option value="SAR">SAR</option>
+                <option value="EUR">EUR</option>
+                <option value="AED">AED</option>
+                <option value="KWD">KWD</option>
+              </select>
+            </>
+          )}
           <div>
             <button type="submit" disabled={saving} style={btnPrimary}>{saving ? 'Saving…' : (editingId ? 'Update' : 'Create')}</button>
             {editingId ? <button type="button" onClick={resetForm} style={btn}>Cancel</button> : null}
@@ -195,9 +214,9 @@ export default function Units() {
           <div style={{ border: '1px solid #e6eaf0', borderRadius: 10, padding: 10, marginBottom: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <div>
-                <div style={metaText}>Link to Unit Model (optional)</div>
-                <select value={form.model_id} onChange={e => setForm(s => ({ ...s, model_id: e.target.value }))} style={ctrl}>
-                  <option value="">— No model —</option>
+                <div style={metaText}>Link to Unit Model (required)</div>
+                <select value={form.model_id} onChange={e => setForm(s => ({ ...s, model_id: e.target.value }))} style={ctrl} required>
+                  <option value="">— Select a model —</option>
                   {models.map(m => (
                     <option key={m.id} value={m.id}>
                       {m.model_code ? `${m.model_code} — ` : ''}{m.model_name} {m.area ? `(${m.area} m²)` : ''}
@@ -207,7 +226,7 @@ export default function Units() {
                 {modelsError ? <div style={errorText}>{modelsError}</div> : null}
               </div>
               <div style={{ display: 'flex', alignItems: 'end' }}>
-                <span style={metaText}>If a model is chosen, this unit will be linked for pricing and reporting.</span>
+                <span style={metaText}>Financial Admin must select a model. A link request will be sent to the Financial Manager for approval. Upon approval, all standard prices and areas are copied into the inventory.</span>
               </div>
             </div>
           </div>
