@@ -79,9 +79,11 @@ export default function Units() {
         ...form,
         base_price: Number(form.base_price) || 0,
         currency: (form.currency || 'EGP').toUpperCase(),
-        model_id: form.model_id ? Number(form.model_id) : null
+        // Never send model_id directly when financial_admin (server will reject); use link-request below
+        ...(role !== 'financial_admin' && form.model_id ? { model_id: Number(form.model_id) } : {})
       }
       let resp
+      let createdOrEditedId = editingId
       if (editingId) {
         resp = await fetchWithAuth(`${API_URL}/api/units/${editingId}`, {
           method: 'PATCH',
@@ -97,6 +99,23 @@ export default function Units() {
       }
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
+      createdOrEditedId = editingId || data?.unit?.id
+
+      // If Financial Admin selected a model, submit a link-request
+      if (role === 'financial_admin' && form.model_id && createdOrEditedId) {
+        const lr = await fetchWithAuth(`${API_URL}/api/inventory/units/${createdOrEditedId}/link-request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_id: Number(form.model_id) })
+        })
+        const ld = await lr.json()
+        if (!lr.ok) {
+          alert(ld?.error?.message || 'Link request failed')
+        } else {
+          alert('Link request submitted for approval.')
+        }
+      }
+
       resetForm()
       await load()
     } catch (e) {

@@ -65,17 +65,15 @@ function requireAdminLike(req, res, next) {
 // Create unit
 router.post('/', authMiddleware, requireAdminLike, async (req, res) => {
   try {
+    const role = req.user?.role
     const { code, description, unit_type, base_price, currency, model_id, unit_type_id } = req.body || {}
     if (!code || typeof code !== 'string') return res.status(400).json({ error: { message: 'code is required' } })
     const price = Number(base_price || 0)
     const cur = (currency || 'EGP').toString().toUpperCase()
 
-    // Optional link to model
-    let mid = null
-    if (model_id != null) {
-      const m = await pool.query('SELECT id FROM unit_models WHERE id=$1', [Number(model_id)])
-      if (m.rows.length === 0) return res.status(400).json({ error: { message: 'Invalid model_id' } })
-      mid = Number(model_id)
+    // financial_admin must not set model_id directly; use link-request workflow
+    if (role === 'financial_admin' && model_id != null) {
+      return res.status(400).json({ error: { message: 'Financial Admin cannot set model_id directly. Use /api/inventory/units/:id/link-request after creating the unit.' } })
     }
 
     // Optional unit_type_id
@@ -84,6 +82,14 @@ router.post('/', authMiddleware, requireAdminLike, async (req, res) => {
       const t = await pool.query('SELECT id FROM unit_types WHERE id=$1', [Number(unit_type_id)])
       if (t.rows.length === 0) return res.status(400).json({ error: { message: 'Invalid unit_type_id' } })
       utid = Number(unit_type_id)
+    }
+
+    let mid = null
+    if (model_id != null) {
+      // Only admin/superadmin can set directly (bypassing workflow)
+      const m = await pool.query('SELECT id FROM unit_models WHERE id=$1', [Number(model_id)])
+      if (m.rows.length === 0) return res.status(400).json({ error: { message: 'Invalid model_id' } })
+      mid = Number(model_id)
     }
 
     const r = await pool.query(
@@ -100,6 +106,7 @@ router.post('/', authMiddleware, requireAdminLike, async (req, res) => {
 // Update unit
 router.patch('/:id', authMiddleware, requireAdminLike, async (req, res) => {
   try {
+    const role = req.user?.role
     const id = Number(req.params.id)
     const { code, description, unit_type, base_price, currency, model_id, unit_type_id } = req.body || {}
     const r0 = await pool.query('SELECT * FROM units WHERE id=$1', [id])
@@ -110,6 +117,10 @@ router.patch('/:id', authMiddleware, requireAdminLike, async (req, res) => {
     const newType = typeof unit_type === 'string' ? unit_type : u.unit_type
     const price = base_price != null ? Number(base_price) : u.base_price
     const cur = typeof currency === 'string' ? currency.toUpperCase() : u.currency
+
+    if (role === 'financial_admin' && model_id !== undefined) {
+      return res.status(400).json({ error: { message: 'Financial Admin cannot set model_id directly. Use link-request workflow.' } })
+    }
 
     let mid = u.model_id
     if (model_id !== undefined) {

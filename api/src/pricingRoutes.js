@@ -72,6 +72,24 @@ router.patch('/unit-model/:id/status', requireRole(['ceo', 'chairman', 'vice_cha
       [id, status === 'approved' ? 'approve' : 'reject', req.user.id, JSON.stringify({ reason: reason || null })]
     );
 
+    // If approved, propagate price to all linked units and log an audit entry (with count)
+    if (String(status) === 'approved') {
+      const approved = r.rows[0];
+      const modelId = approved.model_id;
+      const price = Number(approved.price) || 0;
+
+      const upd = await pool.query(
+        `UPDATE units SET base_price=$1, updated_at=now() WHERE model_id=$2`,
+        [price, modelId]
+      );
+
+      await pool.query(
+        `INSERT INTO unit_model_pricing_audit (pricing_id, action, changed_by, details)
+         VALUES ($1, 'propagate', $2, $3)`,
+        [id, req.user.id, JSON.stringify({ propagated_to_units: upd.rowCount || 0, model_id: modelId, new_price: price })]
+      );
+    }
+
     return res.json({ ok: true, pricing: r.rows[0] });
   } catch (e) {
     console.error('PATCH /api/pricing/unit-model/:id/status error:', e);
