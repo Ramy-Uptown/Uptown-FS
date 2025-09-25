@@ -201,6 +201,14 @@ export default function App(props) {
     maintenance_fee: '',
     delivery_period: ''
   })
+
+  // Additional fees schedule (not part of PV calc)
+  const [feeSchedule, setFeeSchedule] = useState({
+    maintenancePaymentAmount: '',
+    maintenancePaymentMonth: '',
+    garagePaymentAmount: '',
+    garagePaymentMonth: ''
+  })
   const [customNotes, setCustomNotes] = useState({
     dp_explanation: '',
     poa_clause: ''
@@ -377,9 +385,9 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
 
   // Persist on change
   useEffect(() => {
-    const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes }
+    const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes, feeSchedule }
     localStorage.setItem(LS_KEY, JSON.stringify(snapshot))
-  }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes])
+  }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes, feeSchedule])
 
   // Expose imperative APIs for embedding contexts
   useEffect(() => {
@@ -578,7 +586,20 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
     setGenError('')
     setGenResult(null)
     try {
-      const body = { ...payload, language, currency }
+      const body = {
+        ...payload,
+        language,
+        currency,
+        // base date for absolute due dates on schedule; prefer contract date, fallback to reservation form date
+        inputs: {
+          ...payload.inputs,
+          baseDate: contractInfo.contract_date || contractInfo.reservation_form_date || null,
+          maintenancePaymentAmount: Number(feeSchedule.maintenancePaymentAmount) || 0,
+          maintenancePaymentMonth: Number(feeSchedule.maintenancePaymentMonth) || 0,
+          garagePaymentAmount: Number(feeSchedule.garagePaymentAmount) || 0,
+          garagePaymentMonth: Number(feeSchedule.garagePaymentMonth) || 0
+        }
+      }
       const resp = await fetchWithAuth(`${API_URL}/api/generate-plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1218,6 +1239,29 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
               <label style={styles.label}>Delivery Period (<span style={styles.arInline}>[[مدة التسليم]]</span>)</label>
               <input dir="auto" style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
             </div>
+          </div>
+
+          <div style={{ marginTop: 12, borderTop: '1px dashed #ead9bd', paddingTop: 12 }}>
+            <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Additional Fees Schedule (not included in PV)</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+              <div>
+                <label style={styles.label}>Maintenance Amount</label>
+                <input type="number" style={styles.input()} value={feeSchedule.maintenancePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentAmount: e.target.value }))} placeholder="e.g. 150000" />
+              </div>
+              <div>
+                <label style={styles.label}>Maintenance Due Month (from contract date)</label>
+                <input type="number" min="0" style={styles.input()} value={feeSchedule.maintenancePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentMonth: e.target.value }))} placeholder="e.g. 0 for at contract" />
+              </div>
+              <div>
+                <label style={styles.label}>Garage Amount</label>
+                <input type="number" style={styles.input()} value={feeSchedule.garagePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentAmount: e.target.value }))} placeholder="e.g. 200000" />
+              </div>
+              <div>
+                <label style={styles.label}>Garage Due Month (from contract date)</label>
+                <input type="number" min="0" style={styles.input()} value={feeSchedule.garagePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentMonth: e.target.value }))} placeholder="e.g. 12" />
+              </div>
+            </div>
+            <small style={styles.metaText}>These fees will be appended to the generated schedule with dates based on the contract date (or reservation form date if contract date is empty). They are not part of PV calculation.</small>
           </div>
         </section>
 

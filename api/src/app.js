@@ -508,25 +508,39 @@ app.post('/api/generate-plan', async (req, res) => {
     const npvWarning = (Number(result.calculatedPV) || 0) < toleranceValue
 
     const schedule = []
-    const pushEntry = (label, month, amount) => {
+    const pushEntry = (label, month, amount, baseDateStr) => {
       const amt = Number(amount) || 0
       if (amt <= 0) return
+      const m = Number(month) || 0
+      let dueDate = null
+      if (baseDateStr) {
+        const base = new Date(baseDateStr)
+        if (!isNaN(base.getTime())) {
+          const d = new Date(base)
+          d.setMonth(d.getMonth() + m)
+          dueDate = d.toISOString().slice(0, 10) // YYYY-MM-DD
+        }
+      }
       schedule.push({
         label,
-        month: Number(month) || 0,
+        month: m,
         amount: amt,
+        date: dueDate,
         writtenAmount: convertToWords(amt, lang, { currency })
       })
     }
+
+    // Base date for computing absolute dates (optional)
+    const baseDate = effInputs.baseDate || effInputs.contractDate || null
 
     // Down payment or split first year
     const splitY1 = !!effInputs.splitFirstYearPayments
     if (splitY1) {
       for (const p of (effInputs.firstYearPayments || [])) {
-        pushEntry(p.type === 'dp' ? 'Down Payment (Y1 split)' : 'First Year', p.month, p.amount)
+        pushEntry(p.type === 'dp' ? 'Down Payment (Y1 split)' : 'First Year', p.month, p.amount, baseDate)
       }
     } else {
-      pushEntry('Down Payment', 0, result.downPaymentAmount)
+      pushEntry('Down Payment', 0, result.downPaymentAmount, baseDate)
     }
 
     const subs = effInputs.subsequentYears || []
@@ -542,16 +556,25 @@ app.post('/api/generate-plan', async (req, res) => {
       const per = (Number(y.totalNominal) || 0) / (nInYear || 1)
       const startAfterYear = (splitY1 ? 1 : 0) + idx
       const months = getPaymentMonths(nInYear, y.frequency, startAfterYear)
-      months.forEach((m, i) => pushEntry(`Year ${startAfterYear + 1} (${y.frequency})`, m, per))
+      months.forEach((m, i) => pushEntry(`Year ${startAfterYear + 1} (${y.frequency})`, m, per, baseDate))
     })
 
     if ((Number(effInputs.additionalHandoverPayment) || 0) > 0 && (Number(effInputs.handoverYear) || 0) > 0) {
-      pushEntry('Handover', Number(effInputs.handoverYear) * 12, effInputs.additionalHandoverPayment)
+      pushEntry('Handover', Number(effInputs.handoverYear) * 12, effInputs.additionalHandoverPayment, baseDate)
     }
+
+    // Additional one-time fees (NOT included in PV calculation — appended only to schedule)
+    const maintAmt = Number(effInputs.maintenancePaymentAmount) || 0
+    const maintMonth = Number(effInputs.maintenancePaymentMonth) || 0
+    if (maintAmt > 0) pushEntry('Maintenance Fee', maintMonth, maintAmt, baseDate)
+
+    const garAmt = Number(effInputs.garagePaymentAmount) || 0
+    const garMonth = Number(effInputs.garagePaymentMonth) || 0
+    if (garAmt > 0) pushEntry('Garage Fee', garMonth, garAmt, baseDate)
 
     const eqMonths = result.equalInstallmentMonths || []
     const eqAmt = Number(result.equalInstallmentAmount) || 0
-    eqMonths.forEach((m, i) => pushEntry('Equal Installment', m, eqAmt))
+    eqMonths.forEach((m, i) => pushEntry('Equal Installment', m, eqAmt, baseDate))
 
     schedule.sort((a, b) => (a.month - b.month) || a.label.localeCompare(b.label))
 
