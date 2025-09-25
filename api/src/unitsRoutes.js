@@ -68,13 +68,30 @@ router.post('/', authMiddleware, requireAdminLike, async (req, res) => {
     const role = req.user?.role
     const { code, description, unit_type, base_price, currency, model_id, unit_type_id } = req.body || {}
     if (!code || typeof code !== 'string') return res.status(400).json({ error: { message: 'code is required' } })
+
+    // Financial Admin: can only create draft unit with code; must request link to model separately
+    if (role === 'financial_admin') {
+      try {
+        const r = await pool.query(
+          `INSERT INTO units (code, description, unit_type, unit_type_id, base_price, currency, model_id, unit_status, created_by, available)
+           VALUES ($1, NULL, NULL, NULL, 0, 'EGP', NULL, 'INVENTORY_DRAFT', $2, TRUE)
+           RETURNING *`,
+          [code.trim(), req.user.id]
+        )
+        return res.json({ ok: true, unit: r.rows[0] })
+      } catch (err) {
+        // Unique violation on code
+        if (err && err.code === '23505') {
+          return res.status(400).json({ error: { message: 'Unit code already exists. Duplicate codes are not allowed.' } })
+        }
+        console.error('POST /api/units (FA) error', err)
+        return res.status(500).json({ error: { message: 'Internal error' } })
+      }
+    }
+
+    // Admin/Superadmin: full control (optional direct link to model)
     const price = Number(base_price || 0)
     const cur = (currency || 'EGP').toString().toUpperCase()
-
-    // financial_admin must not set model_id directly; use link-request workflow
-    if (role === 'financial_admin' && model_id != null) {
-      return res.status(400).json({ error: { message: 'Financial Admin cannot set model_id directly. Use /api/inventory/units/:id/link-request after creating the unit.' } })
-    }
 
     // Optional unit_type_id
     let utid = null
@@ -86,19 +103,28 @@ router.post('/', authMiddleware, requireAdminLike, async (req, res) => {
 
     let mid = null
     if (model_id != null) {
-      // Only admin/superadmin can set directly (bypassing workflow)
       const m = await pool.query('SELECT id FROM unit_models WHERE id=$1', [Number(model_id)])
       if (m.rows.length === 0) return res.status(400).json({ error: { message: 'Invalid model_id' } })
       mid = Number(model_id)
     }
 
-    const r = await pool.query(
-      'INSERT INTO units (code, description, unit_type, unit_type_id, base_price, currency, model_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [code.trim(), description || null, unit_type || null, utid, isFinite(price) ? price : 0, cur, mid]
-    )
-    return res.json({ ok: true, unit: r.rows[0] })
+    try {
+      const r = await pool.query(
+        `INSERT INTO units (code, description, unit_type, unit_type_id, base_price, currency, model_id, unit_status, created_by, available)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'AVAILABLE', $8, TRUE)
+         RETURNING *`,
+        [code.trim(), description || null, unit_type || null, utid, isFinite(price) ? price : 0, cur, mid, req.user.id]
+      )
+      return res.json({ ok: true, unit: r.rows[0] })
+    } catch (err) {
+      if (err && err.code === '23505') {
+        return res.status(400).json({ error: { message: 'Unit code already exists. Duplicate codes are not allowed.' } })
+      }
+      console.error('POST /api/units error', err)
+      return res.status(500).json({ error: { message: 'Internal error' } })
+    }
   } catch (e) {
-    console.error('POST /api/units error', e)
+    console.error('POST /api/units outer error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
   }
 })
