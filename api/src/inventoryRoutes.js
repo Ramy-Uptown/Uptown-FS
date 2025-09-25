@@ -36,10 +36,10 @@ async function createUnitModelChange(client, { action, model_id = null, payload 
   return r.rows[0]
 }
 
-//
-// Unit Models CRUD (financial_manager only for write; list also restricted)
-//
-router.get('/unit-models', authMiddleware, requireRole(['financial_manager','ceo','chairman','vice_chairman']), async (req, res) => {
+// --------------------
+// Unit Models (read list)
+// --------------------
+router.get('/unit-models', authMiddleware, requireRole(['financial_manager', 'financial_admin', 'ceo', 'chairman', 'vice_chairman']), async (req, res) => {
   try {
     const { search, page = 1, pageSize = 20 } = req.query || {}
     const p = Math.max(1, Number(page) || 1)
@@ -49,7 +49,7 @@ router.get('/unit-models', authMiddleware, requireRole(['financial_manager','ceo
     if (search) {
       const s = `%${String(search).toLowerCase()}%`
       params.push(s)
-      clauses.push(`(LOWER(model_name) LIKE $${params.length} OR LOWER(COALESCE(model_code, '')) LIKE $${params.length})`)
+      clauses.push(`(LOWER(model_name) LIKE ${params.length} OR LOWER(COALESCE(model_code, '')) LIKE ${params.length})`)
     }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
     const off = (p - 1) * ps
@@ -68,6 +68,7 @@ router.get('/unit-models', authMiddleware, requireRole(['financial_manager','ceo
   }
 })
 
+// Existing create/update/delete routes for unit models remain restricted to financial_manager
 router.post('/unit-models', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
   const client = await pool.connect()
   try {
@@ -317,6 +318,84 @@ router.patch('/unit-models/changes/:id/reject', authMiddleware, requireRole(['ce
   }
 })
 
+// --------------------
+// Inventory: unit types & units
+// --------------------
+
+// List unit types (broad read access for calculators)
+router.get('/types', authMiddleware, requireRole(['admin','superadmin','sales_manager','property_consultant','financial_manager','financial_admin','ceo','chairman','vice_chairman']), async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT id, name, description, active FROM unit_types WHERE active=TRUE ORDER BY name ASC`)
+    return ok(res, { unit_types: r.rows })
+  } catch (e) {
+    console.error('GET /api/inventory/types error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// List available units for a given type
+router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_manager','property_consultant','financial_manager','financial_admin','ceo','chairman','vice_chairman']), async (req, res) => {
+  try {
+    const typeId = num(req.query.unit_type_id)
+    const clauses = ['available = TRUE']
+    const params = []
+    if (typeId) { params.push(typeId); clauses.push(`unit_type_id = ${params.length}`) }
+    const where = `WHERE ${clauses.join(' AND ')}`
+    const r = await pool.query(
+      `SELECT id, code, description, unit_type, unit_type_id, base_price, currency, model_id
+       FROM units
+       ${where}
+       ORDER BY id DESC
+       LIMIT 200`,
+      params
+    )
+    return ok(res, { units: r.rows })
+  } catch (e) {
+    console.error('GET /api/inventory/units error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// Create inventory unit (Financial Admin)
+router.post('/units', authMiddleware, requireRole(['financial_admin']), async (req, res) => {
+  try {
+    const { code, description, unit_type, unit_type_id, base_price, currency, model_id } = req.body || {}
+    if (!code || typeof code !== 'string') return bad(res, 400, 'code is required')
+    const price = Number(base_price || 0)
+    const cur = (currency || 'EGP').toString().toUpperCase()
+
+    // Optional: validate model_id exists when provided
+    let mid = null
+    if (model_id != null) {
+      const m = await pool.query('SELECT id FROM unit_models WHERE id=$1', [Number(model_id)])
+      if (m.rows.length === 0) return bad(res, 400, 'Invalid model_id')
+      mid = Number(model_id)
+    }
+
+    let utid = null
+    if (unit_type_id != null) {
+      const t = await pool.query('SELECT id FROM unit_types WHERE id=$1', [Number(unit_type_id)])
+      if (t.rows.length === 0) return bad(res, 400, 'Invalid unit_type_id')
+      utid = Number(unit_type_id)
+    }
+
+    const r = await pool.query(
+      `INSERT INTO units (code, description, unit_type, unit_type_id, base_price, currency, model_id, available)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+       RETURNING *`,
+      [code.trim(), description || null, unit_type || null, utid, isFinite(price) ? price : 0, cur, mid]
+    )
+    return ok(res, { unit: r.rows[0] })
+  } catch (e) {
+    console.error('POST /api/inventory/units error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// --------------------
+// Holds: requests/approve/unblock/extend/override flow
+// --------------------
+
 // Hold requests
 router.post('/holds', authMiddleware, requireRole(['property_consultant']), async (req, res) => {
   try {
@@ -448,7 +527,10 @@ router.post('/holds/:id/override-request', authMiddleware, requireRole(['financi
     const hold = cur.rows[0]
     // cannot request override if already reserved
     if (hold.payment_plan_id) {
-      const rf = await client.query(`SELECT 1 FROM reservation_forms WHERE payment_plan_id=$1 AND status='approved' LIMIT 1`, [hold.payment_plan_id])
+      const rf = await client.query(
+        `SELECT 1 FROM reservation_forms WHERE payment_plan_id=$1 AND status='approved' LIMIT 1`,
+        [hold.payment_plan_id]
+      )
       if (rf.rows.length > 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Cannot override: unit is reserved') }
     }
     const upd = await client.query(
@@ -510,158 +592,7 @@ router.patch('/holds/:id/override-approve', authMiddleware, requireRole(['ceo'])
   }
 })
 
-// (duplicate/invalid block removed)
-
-router.patch('/holds/:id/approve', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
-  const client = await pool.connect()
-  try {
-    const id = num(req.params.id)
-    if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
-    await client.query('BEGIN')
-    const cur = await client.query('SELECT * FROM holds WHERE id=$1', [id])
-    if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Hold not found') }
-    if (cur.rows[0].status !== 'pending_approval') { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Hold not pending') }
-    const expiresAt = cur.rows[0].expires_at ? new Date(cur.rows[0].expires_at) : new Date(Date.now() + 7 * 24 * 3600 * 1000)
-    const nextNotify = new Date(expiresAt.getTime())
-    const upd = await client.query(
-      `UPDATE holds
-       SET status='approved', approved_by=$1, expires_at=$2, next_notify_at=$3, updated_at=now()
-       WHERE id=$4 RETURNING *`,
-      [req.user.id, expiresAt.toISOString(), nextNotify.toISOString(), id]
-    )
-    // Block unit
-    await client.query('UPDATE units SET available=FALSE, updated_at=now() WHERE id=$1', [cur.rows[0].unit_id])
-    await client.query('COMMIT'); client.release()
-    return ok(res, { hold: upd.rows[0] })
-  } catch (e) {
-    try { await client.query('ROLLBACK') } catch {}
-    client.release()
-    console.error('PATCH /api/inventory/holds/:id/approve error:', e)
-    return bad(res, 500, 'Internal error')
-  }
-})
-
-router.patch('/holds/:id/unblock', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
-  const client = await pool.connect()
-  try {
-    const id = num(req.params.id)
-    if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
-    await client.query('BEGIN')
-    const cur = await client.query('SELECT * FROM holds WHERE id=$1', [id])
-    if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Hold not found') }
-    const upd = await client.query(
-      `UPDATE holds SET status='unblocked', updated_at=now() WHERE id=$1 RETURNING *`,
-      [id]
-    )
-    await client.query('UPDATE units SET available=TRUE, updated_at=now() WHERE id=$1', [cur.rows[0].unit_id])
-    await client.query('COMMIT'); client.release()
-    return ok(res, { hold: upd.rows[0] })
-  } catch (e) {
-    try { await client.query('ROLLBACK') } catch {}
-    client.release()
-    console.error('PATCH /api/inventory/holds/:id/unblock error:', e)
-    return bad(res, 500, 'Internal error')
-  }
-})
-
-router.patch('/holds/:id/extend', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
-  try {
-    const id = num(req.params.id)
-    if (!id) return bad(res, 400, 'Invalid id')
-    const r = await pool.query(
-      `UPDATE holds SET expires_at = COALESCE(expires_at, now()) + INTERVAL '7 days', next_notify_at = COALESCE(expires_at, now()) + INTERVAL '7 days', updated_at=now()
-       WHERE id=$1 AND status='approved'
-       RETURNING *`,
-      [id]
-    )
-    if (r.rows.length === 0) return bad(res, 404, 'Hold not found or not approved')
-    return ok(res, { hold: r.rows[0] })
-  } catch (e) {
-    console.error('PATCH /api/inventory/holds/:id/extend error:', e)
-    return bad(res, 500, 'Internal error')
-  }
-})
-
-// Override unblock (FM can override after CEO approvals elsewhere) if unit not reserved
-/**
- * Override-unblock flow:
- * 1) FM requests override -> status 'pending_override_ceo' and notify CEOs
- * 2) CEO approves -> status 'override_ceo_approved' and notify FMs + consultant
- * 3) FM executes override-unblock -> set available=true, status 'unblocked' and notify consultant + CEOs
- */
-router.post('/holds/:id/override-request', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
-  const client = await pool.connect()
-  try {
-    const id = num(req.params.id)
-    if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
-    await client.query('BEGIN')
-    const cur = await client.query('SELECT * FROM holds WHERE id=$1', [id])
-    if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Hold not found') }
-    const hold = cur.rows[0]
-    // cannot request override if already reserved
-    if (hold.payment_plan_id) {
-      const rf = await client.query(`SELECT 1 FROM reservation_forms WHERE payment_plan_id=$1 AND status='approved' LIMIT 1`, [hold.payment_plan_id])
-      if (rf.rows.length > 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Cannot override: unit is reserved') }
-    }
-    const upd = await client.query(
-      `UPDATE holds SET status='pending_override_ceo', updated_at=now() WHERE id=$1 RETURNING *`,
-      [id]
-    )
-    // notify all CEOs
-    await client.query(
-      `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
-       SELECT u.id, 'hold_override_request', 'holds', $1, 'Hold override requested and awaits CEO approval.'
-       FROM users u WHERE u.role='ceo' AND u.active=TRUE`,
-      [id]
-    )
-    await client.query('COMMIT'); client.release()
-    return ok(res, { hold: upd.rows[0] })
-  } catch (e) {
-    try { await client.query('ROLLBACK') } catch {}
-    client.release()
-    console.error('POST /api/inventory/holds/:id/override-request error:', e)
-    return bad(res, 500, 'Internal error')
-  }
-})
-
-router.patch('/holds/:id/override-approve', authMiddleware, requireRole(['ceo']), async (req, res) => {
-  const client = await pool.connect()
-  try {
-    const id = num(req.params.id)
-    if (!id) { client.release(); return bad(res, 400, 'Invalid id') }
-    await client.query('BEGIN')
-    const cur = await client.query('SELECT * FROM holds WHERE id=$1', [id])
-    if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Hold not found') }
-    if (cur.rows[0].status !== 'pending_override_ceo') { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Not pending CEO override approval') }
-    const upd = await client.query(
-      `UPDATE holds SET status='override_ceo_approved', updated_at=now() WHERE id=$1 RETURNING *`,
-      [id]
-    )
-    // Notify all Financial Managers and the requesting consultant
-    await client.query(
-      `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
-       SELECT u.id, 'hold_override_ceo_approved', 'holds', $1, 'CEO approved hold override. You may unblock the unit.'
-       FROM users u WHERE u.role='financial_manager' AND u.active=TRUE`,
-      [id]
-    )
-    const requestedBy = cur.rows[0].requested_by
-    if (requestedBy) {
-      await client.query(
-        `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
-         VALUES ($1, 'hold_override_ceo_approved', 'holds', $2, 'CEO approved hold override for your request.')`,
-        [requestedBy, id]
-      )
-    }
-    await client.query('COMMIT'); client.release()
-    return ok(res, { hold: upd.rows[0] })
-  } catch (e) {
-    try { await client.query('ROLLBACK') } catch {}
-    client.release()
-    console.error('PATCH /api/inventory/holds/:id/override-approve error:', e)
-    return bad(res, 500, 'Internal error')
-  }
-})
-
+// Override-unblock after CEO approval
 router.patch('/holds/:id/override-unblock', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
   const client = await pool.connect()
   try {
