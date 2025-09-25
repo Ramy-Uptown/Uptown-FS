@@ -159,6 +159,11 @@ router.get('/unit-model/pending', requireRole(['ceo', 'chairman', 'vice_chairman
          p.id, p.model_id, p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price, p.status,
          m.model_name,
          m.model_code,
+         m.area,
+         m.has_garden,
+         m.garden_area,
+         m.has_roof,
+         m.roof_area,
          creator.email AS created_by_email
        FROM unit_model_pricing p
        JOIN unit_models m ON m.id = p.model_id

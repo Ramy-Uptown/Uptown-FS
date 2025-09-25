@@ -128,15 +128,16 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Finance Team', href: '/admin/finance-team' }
         ]
       case 'financial_manager':
-        return [
-          ...base,
-          queuesLink,
-          { label: 'Rejected Requests', href: '/admin/rejected-pricings' },
-          { label: 'Finance Team', href: '/admin/finance-team' },
-          { label: 'Standard Pricing', href: '/admin/standard-pricing' },
-          { label: 'Unit Models', href: '/admin/unit-models' },
-          { label: 'Holds', href: '/admin/holds' }
-        ]
+        return [
+          ...base,
+          queuesLink,
+          { label: 'Inventory Drafts', href: '/admin/inventory-drafts' },
+          { label: 'Rejected Requests', href: '/admin/rejected-pricings' },
+          { label: 'Finance Team', href: '/admin/finance-team' },
+          { label: 'Standard Pricing', href: '/admin/standard-pricing' },
+          { label: 'Unit Models', href: '/admin/unit-models' },
+          { label: 'Holds', href: '/admin/holds' }
+        ]
       case 'financial_admin':
         return [
           ...base,

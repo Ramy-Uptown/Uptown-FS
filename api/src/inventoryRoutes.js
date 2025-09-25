@@ -339,7 +339,7 @@ router.get('/types', authMiddleware, requireRole(['admin','superadmin','sales_ma
 router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_manager','property_consultant','financial_manager','financial_admin','ceo','chairman','vice_chairman']), async (req, res) => {
   try {
     const typeId = num(req.query.unit_type_id)
-    const clauses = ['available = TRUE', 'model_id IS NOT NULL']
+    const clauses = ['available = TRUE', "unit_status='AVAILABLE'", 'model_id IS NOT NULL']
     const params = []
     if (typeId) { params.push(typeId); clauses.push(`unit_type_id = ${params.length}`) }
     const where = `WHERE ${clauses.join(' AND ')}`
@@ -360,38 +360,103 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
   }
 })
 
-// Create inventory unit (Financial Admin)
+// Create inventory unit (Financial Admin) -> goes into FM approval queue as INVENTORY_DRAFT
 router.post('/units', authMiddleware, requireRole(['financial_admin']), async (req, res) => {
   try {
-    const { code, description, unit_type, unit_type_id, base_price, currency, model_id } = req.body || {}
+    const { code } = req.body || {}
     if (!code || typeof code !== 'string') return bad(res, 400, 'code is required')
-    const price = Number(base_price || 0)
-    const cur = (currency || 'EGP').toString().toUpperCase()
 
-    // Optional: validate model_id exists when provided
-    let mid = null
-    if (model_id != null) {
-      const m = await pool.query('SELECT id FROM unit_models WHERE id=$1', [Number(model_id)])
-      if (m.rows.length === 0) return bad(res, 400, 'Invalid model_id')
-      mid = Number(model_id)
+    // Create minimal draft unit; other attributes flow in later via model link approval
+    let unit
+    try {
+      const r = await pool.query(
+        `INSERT INTO units (code, description, unit_type, unit_type_id, base_price, currency, model_id, available, unit_status, created_by)
+         VALUES ($1, NULL, NULL, NULL, 0, 'EGP', NULL, TRUE, 'INVENTORY_DRAFT', $2)
+         RETURNING *`,
+        [code.trim(), req.user.id]
+      )
+      unit = r.rows[0]
+    } catch (err) {
+      if (err && err.code === '23505') {
+        return bad(res, 400, 'Unit code already exists. Duplicate codes are not allowed.')
+      }
+      throw err
     }
 
-    let utid = null
-    if (unit_type_id != null) {
-      const t = await pool.query('SELECT id FROM unit_types WHERE id=$1', [Number(unit_type_id)])
-      if (t.rows.length === 0) return bad(res, 400, 'Invalid unit_type_id')
-      utid = Number(unit_type_id)
-    }
+    // Notify all Financial Managers of a new draft unit awaiting approval
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+       SELECT u.id, 'inventory_unit_draft', 'units', $1, 'New inventory unit draft added. Please review and approve.'
+       FROM users u WHERE u.role='financial_manager' AND u.active=TRUE`,
+      [unit.id]
+    )
+
+    return ok(res, { unit, message: 'Unit created as draft. Awaiting Financial Manager approval.' })
+  } catch (e) {
+    console.error('POST /api/inventory/units error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// FM: list inventory drafts awaiting approval
+router.get('/units/drafts', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT * FROM units WHERE unit_status='INVENTORY_DRAFT' ORDER BY updated_at DESC, id DESC`
+    )
+    return ok(res, { units: r.rows })
+  } catch (e) {
+    console.error('GET /api/inventory/units/drafts error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// FM: approve inventory draft
+router.patch('/units/:id/approve', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const id = num(req.params.id)
+    if (!id) return bad(res, 400, 'Invalid id')
+    const r0 = await pool.query(`SELECT id, unit_status FROM units WHERE id=$1`, [id])
+    if (r0.rows.length === 0) return bad(res, 404, 'Unit not found')
+    if (r0.rows[0].unit_status !== 'INVENTORY_DRAFT') return bad(res, 400, 'Unit is not in draft status')
 
     const r = await pool.query(
-      `INSERT INTO units (code, description, unit_type, unit_type_id, base_price, currency, model_id, available)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+      `UPDATE units
+       SET unit_status='AVAILABLE', approved_by=$1, updated_at=now()
+       WHERE id=$2
        RETURNING *`,
-      [code.trim(), description || null, unit_type || null, utid, isFinite(price) ? price : 0, cur, mid]
+      [req.user.id, id]
     )
     return ok(res, { unit: r.rows[0] })
   } catch (e) {
-    console.error('POST /api/inventory/units error:', e)
+    console.error('PATCH /api/inventory/units/:id/approve error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// FM: reject inventory draft (stores optional reason in meta)
+router.patch('/units/:id/reject', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const id = num(req.params.id)
+    const { reason } = req.body || {}
+    if (!id) return bad(res, 400, 'Invalid id')
+    const r0 = await pool.query(`SELECT id, unit_status, meta FROM units WHERE id=$1`, [id])
+    if (r0.rows.length === 0) return bad(res, 404, 'Unit not found')
+    if (r0.rows[0].unit_status !== 'INVENTORY_DRAFT') return bad(res, 400, 'Unit is not in draft status')
+
+    const currentMeta = r0.rows[0].meta || {}
+    const newMeta = { ...currentMeta, inventory_reject_reason: reason || null }
+
+    const r = await pool.query(
+      `UPDATE units
+       SET unit_status='INVENTORY_REJECTED', approved_by=$1, meta=$2::jsonb, updated_at=now()
+       WHERE id=$3
+       RETURNING *`,
+      [req.user.id, JSON.stringify(newMeta), id]
+    )
+    return ok(res, { unit: r.rows[0] })
+  } catch (e) {
+    console.error('PATCH /api/inventory/units/:id/reject error:', e)
     return bad(res, 500, 'Internal error')
   }
 })

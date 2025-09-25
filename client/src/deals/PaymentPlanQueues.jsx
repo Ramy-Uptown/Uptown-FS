@@ -72,15 +72,32 @@ export default function UnitModelQueues() {
     }
   };
 
-  const renderPayload = (payload) => (
-    <ul className="list-disc pl-5 text-xs">
-      {Object.entries(payload).map(([key, value]) => (
-        <li key={key}>
-          <strong>{key}:</strong> {JSON.stringify(value)}
-        </li>
-      ))}
-    </ul>
-  );
+  const renderPayload = (payload) => {
+    const entries = Object.entries(payload || {});
+    if (entries.length === 0) return <span className="text-gray-500">No details</span>;
+    return (
+      <div className="overflow-x-auto">
+        <table className="min-w-[400px] border border-gray-200 rounded text-xs">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-2 py-1 text-left text-gray-600 font-medium">Field</th>
+              <th className="px-2 py-1 text-left text-gray-600 font-medium">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map(([key, value]) => (
+              <tr key={key} className="border-t">
+                <td className="px-2 py-1 font-semibold whitespace-nowrap">{key}</td>
+                <td className="px-2 py-1">
+                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   return (
     <div className="container mx-auto p-4">
