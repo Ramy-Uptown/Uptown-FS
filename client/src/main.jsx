@@ -19,6 +19,7 @@ import CommissionPolicies from './admin/CommissionPolicies.jsx'
 import CommissionsReport from './admin/CommissionsReport.jsx'
 import StandardPricing from './admin/StandardPricing.jsx'
 import StandardPricingApprovals from './admin/StandardPricingApprovals.jsx'; // THIS LINE IS NEW
+import RejectedPricings from './admin/RejectedPricings.jsx';
 import HoldsFM from './admin/HoldsFM.jsx'
 import HoldsCEO from './admin/HoldsCEO.jsx'
 import WorkflowLogs from './admin/WorkflowLogs.jsx'
@@ -125,6 +126,14 @@ createRoot(document.getElementById('root')).render(
           }
         />
         {/* --- END OF NEW ROUTE --- */}
+       < Route
+          path="/admin/standard-pricing-rejected"
+          element={
+           < RoleBasedRoute allowedRoles={['financial_manager']}>
+             < RejectedPricings />
+          </  RoleBasedRoute>
+          }
+      _code  new/</>
         <Route
           path="/admin/inventory"
           element={

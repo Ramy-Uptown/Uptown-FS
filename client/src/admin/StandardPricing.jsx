@@ -301,32 +301,35 @@ export default function StandardPricing() {
         {error ? <p style={errorText}>{error}</p> : null}
 
         {role === 'financial_manager' && (
-          <form onSubmit={handleUpsertPricing} style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 16, marginTop: 12, marginBottom: 16 }}>
-            <h3 style={{ marginTop: 0 }}>Select Unit Model</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'center' }}>
-              <div>
-                <div style={metaText}>Model Name</div>
-                <select value={selectedModelName} onChange={e => setSelectedModelName(e.target.value)} style={ctrl}>
-                  <option value="">Select name…</option>
-                  {models.map(m => (
-                    <option key={m.id} value={m.model_name || ''}>
-                      {m.model_name || ''} {m.area ? `— ${m.area} m²` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <div style={metaText}>Model Code</div>
-                <select value={selectedModelCode} onChange={e => setSelectedModelCode(e.target.value)} style={ctrl}>
-                  <option value="">Select code…</option>
-                  {models.map(m => (
-                    <option key={m.id} value={m.model_code || ''}>
-                      {m.model_code || '(none)'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+              <form onSubmit={handleUpsertPricing} style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 16, marginTop: 12, marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <h3 style={{ marginTop: 0 }}>Select Unit Model</h3>
+                  <a href="/admin/standard-pricing-rejected" style={{ ...btn, textDecoration: 'none', display: 'inline-block' }}>Rejected Requests</a>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'center' }}>
+                  <div>
+                    <div style={metaText}>Model Name</div>
+                    <select value={selectedModelName} onChange={e => setSelectedModelName(e.target.value)} style={ctrl}>
+                      <option value="">Select name…</option>
+                      {models.map(m => (
+                        <option key={m.id} value={m.model_name || ''}>
+                          {m.model_name || ''} {m.area ? `— ${m.area} m²` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={metaText}>Model Code</div>
+                    <select value={selectedModelCode} onChange={e => setSelectedModelCode(e.target.value)} style={ctrl}>
+                      <option value="">Select code…</option>
+                      {models.map(m => (
+                        <option key={m.id} value={m.model_code || ''}>
+                          {m.model_code || '(none)'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
             {selectedModel ? (
               <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
@@ -484,8 +487,22 @@ export default function StandardPricing() {
                   <td style={td}>{p.model_code || ''}</td>
                   <td style={td}>{Number(p.area || 0).toLocaleString()}</td>
                   <td style={td}>{Number(p.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{Number(p.garden_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{Number(p.roof_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td style={td}>{
+                    (() => {
+                      const hasGarden = p.has_garden ?? (p.garden_area != null ? Number(p.garden_area) > 0 : null);
+                      const val = Number(p.garden_price || 0);
+                      if (hasGarden === false) return 'N.A';
+                      return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasGarden === false ? 'N.A' : '0.00');
+                    })()
+                  }</td>
+                  <td style={td}>{
+                    (() => {
+                      const hasRoof = p.has_roof ?? (p.roof_area != null ? Number(p.roof_area) > 0 : null);
+                      const val = Number(p.roof_price || 0);
+                      if (hasRoof === false) return 'N.A';
+                      return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasRoof === false ? 'N.A' : '0.00');
+                    })()
+                  }</td>
                   <td style={td}>{Number(p.storage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td style={td}>{Number(p.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td style={td}>{Number(p.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
