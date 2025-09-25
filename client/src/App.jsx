@@ -308,7 +308,7 @@ export default function App(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unitInfo.unit_type])
 
-function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCurrency }) {
+function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCurrency, setFeeSchedule }) {
   const [types, setTypes] = useState([])
   const [selectedTypeId, setSelectedTypeId] = useState('')
   const [units, setUnits] = useState([])
@@ -360,7 +360,13 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
             const id = Number(e.target.value)
             const u = units.find(x => x.id === id)
             if (!u) return
-            setStdPlan(s => ({ ...s, totalPrice: Number(u.base_price) || s.totalPrice }))
+            // Compute total price excluding maintenance (PV base)
+            const total = Number(u.base_price || 0)
+              + Number(u.garden_price || 0)
+              + Number(u.roof_price || 0)
+              + Number(u.storage_price || 0)
+              + Number(u.garage_price || 0)
+            setStdPlan(s => ({ ...s, totalPrice: total }))
             setCurrency(u.currency || 'EGP')
             setInputs(s => ({ ...s, planDurationYears: s.planDurationYears || 5 }))
             setUnitInfo(s => ({
@@ -369,6 +375,13 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
               unit_code: u.code || s.unit_code,
               description: u.description || s.description,
             }))
+            if (setFeeSchedule) {
+              setFeeSchedule(fs => ({
+                ...fs,
+                maintenancePaymentAmount: Number(u.maintenance_price || 0) || '',
+                // leave months empty for consultant to choose
+              }))
+            }
           }}
           style={styles.select()}
           disabled={!selectedTypeId || loadingUnits || units.length === 0}
@@ -1168,6 +1181,7 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
                 setStdPlan={setStdPlan}
                 setInputs={setInputs}
                 setCurrency={setCurrency}
+                setFeeSchedule={setFeeSchedule}
               />
               <small style={styles.metaText}>
                 Choose a type to view available inventory. Selecting a unit will set price and details automatically.
