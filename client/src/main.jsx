@@ -135,9 +135,17 @@ createRoot(document.getElementById('root')).render(
             </RoleBasedRoute>
           }
         />
-        {/* Alias path to avoid mismatched links */}
+        {/* Alias paths to avoid mismatched links */}
         <Route
           path="/admin/standard-pricing/rejected"
+          element={
+            <RoleBasedRoute allowedRoles={['financial_manager']}>
+              <RejectedPricings />
+            </RoleBasedRoute>
+          }
+        />
+        <Route
+          path="/admin/rejected-pricings"
           element={
             <RoleBasedRoute allowedRoles={['financial_manager']}>
               <RejectedPricings />

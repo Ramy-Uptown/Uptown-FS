@@ -8,6 +8,7 @@ export default function InventoryDrafts() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(0)
+  const [linkMap, setLinkMap] = useState({}) // unit_id -> { status, model_name, model_code }
 
   const handleLogout = async () => {
     try {
@@ -34,7 +35,29 @@ export default function InventoryDrafts() {
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/units/drafts`)
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load drafts')
-      setUnits(data.units || [])
+      const list = data.units || []
+      setUnits(list)
+
+      // Fetch pending link requests to show model linking status
+      try {
+        const lr = await fetchWithAuth(`${API_URL}/api/inventory/unit-link-requests?status=pending_approval`)
+        const ldata = await lr.json()
+        if (lr.ok) {
+          const map = {}
+          (ldata.links || []).forEach(link => {
+            map[link.unit_id] = {
+              status: link.status,
+              model_name: link.model_name,
+              model_code: link.model_code
+            }
+          })
+          setLinkMap(map)
+        } else {
+          setLinkMap({})
+        }
+      } catch {
+        setLinkMap({})
+      }
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -79,6 +102,19 @@ export default function InventoryDrafts() {
     }
   }
 
+  function renderLinkCell(u) {
+    const info = linkMap[u.id]
+    if (!info) return <span style={metaText}>No request</span>
+    return (
+      <span>
+        {info.status === 'pending_approval' ? 'Pending' : info.status}
+        {' — '}
+        {info.model_code ? `${info.model_code} — ` : ''}
+        {info.model_name || ''}
+      </span>
+    )
+  }
+
   return (
     <div>
       <BrandHeader onLogout={handleLogout} />
@@ -92,6 +128,8 @@ export default function InventoryDrafts() {
               <tr>
                 <th style={th}>ID</th>
                 <th style={th}>Code</th>
+                <th style={th}>Unit Type ID</th>
+                <th style={th}>Model Link</th>
                 <th style={th}>Created By</th>
                 <th style={th}>Status</th>
                 <th style={th}>Created At</th>
@@ -103,6 +141,8 @@ export default function InventoryDrafts() {
                 <tr key={u.id}>
                   <td style={td}>{u.id}</td>
                   <td style={td}>{u.code}</td>
+                  <td style={td}>{u.unit_type_id ?? '-'}</td>
+                  <td style={td}>{renderLinkCell(u)}</td>
                   <td style={td}>{u.created_by || '-'}</td>
                   <td style={td}>{u.unit_status}</td>
                   <td style={td}>{(u.created_at || '').replace('T', ' ').replace('Z', '')}</td>
@@ -114,7 +154,7 @@ export default function InventoryDrafts() {
               ))}
               {units.length === 0 && !loading && (
                 <tr>
-                  <td style={td} colSpan={6}>No drafts awaiting approval.</td>
+                  <td style={td} colSpan={8}>No drafts awaiting approval.</td>
                 </tr>
               )}
             </tbody>
@@ -122,7 +162,7 @@ export default function InventoryDrafts() {
         </div>
         <p style={metaText}>
           Notes: Draft units are created by Financial Admin with code only. Once approved, they become AVAILABLE and can be linked to models
-          via the Unit-Model link workflow. Rejected drafts will be marked INVENTORY_REJECTED with your reason stored in metadata.
+          via the Unit-Model link workflow. If a model link request exists, its status and model appear above.
         </p>
       </div>
     </div>
