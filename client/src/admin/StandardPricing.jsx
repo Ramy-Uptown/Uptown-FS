@@ -69,6 +69,8 @@ export default function StandardPricing() {
   const [years, setYears] = useState(5);
   const [frequency, setFrequency] = useState('monthly');
   const [annualRate, setAnnualRate] = useState(12);
+  const [maintenancePrice, setMaintenancePrice] = useState('');
+  const [garagePrice, setGaragePrice] = useState('');
 
   const selectedModel = useMemo(() => {
     const id = Number(selectedModelId);
@@ -136,7 +138,12 @@ export default function StandardPricing() {
       const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_id: Number(selectedModelId), price: Number(stdPrice) })
+        body: JSON.stringify({
+          model_id: Number(selectedModelId),
+          price: Number(stdPrice),
+          maintenance_price: maintenancePrice === '' ? 0 : Number(maintenancePrice),
+          garage_price: garagePrice === '' ? 0 : Number(garagePrice)
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || 'Failed to save pricing');
@@ -324,6 +331,14 @@ export default function StandardPricing() {
                 <input type="number" value={stdPrice} onChange={e => setStdPrice(e.target.value)} style={ctrl} placeholder="e.g. 3,500,000" />
               </div>
               <div>
+                <div style={metaText}>Maintenance Price (EGP) — not used in calculations</div>
+                <input type="number" value={maintenancePrice} onChange={e => setMaintenancePrice(e.target.value)} style={ctrl} placeholder="e.g. 150,000" />
+              </div>
+              <div>
+                <div style={metaText}>Garage Price (EGP) — not used in calculations</div>
+                <input type="number" value={garagePrice} onChange={e => setGaragePrice(e.target.value)} style={ctrl} placeholder="e.g. 200,000" />
+              </div>
+              <div>
                 <div style={metaText}>Down Payment (%)</div>
                 <input type="number" value={dpPercent} onChange={e => setDpPercent(e.target.value)} style={ctrl} />
               </div>
@@ -331,6 +346,8 @@ export default function StandardPricing() {
                 <div style={metaText}>Plan Duration (years)</div>
                 <input type="number" value={years} onChange={e => setYears(e.target.value)} style={ctrl} />
               </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 8 }}>
               <div>
                 <div style={metaText}>Installment Frequency</div>
                 <select value={frequency} onChange={e => setFrequency(e.target.value)} style={ctrl}>
@@ -378,6 +395,8 @@ export default function StandardPricing() {
                 <th style={th}>Code</th>
                 <th style={th}>Area</th>
                 <th style={th}>Price (EGP)</th>
+                <th style={th}>Maintenance</th>
+                <th style={th}>Garage</th>
                 <th style={th}>Status</th>
                 <th style={th}>Created By</th>
                 <th style={th}>Approved By</th>
@@ -391,6 +410,8 @@ export default function StandardPricing() {
                   <td style={td}>{p.model_code || ''}</td>
                   <td style={td}>{Number(p.area || 0).toLocaleString()}</td>
                   <td style={td}>{Number(p.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td style={td}>{Number(p.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td style={td}>{Number(p.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td style={td}>{p.status}</td>
                   <td style={td}>{p.created_by_email || ''}</td>
                   <td style={td}>{p.approved_by_email || ''}</td>

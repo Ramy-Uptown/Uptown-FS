@@ -749,11 +749,13 @@ router.patch('/unit-link-requests/:id/approve', authMiddleware, requireRole(['fi
     if (model.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Model not found') }
     const m = model.rows[0]
 
-    const priceRes = await client.query(`SELECT price FROM unit_model_pricing WHERE model_id=$1 AND status='approved' ORDER BY id DESC LIMIT 1`, [link.model_id])
+    const priceRes = await client.query(`SELECT price, maintenance_price, garage_price FROM unit_model_pricing WHERE model_id=$1 AND status='approved' ORDER BY id DESC LIMIT 1`, [link.model_id])
     if (priceRes.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Model has no approved pricing') }
     const basePrice = Number(priceRes.rows[0].price) || 0
+    const maintPrice = Number(priceRes.rows[0].maintenance_price ?? 0) || 0
+    const garPrice = Number(priceRes.rows[0].garage_price ?? 0) || 0
 
-    // Copy features & set price; garage_price/maintenance_price preserved if already set, otherwise 0
+    // Copy features & set prices
     const upd = await client.query(
       `UPDATE units
        SET model_id=$1,
@@ -764,15 +766,16 @@ router.patch('/unit-link-requests/:id/approve', authMiddleware, requireRole(['fi
            garden_area=$6,
            has_roof=$7,
            roof_area=$8,
-           maintenance_price=COALESCE(maintenance_price, 0),
-           garage_price=COALESCE(garage_price, 0),
+           maintenance_price=$9,
+           garage_price=$10,
            updated_at=now()
-       WHERE id=$9
+       WHERE id=$11
        RETURNING *`,
       [
         link.model_id,
         basePrice,
         m.area, m.orientation, m.has_garden, m.garden_area, m.has_roof, m.roof_area,
+        maintPrice, garPrice,
         link.unit_id
       ]
     )
