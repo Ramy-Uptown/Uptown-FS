@@ -1,7 +1,16 @@
 import React, { useEffect, useState } from 'react'
 import BrandHeader from '../lib/BrandHeader.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { pageContainer, pageTitle, tableWrap, table, th, td, ctrl, btn, btnPrimary, btnDanger, metaText, errorText } from '../lib/ui.js'
+
+function fmt(n) {
+  const v = Number(n || 0)
+  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+function yesNo(v, area) {
+  if (v != null) return v ? 'Yes' : 'No'
+  const a = Number(area)
+  return Number.isFinite(a) && a > 0 ? 'Yes' : 'No'
+}
 
 export default function UnitModelChanges() {
   const [changes, setChanges] = useState([])
@@ -81,11 +90,15 @@ export default function UnitModelChanges() {
   return (
     <div>
       <BrandHeader onLogout={handleLogout} />
-      <div style={pageContainer}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={pageTitle}>Unit Model Changes</h2>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <select value={status} onChange={e => setStatus(e.target.value)} style={ctrl}>
+      <div className="container mx-auto p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">Unit Model Changes</h2>
+          <div>
+            <select
+              value={status}
+              onChange={e => setStatus(e.target.value)}
+              className="px-3 py-2 border rounded-md"
+            >
               <option value="pending_approval">Pending Approval</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
@@ -93,79 +106,99 @@ export default function UnitModelChanges() {
           </div>
         </div>
 
-        {error ? <p style={errorText}>{error}</p> : null}
-        {loading ? <p style={metaText}>Loading…</p> : null}
+        {error ? <p className="text-red-500 mt-2">{error}</p> : null}
+        {loading ? <p className="text-gray-500 mt-2">Loading…</p> : null}
 
-        <div style={tableWrap}>
-          <table style={table}>
-            <thead>
+        <div className="overflow-x-auto mt-3">
+          <table className="min-w-full bg-white border border-gray-200 shadow-sm rounded-lg">
+            <thead className="bg-gray-50">
               <tr>
-                <th style={th}>ID</th>
-                <th style={th}>Action</th>
-                <th style={th}>Model ID</th>
-                <th style={th}>Requested By</th>
-                <th style={th}>Approved By</th>
-                <th style={th}>Reason</th>
-                <th style={th}>Requested At</th>
-                <th style={th}>Updated At</th>
-                <th style={th}>Payload</th>
-                {status === 'pending_approval' && isTop ? <th style={th}>Actions</th> : null}
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requested By</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Approved By</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requested At</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Updated At</th>
+                {/* Key payload summary columns for better visual parity with pricing queue */}
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model Code</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Area (m²)</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Orientation</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Garden</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Garden Area</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roof</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roof Area</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Garage Area</th>
+                {status === 'pending_approval' && isTop ? (
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                ) : null}
               </tr>
             </thead>
-            <tbody>
-              {changes.map(ch => (
+            <tbody className="bg-white divide-y divide-gray-200">
+              {changes.map(ch => {
+                const p = ch.payload || {}
+                return (
                 <tr key={ch.id}>
-                  <td style={td}>{ch.id}</td>
-                  <td style={td}>{ch.action}</td>
-                  <td style={td}>{ch.model_id || '—'}</td>
-                  <td style={td}>{ch.requested_by_email || ch.requested_by}</td>
-                  <td style={td}>{ch.approved_by_email || (ch.approved_by || '—')}</td>
-                  <td style={td}>{ch.reason || '—'}</td>
-                  <td style={td}>{ch.created_at ? new Date(ch.created_at).toLocaleString() : ''}</td>
-                  <td style={td}>{ch.updated_at ? new Date(ch.updated_at).toLocaleString() : ''}</td>
-                  <td style={{ ...td, fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                    {(() => {
-                      const src = ch.payload || {}
-                      const cleaned = {}
-                      for (const [k, v] of Object.entries(src)) {
-                        if (k === 'garage_standard_code') continue
-                        if (v === null || v === undefined || v === '') continue
-                        cleaned[k] = v
-                      }
-                      return JSON.stringify(cleaned, null, 2)
-                    })()}
-                  </td>
+                  <td className="px-4 py-3">{ch.id}</td>
+                  <td className="px-4 py-3">{ch.action}</td>
+                  <td className="px-4 py-3">{ch.model_id || '—'}</td>
+                  <td className="px-4 py-3">{ch.requested_by_email || ch.requested_by}</td>
+                  <td className="px-4 py-3">{ch.approved_by_email || (ch.approved_by || '—')}</td>
+                  <td className="px-4 py-3">{ch.reason || '—'}</td>
+                  <td className="px-4 py-3">{ch.created_at ? new Date(ch.created_at).toLocaleString() : ''}</td>
+                  <td className="px-4 py-3">{ch.updated_at ? new Date(ch.updated_at).toLocaleString() : ''}</td>
+
+                  <td className="px-4 py-3">{p.model_name || '—'}</td>
+                  <td className="px-4 py-3">{p.model_code || '—'}</td>
+                  <td className="px-4 py-3">{p.area != null ? Number(p.area).toLocaleString() : '—'}</td>
+                  <td className="px-4 py-3">{String(p.orientation || '').replace(/_/g, ' ') || '—'}</td>
+                  <td className="px-4 py-3">{yesNo(p.has_garden, p.garden_area)}</td>
+                  <td className="px-4 py-3">{p.garden_area != null ? Number(p.garden_area).toLocaleString() : '—'}</td>
+                  <td className="px-4 py-3">{yesNo(p.has_roof, p.roof_area)}</td>
+                  <td className="px-4 py-3">{p.roof_area != null ? Number(p.roof_area).toLocaleString() : '—'}</td>
+                  <td className="px-4 py-3">{p.garage_area != null ? Number(p.garage_area).toLocaleString() : '—'}</td>
+
                   {status === 'pending_approval' && isTop ? (
-                    <td style={td}>
-                      <div style={{ display: 'grid', gap: 6 }}>
-                        <button onClick={() => approveChange(ch.id)} style={btnPrimary}>Approve</button>
-                        <div>
-                          <input
-                            placeholder="Reason (required to reject)"
-                            value={rejectReason[ch.id] || ''}
-                            onChange={e => setRejectReason(s => ({ ...s, [ch.id]: e.target.value }))}
-                            style={{ ...ctrl, width: '100%' }}
-                          />
-                          <button onClick={() => rejectChange(ch.id)} style={{ ...btnDanger, marginTop: 6 }}>Reject</button>
-                        </div>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => approveChange(ch.id)}
+                          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-3 rounded text-sm"
+                        >
+                          Approve
+                        </button>
+                        <input
+                          placeholder="Reason (required)"
+                          value={rejectReason[ch.id] || ''}
+                          onChange={e => setRejectReason(s => ({ ...s, [ch.id]: e.target.value }))}
+                          className="px-3 py-2 border rounded-md"
+                        />
+                        <button
+                          onClick={() => rejectChange(ch.id)}
+                          className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-3 rounded text-sm"
+                        >
+                          Reject
+                        </button>
                       </div>
                     </td>
                   ) : null}
                 </tr>
-              ))}
+              )})}
               {changes.length === 0 && !loading && (
                 <tr>
-                  <td style={td} colSpan={status === 'pending_approval' && isTop ? 10 : 9}>No changes.</td>
+                  <td className="px-4 py-3" colSpan={status === 'pending_approval' && isTop ? 18 : 17}>
+                    No changes.
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
 
-        <div style={{ marginTop: 8 }}>
-          <span style={metaText}>
-            Only CEO, Chairman, or Vice Chairman can approve or reject changes. All timestamps and reasons are preserved.
-          </span>
+        <div className="mt-2 text-gray-500 text-sm">
+          Only CEO, Chairman, or Vice Chairman can approve or reject changes. All timestamps and reasons are preserved.
         </div>
       </div>
     </div>

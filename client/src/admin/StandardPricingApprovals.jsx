@@ -4,6 +4,16 @@ import { fetchWithAuth, API_URL } from '../lib/apiClient.js';
 import { Link } from 'react-router-dom';
 import BrandHeader from '../lib/BrandHeader.jsx';
 
+function fmt(n) {
+  const v = Number(n || 0);
+  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function hasFeature(flag, area) {
+  if (flag != null) return !!flag;
+  const a = Number(area);
+  return Number.isFinite(a) && a > 0;
+}
+
 export default function StandardPricingApprovals() {
     const [pendingPricings, setPendingPricings] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -72,19 +82,34 @@ export default function StandardPricingApprovals() {
                         <table className="min-w-full bg-white border border-gray-200 shadow-sm rounded-lg">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model Name</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model Code</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price (EGP)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Area (m²)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Base (EGP)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Garden (EGP)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roof (EGP)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Storage (EGP)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Garage (EGP)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Maintenance (EGP)</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requested By</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {pendingPricings.map((item) => (
+                                {pendingPricings.map((item) => {
+                                    const showGarden = hasFeature(item.has_garden, item.garden_area);
+                                    const showRoof = hasFeature(item.has_roof, item.roof_area);
+                                    return (
                                     <tr key={item.id}>
                                         <td className="px-4 py-4 whitespace-nowrap font-semibold">{item.model_name}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap">{item.model_code}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap">{Number(item.price).toLocaleString()}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{item.model_code || ''}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{Number(item.area || 0).toLocaleString()}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{fmt(item.price)}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{showGarden ? fmt(item.garden_price) : 'N.A'}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{showRoof ? fmt(item.roof_price) : 'N.A'}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{fmt(item.storage_price)}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{fmt(item.garage_price)}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{fmt(item.maintenance_price)}</td>
                                         <td className="px-4 py-4 whitespace-nowrap">{item.created_by_email}</td>
                                         <td className="px-4 py-4 whitespace-nowrap space-x-2">
                                             <button
@@ -101,7 +126,7 @@ export default function StandardPricingApprovals() {
                                             </button>
                                         </td>
                                     </tr>
-                                ))}
+                                )})}
                             </tbody>
                         </table>
                     </div>
