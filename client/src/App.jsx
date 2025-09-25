@@ -317,141 +317,141 @@ export default function App(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unitInfo.unit_type])
 
-function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCurrency, setFeeSchedule, setUnitPricingBreakdown })
-  const [types, setTypes] = useState([])
-  const [selectedTypeId, setSelectedTypeId] = useState('')
-  const [units, setUnits] = useState([])
-  const [loadingTypes, setLoadingTypes] = useState(false)
-  const [loadingUnits, setLoadingUnits] = useState(false)
+  function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCurrency, setFeeSchedule, setUnitPricingBreakdown }) {
+    const [types, setTypes] = useState([])
+    const [selectedTypeId, setSelectedTypeId] = useState('')
+    const [units, setUnits] = useState([])
+    const [loadingTypes, setLoadingTypes] = useState(false)
+    const [loadingUnits, setLoadingUnits] = useState(false)
 
-  useEffect(() => {
-    async function loadTypes() {
-      try {
-        setLoadingTypes(true)
-        const resp = await fetchWithAuth(`${API_URL}/api/inventory/types`)
-        const data = await resp.json()
-        if (resp.ok) setTypes(data.unit_types || [])
-      } finally {
-        setLoadingTypes(false)
+    useEffect(() => {
+      const loadTypes = async () => {
+        try {
+          setLoadingTypes(true)
+          const resp = await fetchWithAuth(`${API_URL}/api/inventory/types`)
+          const data = await resp.json()
+          if (resp.ok) setTypes(data.unit_types || [])
+        } finally {
+          setLoadingTypes(false)
+        }
       }
-    }
-    loadTypes()
-  }, [])
+      loadTypes()
+    }, [])
 
-  useEffect(() => {
-    async function loadUnits() {
-      if (!selectedTypeId) { setUnits([]); return }
-      try {
-        setLoadingUnits(true)
-        const resp = await fetchWithAuth(`${API_URL}/api/inventory/units?unit_type_id=${encodeURIComponent(selectedTypeId)}`)
-        const data = await resp.json()
-        if (resp.ok) setUnits(data.units || [])
-      } finally {
-        setLoadingUnits(false)
+    useEffect(() => {
+      const loadUnits = async () => {
+        if (!selectedTypeId) { setUnits([]); return }
+        try {
+          setLoadingUnits(true)
+          const resp = await fetchWithAuth(`${API_URL}/api/inventory/units?unit_type_id=${encodeURIComponent(selectedTypeId)}`)
+          const data = await resp.json()
+          if (resp.ok) setUnits(data.units || [])
+        } finally {
+          setLoadingUnits(false)
+        }
       }
-    }
-    loadUnits()
-  }, [selectedTypeId])
+      loadUnits()
+    }, [selectedTypeId])
 
-  return (
-    <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
-      <div>
-        <select value={selectedTypeId} onChange={e => setSelectedTypeId(e.target.value)} style={styles.select()}>
-          <option value="">Select type…</option>
-          {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        {loadingTypes ? <small style={styles.metaText}>Loading types…</small> : null}
-      </div>
-      <div>
-        <select
-          value=""
-          onChange={async e => {
-            const id = Number(e.target.value)
-            const u = units.find(x => x.id === id)
-            if (!u) return
-            // Compute total price excluding maintenance (PV base)
-            const base = Number(u.base_price || 0)
-            const garden = Number(u.garden_price || 0)
-            const roof = Number(u.roof_price || 0)
-            const storage = Number(u.storage_price || 0)
-            const garage = Number(u.garage_price || 0)
-            const maintenance = Number(u.maintenance_price || 0)
-            const total = base + garden + roof + storage + garage
+    return (
+      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
+        <div>
+          <select value={selectedTypeId} onChange={e => setSelectedTypeId(e.target.value)} style={styles.select()}>
+            <option value="">Select type…</option>
+            {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          {loadingTypes ? <small style={styles.metaText}>Loading types…</small> : null}
+        </div>
+        <div>
+          <select
+            value=""
+            onChange={async e => {
+              const id = Number(e.target.value)
+              const u = units.find(x => x.id === id)
+              if (!u) return
+              // Compute total price excluding maintenance (PV base)
+              const base = Number(u.base_price || 0)
+              const garden = Number(u.garden_price || 0)
+              const roof = Number(u.roof_price || 0)
+              const storage = Number(u.storage_price || 0)
+              const garage = Number(u.garage_price || 0)
+              const maintenance = Number(u.maintenance_price || 0)
+              const total = base + garden + roof + storage + garage
 
-            setStdPlan(s => ({ ...s, totalPrice: total }))
-            setCurrency(u.currency || 'EGP')
-            setUnitInfo(s => ({
-              ...s,
-              unit_type: u.unit_type || s.unit_type,
-              unit_code: u.code || s.unit_code,
-              description: u.description || s.description,
-            }))
-            if (setFeeSchedule) {
-              setFeeSchedule(fs => ({
-                ...fs,
-                maintenancePaymentAmount: maintenance || '',
-                // leave months empty for consultant to choose
-              }))
-            }
-            if (setUnitPricingBreakdown) {
-              setUnitPricingBreakdown({
-                base, garden, roof, storage, garage, maintenance,
-                totalExclMaintenance: total
-              })
-            }
-            // Pull standard financials by unit type and set defaults
-            try {
-              const ut = encodeURIComponent(u.unit_type || '')
-              if (ut) {
-                const resp = await fetchWithAuth(`${API_URL}/api/workflow/standard-pricing/approved-by-type/${ut}`)
-                const data = await resp.json()
-                if (resp.ok && data?.standard_pricing) {
-                  const sp = data.standard_pricing
-                  setStdPlan(s => ({
-                    ...s,
-                    financialDiscountRate: Number(sp.std_financial_rate_percent ?? s.financialDiscountRate) || s.financialDiscountRate,
-                    calculatedPV: Number(sp.price) || Number(sp.calculated_pv) || s.calculatedPV
-                  }))
-                  setInputs(s => ({
-                    ...s,
-                    planDurationYears: s.planDurationYears || Number(sp.plan_duration_years) || s.planDurationYears || 5,
-                    installmentFrequency: s.installmentFrequency || sp.installment_frequency || s.installmentFrequency || 'monthly',
-                    dpType: 'percentage',
-                    downPaymentValue: s.downPaymentValue || 20 // default 20% down payment
-                  }))
-                } else {
-                  // fallback defaults
-                  setInputs(s => ({
-                    ...s,
-                    planDurationYears: s.planDurationYears || 5,
-                    installmentFrequency: s.installmentFrequency || 'monthly',
-                    dpType: 'percentage',
-                    downPaymentValue: s.downPaymentValue || 20
-                  }))
-                }
-              }
-            } catch {
-              setInputs(s => ({
+              setStdPlan(s => ({ ...s, totalPrice: total }))
+              setCurrency(u.currency || 'EGP')
+              setUnitInfo(s => ({
                 ...s,
-                planDurationYears: s.planDurationYears || 5,
-                installmentFrequency: s.installmentFrequency || 'monthly',
-                dpType: 'percentage',
-                downPaymentValue: s.downPaymentValue || 20
+                unit_type: u.unit_type || s.unit_type,
+                unit_code: u.code || s.unit_code,
+                description: u.description || s.description,
               }))
-            }
-          }}
-          style={styles.select()}
-          disabled={!selectedTypeId || loadingUnits || units.length === 0}
-        >
-          <option value="">{loadingUnits ? 'Loading…' : (units.length ? 'Select unit…' : 'No units')}</option>
-          {units.map(u => (
-            <option key={u.id} value={u.id}>{u.code} — {u.description || ''}</option>
-          ))}
-        </select>
+              if (setFeeSchedule) {
+                setFeeSchedule(fs => ({
+                  ...fs,
+                  maintenancePaymentAmount: maintenance || '',
+                  // leave months empty for consultant to choose
+                }))
+              }
+              if (setUnitPricingBreakdown) {
+                setUnitPricingBreakdown({
+                  base, garden, roof, storage, garage, maintenance,
+                  totalExclMaintenance: total
+                })
+              }
+              // Pull standard financials by unit type and set defaults
+              try {
+                const ut = encodeURIComponent(u.unit_type || '')
+                if (ut) {
+                  const resp = await fetchWithAuth(`${API_URL}/api/workflow/standard-pricing/approved-by-type/${ut}`)
+                  const data = await resp.json()
+                  if (resp.ok && data?.standard_pricing) {
+                    const sp = data.standard_pricing
+                    setStdPlan(s => ({
+                      ...s,
+                      financialDiscountRate: Number(sp.std_financial_rate_percent ?? s.financialDiscountRate) || s.financialDiscountRate,
+                      calculatedPV: Number(sp.price) || Number(sp.calculated_pv) || s.calculatedPV
+                    }))
+                    setInputs(s => ({
+                      ...s,
+                      planDurationYears: s.planDurationYears || Number(sp.plan_duration_years) || s.planDurationYears || 5,
+                      installmentFrequency: s.installmentFrequency || sp.installment_frequency || s.installmentFrequency || 'monthly',
+                      dpType: 'percentage',
+                      downPaymentValue: s.downPaymentValue || 20 // default 20% down payment
+                    }))
+                  } else {
+                    // fallback defaults
+                    setInputs(s => ({
+                      ...s,
+                      planDurationYears: s.planDurationYears || 5,
+                      installmentFrequency: s.installmentFrequency || 'monthly',
+                      dpType: 'percentage',
+                      downPaymentValue: s.downPaymentValue || 20
+                    }))
+                  }
+                }
+              } catch {
+                setInputs(s => ({
+                  ...s,
+                  planDurationYears: s.planDurationYears || 5,
+                  installmentFrequency: s.installmentFrequency || 'monthly',
+                  dpType: 'percentage',
+                  downPaymentValue: s.downPaymentValue || 20
+                }))
+              }
+            }}
+            style={styles.select()}
+            disabled={!selectedTypeId || loadingUnits || units.length === 0}
+          >
+            <option value="">{loadingUnits ? 'Loading…' : (units.length ? 'Select unit…' : 'No units')}</option>
+            {units.map(u => (
+              <option key={u.id} value={u.id}>{u.code} — {u.description || ''}</option>
+            ))}
+          </select>
+        </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
 
   // Persist on change
   useEffect(() => {
@@ -828,7 +828,7 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
 
     const headerRows = [
       [title],
-      [`Buyer: ${buyer}    Unit: ${unit}    Currency: ${curr}`],
+      [`Buyer: ${buyer}     Unit: ${unit}     Currency: ${curr}`],
       [], // spacer
       ['#', 'Cheque No.', 'Date', 'Pay To', 'Amount', 'Amount in Words', 'Notes']
     ]
@@ -837,11 +837,11 @@ function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCu
       const amount = Number(row.amount || 0)
       const amountStr = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       return [
-        i + 1,         // #
-        '',            // Cheque No. (to be filled manually)
-        '',            // Date (to be filled manually)
-        buyer,         // Pay To
-        amountStr,     // Amount
+        i + 1,       // #
+        '',          // Cheque No. (to be filled manually)
+        '',          // Date (to be filled manually)
+        buyer,       // Pay To
+        amountStr,   // Amount
         row.writtenAmount || '', // Amount in Words
         language === 'ar'
           ? `${row.label} (شهر ${getArabicMonth(row.month)})`
