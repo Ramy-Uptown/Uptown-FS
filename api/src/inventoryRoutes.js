@@ -344,7 +344,9 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
     if (typeId) { params.push(typeId); clauses.push(`unit_type_id = ${params.length}`) }
     const where = `WHERE ${clauses.join(' AND ')}`
     const r = await pool.query(
-      `SELECT id, code, description, unit_type, unit_type_id, base_price, currency, model_id, area, orientation, has_garden, garden_area, has_roof, roof_area, maintenance_price, garage_price
+      `SELECT id, code, description, unit_type, unit_type_id, base_price, currency, model_id,
+              area, orientation, has_garden, garden_area, has_roof, roof_area,
+              maintenance_price, garage_price, garden_price, roof_price, storage_price
        FROM units
        ${where}
        ORDER BY id DESC
@@ -751,11 +753,20 @@ router.patch('/unit-link-requests/:id/approve', authMiddleware, requireRole(['fi
     if (model.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Model not found') }
     const m = model.rows[0]
 
-    const priceRes = await client.query(`SELECT price, maintenance_price, garage_price FROM unit_model_pricing WHERE model_id=$1 AND status='approved' ORDER BY id DESC LIMIT 1`, [link.model_id])
+    const priceRes = await client.query(
+      `SELECT price, maintenance_price, garage_price, garden_price, roof_price, storage_price
+       FROM unit_model_pricing
+       WHERE model_id=$1 AND status='approved'
+       ORDER BY id DESC LIMIT 1`,
+      [link.model_id]
+    )
     if (priceRes.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Model has no approved pricing') }
     const basePrice = Number(priceRes.rows[0].price) || 0
     const maintPrice = Number(priceRes.rows[0].maintenance_price ?? 0) || 0
     const garPrice = Number(priceRes.rows[0].garage_price ?? 0) || 0
+    const gardenPrice = Number(priceRes.rows[0].garden_price ?? 0) || 0
+    const roofPrice = Number(priceRes.rows[0].roof_price ?? 0) || 0
+    const storagePrice = Number(priceRes.rows[0].storage_price ?? 0) || 0
 
     // Copy features & set prices
     const upd = await client.query(
@@ -770,14 +781,17 @@ router.patch('/unit-link-requests/:id/approve', authMiddleware, requireRole(['fi
            roof_area=$8,
            maintenance_price=$9,
            garage_price=$10,
+           garden_price=$11,
+           roof_price=$12,
+           storage_price=$13,
            updated_at=now()
-       WHERE id=$11
+       WHERE id=$14
        RETURNING *`,
       [
         link.model_id,
         basePrice,
         m.area, m.orientation, m.has_garden, m.garden_area, m.has_roof, m.roof_area,
-        maintPrice, garPrice,
+        maintPrice, garPrice, gardenPrice, roofPrice, storagePrice,
         link.unit_id
       ]
     )
