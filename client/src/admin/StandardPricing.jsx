@@ -359,8 +359,8 @@ export default function StandardPricing() {
                 <input type="number" value={stdPrice} onChange={e => setStdPrice(e.target.value)} style={ctrl} placeholder="e.g. 3,500,000" />
               </div>
               <div>
-               <<div style={metaText}>Garden Price (E)</</div>
-               <<input
+                <div style={metaText}>Garden Price (EGP)</div>
+                <input
                   type="number"
                   value={gardenPrice}
                   onChange={e => setGardenPrice(e.target.value)}
@@ -368,9 +368,8 @@ export default function StandardPricing() {
                   placeholder={selectedModel?.has_garden ? "e.g. 120,000" : "N.A (no garden)"}
                   disabled={!selectedModel?.has_garden}
                 />
-                {!selectedModel?.has_garden  <?div style={metaText}>This model has no garden. Price must be N.</.Adiv> : null}
-            </  _codedinewv</>
-   </div>
+                {!selectedModel?.has_garden ? <div style={metaText}>This model has no garden. Price must be N.A.</div> : null}
+              </div>
               <div>
                 <div style={metaText}>Roof Price (EGP)</div>
                 <input
