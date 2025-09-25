@@ -133,11 +133,30 @@ export default function StandardPricing() {
     }
   }, [selectedModelCode, models]);
 
+  // When selected model has no garden/roof, clear corresponding prices and keep inputs disabled
+  useEffect(() => {
+    const hasGarden = !!selectedModel?.has_garden;
+    const hasRoof = !!selectedModel?.has_roof;
+    if (!hasGarden && gardenPrice) setGardenPrice('');
+    if (!hasRoof && roofPrice) setRoofPrice('');
+  }, [selectedModel, gardenPrice, roofPrice]);
+
   const handleUpsertPricing = async (e) => {
     e.preventDefault();
     try {
       if (!selectedModelId) throw new Error('Select a Unit Model first');
       if (!stdPrice) throw new Error('Enter standard price');
+
+      // Enforce garden/roof constraints: if the model has no garden/roof, price must be N.A/empty (treated as 0)
+      const hasGarden = !!selectedModel?.has_garden;
+      const hasRoof = !!selectedModel?.has_roof;
+      if (!hasGarden && Number(gardenPrice || 0) > 0) {
+        throw new Error('This unit model has no garden. Garden price must be N.A or empty.');
+      }
+      if (!hasRoof && Number(roofPrice || 0) > 0) {
+        throw new Error('This unit model has no roof. Roof price must be N.A or empty.');
+      }
+
       const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -282,32 +301,35 @@ export default function StandardPricing() {
         {error ? <p style={errorText}>{error}</p> : null}
 
         {role === 'financial_manager' && (
-          <form onSubmit={handleUpsertPricing} style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 16, marginTop: 12, marginBottom: 16 }}>
-            <h3 style={{ marginTop: 0 }}>Select Unit Model</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'center' }}>
-              <div>
-                <div style={metaText}>Model Name</div>
-                <select value={selectedModelName} onChange={e => setSelectedModelName(e.target.value)} style={ctrl}>
-                  <option value="">Select name…</option>
-                  {models.map(m => (
-                    <option key={m.id} value={m.model_name || ''}>
-                      {m.model_name || ''} {m.area ? `— ${m.area} m²` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <div style={metaText}>Model Code</div>
-                <select value={selectedModelCode} onChange={e => setSelectedModelCode(e.target.value)} style={ctrl}>
-                  <option value="">Select code…</option>
-                  {models.map(m => (
-                    <option key={m.id} value={m.model_code || ''}>
-                      {m.model_code || '(none)'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+              <form onSubmit={handleUpsertPricing} style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 16, marginTop: 12, marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <h3 style={{ marginTop: 0 }}>Select Unit Model</h3>
+                  <a href="/admin/standard-pricing-rejected" style={{ ...btn, textDecoration: 'none', display: 'inline-block' }}>Rejected Requests</a>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'center' }}>
+                  <div>
+                    <div style={metaText}>Model Name</div>
+                    <select value={selectedModelName} onChange={e => setSelectedModelName(e.target.value)} style={ctrl}>
+                      <option value="">Select name…</option>
+                      {models.map(m => (
+                        <option key={m.id} value={m.model_name || ''}>
+                          {m.model_name || ''} {m.area ? `— ${m.area} m²` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={metaText}>Model Code</div>
+                    <select value={selectedModelCode} onChange={e => setSelectedModelCode(e.target.value)} style={ctrl}>
+                      <option value="">Select code…</option>
+                      {models.map(m => (
+                        <option key={m.id} value={m.model_code || ''}>
+                          {m.model_code || '(none)'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
             {selectedModel ? (
               <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
@@ -337,12 +359,29 @@ export default function StandardPricing() {
                 <input type="number" value={stdPrice} onChange={e => setStdPrice(e.target.value)} style={ctrl} placeholder="e.g. 3,500,000" />
               </div>
               <div>
-                <div style={metaText}>Garden Price (EGP)</div>
-                <input type="number" value={gardenPrice} onChange={e => setGardenPrice(e.target.value)} style={ctrl} placeholder="e.g. 120,000" />
-              </div>
+               <<div style={metaText}>Garden Price (E)</</div>
+               <<input
+                  type="number"
+                  value={gardenPrice}
+                  onChange={e => setGardenPrice(e.target.value)}
+                  style={ctrl}
+                  placeholder={selectedModel?.has_garden ? "e.g. 120,000" : "N.A (no garden)"}
+                  disabled={!selectedModel?.has_garden}
+                />
+                {!selectedModel?.has_garden  <?div style={metaText}>This model has no garden. Price must be N.</.Adiv> : null}
+            </  _codedinewv</>
+   </div>
               <div>
                 <div style={metaText}>Roof Price (EGP)</div>
-                <input type="number" value={roofPrice} onChange={e => setRoofPrice(e.target.value)} style={ctrl} placeholder="e.g. 180,000" />
+                <input
+                  type="number"
+                  value={roofPrice}
+                  onChange={e => setRoofPrice(e.target.value)}
+                  style={ctrl}
+                  placeholder={selectedModel?.has_roof ? "e.g. 180,000" : "N.A (no roof)"}
+                  disabled={!selectedModel?.has_roof}
+                />
+                {!selectedModel?.has_roof ? <div style={metaText}>This model has no roof. Price must be N.A.</div> : null}
               </div>
               <div>
                 <div style={metaText}>Storage Price (EGP)</div>
@@ -384,7 +423,17 @@ export default function StandardPricing() {
               </div>
               <div>
                 <div style={metaText}>Total Price used for PV (auto)</div>
-                <input readOnly style={ctrl} value={Number(stdPrice || 0) + Number(gardenPrice || 0) + Number(roofPrice || 0) + Number(storagePrice || 0) + Number(garagePrice || 0)} />
+                <input
+                  readOnly
+                  style={ctrl}
+                  value={
+                    Number(stdPrice || 0)
+                    + (selectedModel?.has_garden ? Number(gardenPrice || 0) : 0)
+                    + (selectedModel?.has_roof ? Number(roofPrice || 0) : 0)
+                    + Number(storagePrice || 0)
+                    + Number(garagePrice || 0)
+                  }
+                />
               </div>
             </div>
 
@@ -438,8 +487,22 @@ export default function StandardPricing() {
                   <td style={td}>{p.model_code || ''}</td>
                   <td style={td}>{Number(p.area || 0).toLocaleString()}</td>
                   <td style={td}>{Number(p.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{Number(p.garden_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{Number(p.roof_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td style={td}>{
+                    (() => {
+                      const hasGarden = p.has_garden ?? (p.garden_area != null ? Number(p.garden_area) > 0 : null);
+                      const val = Number(p.garden_price || 0);
+                      if (hasGarden === false) return 'N.A';
+                      return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasGarden === false ? 'N.A' : '0.00');
+                    })()
+                  }</td>
+                  <td style={td}>{
+                    (() => {
+                      const hasRoof = p.has_roof ?? (p.roof_area != null ? Number(p.roof_area) > 0 : null);
+                      const val = Number(p.roof_price || 0);
+                      if (hasRoof === false) return 'N.A';
+                      return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasRoof === false ? 'N.A' : '0.00');
+                    })()
+                  }</td>
                   <td style={td}>{Number(p.storage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td style={td}>{Number(p.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td style={td}>{Number(p.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
