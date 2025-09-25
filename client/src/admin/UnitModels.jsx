@@ -310,6 +310,7 @@ export default function UnitModels() {
               <tr>
                 <th style={th}>ID</th>
                 <th style={th}>Model Name</th>
+                <th style={th}>Model Code</th>
                 <th style={th}>Area (m²)</th>
                 <th style={th}>Orientation</th>
                 <th style={th}>Garden</th>
@@ -325,6 +326,7 @@ export default function UnitModels() {
                 <tr key={it.id}>
                   <td style={td}>{it.id}</td>
                   <td style={td}>{it.model_name}</td>
+                  <td style={td}>{it.model_code}</td>
                   <td style={td}>{Number(it.area || 0).toLocaleString()}</td>
                   <td style={td}>{String(it.orientation || '').replace(/_/g, ' ')}</td>
                   <td style={td}>{it.has_garden ? `Yes${it.garden_area ? ` (${it.garden_area} m²)` : ''}` : 'No'}</td>
