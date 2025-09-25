@@ -49,6 +49,7 @@ router.get('/unit-models', authMiddleware, requireRole(['financial_manager', 'fi
     if (search) {
       const s = `%${String(search).toLowerCase()}%`
       params.push(s)
+      // Reuse same param index for both LIKEs
       clauses.push(`(LOWER(model_name) LIKE ${params.length} OR LOWER(COALESCE(model_code, '')) LIKE ${params.length})`)
     }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
@@ -215,11 +216,12 @@ router.patch('/unit-models/changes/:id/approve', authMiddleware, requireRole(['c
     if (ch.action === 'create') {
       const r = await client.query(
         `INSERT INTO unit_models
-         (model_name, area, orientation, has_garden, garden_area, has_roof, roof_area, garage_area, garage_standard_code, created_by, updated_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)
+         (model_name, model_code, area, orientation, has_garden, garden_area, has_roof, roof_area, garage_area, garage_standard_code, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)
          RETURNING *`,
         [
           String(payload.model_name||'').trim(),
+          payload.model_code ? String(payload.model_code).trim() : null,
           Number(payload.area)||0,
           String(payload.orientation||'left'),
           !!payload.has_garden,
@@ -241,7 +243,7 @@ router.patch('/unit-models/changes/:id/approve', authMiddleware, requireRole(['c
       const curModel = await client.query('SELECT * FROM unit_models WHERE id=$1', [ch.model_id])
       if (curModel.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Model not found') }
       const prev = curModel.rows[0]
-      const allow = ['model_name','area','orientation','has_garden','garden_area','has_roof','roof_area','garage_area','garage_standard_code']
+      const allow = ['model_name','model_code','area','orientation','has_garden','garden_area','has_roof','roof_area','garage_area','garage_standard_code']
       const fields = []
       const params = []
       const updatedPreview = {}
