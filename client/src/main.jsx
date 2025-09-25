@@ -20,6 +20,7 @@ import CommissionsReport from './admin/CommissionsReport.jsx'
 import StandardPricing from './admin/StandardPricing.jsx'
 import StandardPricingApprovals from './admin/StandardPricingApprovals.jsx'; // THIS LINE IS NEW
 import RejectedPricings from './admin/RejectedPricings.jsx';
+import InventoryDrafts from './admin/InventoryDrafts.jsx';
 import HoldsFM from './admin/HoldsFM.jsx'
 import HoldsCEO from './admin/HoldsCEO.jsx'
 import WorkflowLogs from './admin/WorkflowLogs.jsx'
@@ -148,6 +149,14 @@ createRoot(document.getElementById('root')).render(
           element={
             <RoleBasedRoute allowedRoles={['financial_admin', 'superadmin']}>
               <Units />
+            </RoleBasedRoute>
+          }
+        />
+        <Route
+          path="/admin/inventory-drafts"
+          element={
+            <RoleBasedRoute allowedRoles={['financial_manager']}>
+              <InventoryDrafts />
             </RoleBasedRoute>
           }
         />
