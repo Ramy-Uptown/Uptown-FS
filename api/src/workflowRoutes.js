@@ -573,11 +573,11 @@ router.get(
       const params = []
       if (deal_id) {
         params.push(ensureNumber(deal_id))
-        clauses.push(`deal_id = ${params.length}`)
+        clauses.push(`deal_id = $${params.length}`)
       }
       if (status) {
         params.push(String(status))
-        clauses.push(`status = ${params.length}`)
+        clauses.push(`status = $${params.length}`)
       }
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
       const result = await pool.query(`SELECT * FROM payment_plans ${where} ORDER BY id DESC`, params)
@@ -1034,7 +1034,7 @@ router.get(
       )
       const uids = team.rows.map(r => r.uid)
       if (uids.length === 0) return ok(res, { payment_plans: [] })
-      const placeholders = uids.map((_, i) => `${i + 1}`).join(',')
+      const placeholders = uids.map((_, i) => `$${i + 1}`).join(',')
       const r = await pool.query(
         `SELECT * FROM payment_plans WHERE created_by IN (${placeholders}) ORDER BY id DESC`,
         uids
