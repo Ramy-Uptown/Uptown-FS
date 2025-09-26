@@ -553,9 +553,10 @@ router.post('/units', authMiddleware, requireRole(['financial_admin']), async (r
 router.get('/units/drafts', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT u.*, ru.email AS created_by_email
+      `SELECT u.*, ru.email AS created_by_email, m.model_name, m.model_code
        FROM units u
        LEFT JOIN users ru ON ru.id = u.created_by
+       LEFT JOIN unit_models m ON m.id = u.model_id
        WHERE u.unit_status='INVENTORY_DRAFT'
        ORDER BY u.updated_at DESC, u.id DESC`
     )

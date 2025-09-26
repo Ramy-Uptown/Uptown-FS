@@ -8,7 +8,7 @@ export default function InventoryDrafts() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(0)
-  const [linkMap, setLinkMap] = useState({}) // unit_id -> { status, model_name, model_code }
+  // Removed linkMap: model linking requests are disabled; units are created already linked to a model
 
   const handleLogout = async () => {
     try {
@@ -38,26 +38,8 @@ export default function InventoryDrafts() {
       const list = data.units || []
       setUnits(list)
 
-      // Fetch pending link requests to show model linking status
-      try {
-        const lr = await fetchWithAuth(`${API_URL}/api/inventory/unit-link-requests?status=pending_approval`)
-        const ldata = await lr.json()
-        if (lr.ok) {
-          const map = {}
-          (ldata.links || []).forEach(link => {
-            map[link.unit_id] = {
-              status: link.status,
-              model_name: link.model_name,
-              model_code: link.model_code
-            }
-          })
-          setLinkMap(map)
-        } else {
-          setLinkMap({})
-        }
-      } catch {
-        setLinkMap({})
-      }
+      // Model linking requests are disabled; units are created already linked to a model.
+      // No additional fetch required here.
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -102,18 +84,7 @@ export default function InventoryDrafts() {
     }
   }
 
-  function renderLinkCell(u) {
-    const info = linkMap[u.id]
-    if (!info) return <span style={metaText}>No request</span>
-    return (
-      <span>
-        {info.status === 'pending_approval' ? 'Pending' : info.status}
-        {' — '}
-        {info.model_code ? `${info.model_code} — ` : ''}
-        {info.model_name || ''}
-      </span>
-    )
-  }
+  // Removed renderLinkCell: drafts now show direct model info from API
 
   return (
     <div>
@@ -129,7 +100,6 @@ export default function InventoryDrafts() {
                 <th style={th}>ID</th>
                 <th style={th}>Code</th>
                 <th style={th}>Unit Model</th>
-                <th style={th}>Model Link</th>
                 <th style={th}>Created By</th>
                 <th style={th}>Status</th>
                 <th style={th}>Created At</th>
@@ -141,8 +111,7 @@ export default function InventoryDrafts() {
                 <tr key={u.id}>
                   <td style={td}>{u.id}</td>
                   <td style={td}>{u.code}</td>
-                  <td style={td}>{u.model_id ? `#${u.model_id}` : '-'}</td>
-                  <td style={td}>{renderLinkCell(u)}</td>
+                  <td style={td}>{u.model_code ? `${u.model_code} — ${u.model_name || ''}`.trim() : (u.model_name || (u.model_id ? `#${u.model_id}` : '-'))}</td>
                   <td style={td}>{u.created_by_email || '-'}</td>
                   <td style={td}>{u.unit_status}</td>
                   <td style={td}>{(u.created_at || '').replace('T', ' ').replace('Z', '')}</td>
