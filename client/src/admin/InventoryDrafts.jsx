@@ -128,7 +128,7 @@ export default function InventoryDrafts() {
               <tr>
                 <th style={th}>ID</th>
                 <th style={th}>Code</th>
-                <th style={th}>Unit Type ID</th>
+                <th style={th}>Unit Model</th>
                 <th style={th}>Model Link</th>
                 <th style={th}>Created By</th>
                 <th style={th}>Status</th>
@@ -141,7 +141,7 @@ export default function InventoryDrafts() {
                 <tr key={u.id}>
                   <td style={td}>{u.id}</td>
                   <td style={td}>{u.code}</td>
-                  <td style={td}>{u.unit_type_id ?? '-'}</td>
+                  <td style={td}>{u.model_id ? `#${u.model_id}` : '-'}</td>
                   <td style={td}>{renderLinkCell(u)}</td>
                   <td style={td}>{u.created_by || '-'}</td>
                   <td style={td}>{u.unit_status}</td>
