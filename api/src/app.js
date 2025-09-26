@@ -273,8 +273,8 @@ async function runSchemaCheck() {
   return missing
 }
 
-// Endpoint to report schema readiness
-app.get('/api/schema-check', async (req, res) => {
+// Endpoint to report schema readiness (restricted to admin and superadmin)
+app.get('/api/schema-check', requireRole(['admin','superadmin']), async (req, res) => {
   try {
     const missing = await runSchemaCheck()
     const okAll = Object.keys(missing).length === 0
@@ -306,7 +306,7 @@ app.get('/api/schema-check', async (req, res) => {
 })()
 
 // Enforce auth on all /api routes except /api/auth/*
-import { authMiddleware } from './authRoutes.js'
+import { authMiddleware, requireRole } from './authRoutes.js'
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/auth')) return next()
   if (req.path.startsWith('/api/')) return authMiddleware(req, res, next)
