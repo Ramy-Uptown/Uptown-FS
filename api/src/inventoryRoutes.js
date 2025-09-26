@@ -199,6 +199,24 @@ router.get('/unit-models/changes', authMiddleware, requireRole(['financial_manag
   }
 })
 
+// FM: cancel a pending unit model change request they created (replaces approve/deny on FM page)
+router.delete('/unit-models/changes/:id', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const id = num(req.params.id)
+    if (!id) return bad(res, 400, 'Invalid id')
+    const cur = await pool.query('SELECT id, status, requested_by FROM unit_model_changes WHERE id=$1', [id])
+    if (cur.rows.length === 0) return bad(res, 404, 'Change not found')
+    const ch = cur.rows[0]
+    if (ch.status !== 'pending_approval') return bad(res, 400, 'Only pending requests can be cancelled')
+    if (ch.requested_by !== req.user.id) return bad(res, 403, 'You can only cancel your own requests')
+    await pool.query('DELETE FROM unit_model_changes WHERE id=$1', [id])
+    return ok(res, { deleted_id: id })
+  } catch (e) {
+    console.error('DELETE /api/inventory/unit-models/changes/:id error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
 // Approve change (Top Management only)
 router.patch('/unit-models/changes/:id/approve', authMiddleware, requireRole(['ceo','chairman','vice_chairman']), async (req, res) => {
   const client = await pool.connect()

@@ -178,6 +178,33 @@ router.get('/unit-model/pending', requireRole(['ceo', 'chairman', 'vice_chairman
   }
 });
 
+// Financial Manager: cancel a pending pricing request they created
+router.delete('/unit-model/:id', requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: { message: 'Invalid id' } });
+    const cur = await pool.query(`SELECT id, status, created_by FROM unit_model_pricing WHERE id=$1`, [id]);
+    if (cur.rows.length === 0) return res.status(404).json({ error: { message: 'Pricing not found' } });
+    const p = cur.rows[0];
+    if (p.status !== 'pending_approval') {
+      return res.status(400).json({ error: { message: 'Only pending pricing can be cancelled' } });
+    }
+    if (p.created_by !== req.user.id) {
+      return res.status(403).json({ error: { message: 'You can only cancel your own pricing requests' } });
+    }
+    await pool.query('DELETE FROM unit_model_pricing WHERE id=$1', [id]);
+    await pool.query(
+      `INSERT INTO unit_model_pricing_audit (pricing_id, action, changed_by, details)
+       VALUES ($1, 'cancel', $2, $3)`,
+      [id, req.user.id, JSON.stringify({ reason: 'cancelled_by_financial_manager' })]
+    );
+    return res.json({ ok: true, deleted_id: id });
+  } catch (e) {
+    console.error('DELETE /api/pricing/unit-model/:id error:', e);
+    res.status(500).json({ error: { message: 'Internal error' } });
+  }
+});
+
 // Pricing audit history
 router.get('/unit-model/:id/audit', requireRole(['financial_manager', 'ceo', 'chairman', 'vice_chairman']), async (req, res) => {
   try {
