@@ -225,7 +225,7 @@ export default function Units() {
                 {modelsError ? <div style={errorText}>{modelsError}</div> : null}
               </div>
               <div style={{ display: 'flex', alignItems: 'end' }}>
-                <span style={metaText}>Financial Admin must select a model with approved standard pricing. The unit will be created as a draft already linked to the selected model, with prices and areas propagated. Financial Manager approval>
+                <span style={metaText}>Financial Admin must select a model with approved standard pricing. The unit will be created as a draft already linked to the selected model, with prices and areas propagated. Financial Manager approval is required to finalize.</span>
               </div>
             </div>
           </div>
