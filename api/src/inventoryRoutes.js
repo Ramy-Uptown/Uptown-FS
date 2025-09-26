@@ -416,6 +416,7 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
       `SELECT COUNT(1) AS c
        FROM units u
        LEFT JOIN unit_types ut ON ut.id = u.unit_type_id
+       LEFT JOIN unit_models m ON m.id = u.model_id
        ${where}`,
       countParams
     )
@@ -432,6 +433,7 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
          u.has_garden, u.garden_area, u.has_roof, u.roof_area,
          u.maintenance_price, u.garage_price, u.garden_price, u.roof_price, u.storage_price,
          u.available, u.unit_status,
+         m.model_name AS model_name, m.model_code AS model_code,
          (COALESCE(u.has_garden, FALSE) AND COALESCE(u.garden_area, 0) > 0) AS garden_available,
          (COALESCE(u.has_roof, FALSE) AND COALESCE(u.roof_area, 0) > 0) AS roof_available,
          (COALESCE(u.garage_area, 0) > 0) AS garage_available,
@@ -443,6 +445,7 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
            + COALESCE(u.storage_price,0)) AS total_price
        FROM units u
        LEFT JOIN unit_types ut ON ut.id = u.unit_type_id
+       LEFT JOIN unit_models m ON m.id = u.model_id
        ${where}
        ORDER BY u.id DESC
        LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,

@@ -268,7 +268,7 @@ export default function Units() {
               <tr>
                 <th style={th}>ID</th>
                 <th style={th}>Code</th>
-                <th style={th}>Unit Mod</n<th</
+                <th style={th}>Unit Model</th>
                 <th style={th}>Area (m²)</th>
                 <th style={th}>Garden</th>
                 <th style={th}>Roof</th>
@@ -285,9 +285,14 @@ export default function Units() {
                   <td style={td}>{unit.code}</td>
                   <td style={td}>
                     {(() => {
+                      // Prefer fields returned directly from API
+                      const fromApi = unit.model_code ? `${unit.model_code} — ${unit.model_name || ''}`.trim() : (unit.model_name || '')
+                      if (fromApi) return fromApi
+                      // Fallback to loaded models map if available
                       const m = modelMap[unit.model_id]
-                      if (!m) return unit.model_id ? `#${unit.model_id}` : '-'
-                      return m.model_code ? `${m.model_code} — ${m.model_name}` : (m.model_name || `#${unit.model_id}`)
+                      if (m) return m.model_code ? `${m.model_code} — ${m.model_name}` : (m.model_name || `#${unit.model_id}`)
+                      // Final fallback
+                      return unit.model_id ? `#${unit.model_id}` : '-'
                     })()}
                   </td>
                   <td style={td}>{unit.area ? Number(unit.area).toLocaleString() : '-'}</td>
