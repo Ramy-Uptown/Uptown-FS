@@ -61,7 +61,7 @@ export default function SalesTeam() {
       if (memResp) {
         const memData = await memResp.json()
         const map = {}
-        ;(memData.memberships || []).forEach(m => { map[m.consultant_user_id] = String(m.manager_user_id) })
+        ;(memData.memberships || []).forEach(m => { map[m.member_user_id] = String(m.manager_user_id) })
         setMemberships(map)
       }
       if (usersResp) {
