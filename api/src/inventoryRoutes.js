@@ -48,9 +48,9 @@ router.get('/unit-models', authMiddleware, requireRole(['financial_manager', 'fi
     const params = []
     if (search) {
       const s = `%${String(search).toLowerCase()}%`
-      params.push(s)
+      const idx = params.push(s)
       // Reuse same param index for both LIKEs with proper placeholders
-      clauses.push(`(LOWER(model_name) LIKE ${params.length} OR LOWER(COALESCE(model_code, '')) LIKE ${params.length})`)
+      clauses.push(`(LOWER(model_name) LIKE ${idx} OR LOWER(COALESCE(model_code, '')) LIKE ${idx})`)
     }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
     const off = (p - 1) * ps
@@ -155,7 +155,7 @@ router.delete('/unit-models/:id', authMiddleware, requireRole(['financial_manage
     return ok(res, { change, message: 'Delete request created and pending approval.' })
   } catch (e) {
     client.release()
-    console.error('DELETE /api/inventory/unit-models/:id error:', e)
+    console.error('DELETE /api/inventory/units/:id error:', e)
     return bad(res, 500, 'Internal error')
   }
 })
@@ -195,6 +195,24 @@ router.get('/unit-models/changes', authMiddleware, requireRole(['financial_manag
     return ok(res, { changes: r.rows })
   } catch (e) {
     console.error('GET /api/inventory/unit-models/changes error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// FM: cancel a pending unit model change request they created (replaces approve/deny on FM page)
+router.delete('/unit-models/changes/:id', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const id = num(req.params.id)
+    if (!id) return bad(res, 400, 'Invalid id')
+    const cur = await pool.query('SELECT id, status, requested_by FROM unit_model_changes WHERE id=$1', [id])
+    if (cur.rows.length === 0) return bad(res, 404, 'Change not found')
+    const ch = cur.rows[0]
+    if (ch.status !== 'pending_approval') return bad(res, 400, 'Only pending requests can be cancelled')
+    if (ch.requested_by !== req.user.id) return bad(res, 403, 'You can only cancel your own requests')
+    await pool.query('DELETE FROM unit_model_changes WHERE id=$1', [id])
+    return ok(res, { deleted_id: id })
+  } catch (e) {
+    console.error('DELETE /api/inventory/unit-models/changes/:id error:', e)
     return bad(res, 500, 'Internal error')
   }
 })
@@ -255,16 +273,16 @@ router.patch('/unit-models/changes/:id/approve', authMiddleware, requireRole(['c
           }
           if (['has_garden','has_roof'].includes(k)) v = !!v
           updatedPreview[k] = v
-          params.push(v)
-          fields.push(`${k}=${params.length}`)
+          const idx = params.push(v)
+          fields.push(`${k}=${idx}`)
         }
       }
       if (fields.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'No fields to update') }
 
-      params.push(req.user.id)
-      fields.push(`updated_by=${params.length}`)
-      params.push(ch.model_id)
-      const r = await client.query(`UPDATE unit_models SET ${fields.join(', ')}, updated_at=now() WHERE id=${params.length} RETURNING *`, params)
+      const updByIdx = params.push(req.user.id)
+      fields.push(`updated_by=${updByIdx}`)
+      const idIdx = params.push(ch.model_id)
+      const r = await client.query(`UPDATE unit_models SET ${fields.join(', ')}, updated_at=now() WHERE id=${idIdx} RETURNING *`, params)
       applied = r.rows[0]
       const diff = computeDiff(prev, updatedPreview)
       await client.query(
@@ -341,7 +359,7 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
     const typeId = num(req.query.unit_type_id)
     const clauses = ['available = TRUE', "unit_status='AVAILABLE'", 'model_id IS NOT NULL']
     const params = []
-    if (typeId) { params.push(typeId); clauses.push(`unit_type_id = ${params.length}`) }
+    if (typeId) { const idx = params.push(typeId); clauses.push(`unit_type_id = ${idx}`) }
     const where = `WHERE ${clauses.join(' AND ')}`
     const r = await pool.query(
       `SELECT id, code, description, unit_type, unit_type_id, base_price, currency, model_id,
@@ -498,7 +516,7 @@ router.get('/holds', authMiddleware, requireRole(['financial_manager', 'sales_ma
     const { status } = req.query || {}
     const clauses = []
     const params = []
-    if (status) { params.push(String(status)); clauses.push(`status=${params.length}`) }
+    if (status) { const idx = params.push(String(status)); clauses.push(`status=${idx}`) }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
     const r = await pool.query(`SELECT * FROM holds ${where} ORDER BY id DESC`, params)
     return ok(res, { holds: r.rows })

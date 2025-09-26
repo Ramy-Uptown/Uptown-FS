@@ -524,9 +524,31 @@ export default function StandardPricing() {
                             <button onClick={() => handleApproveStatus(p.id, 'rejected', rejectReasons[p.id])} style={btnDanger}>Reject</button>
                           </div>
                         </>
-                      ) : (
+                      ) : null}
+                      {(role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id) ? (
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm('Cancel this pending pricing request?')) return
+                            try {
+                              const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model/${p.id}`, { method: 'DELETE' })
+                              const data = await res.json()
+                              if (!res.ok) throw new Error(data?.error?.message || 'Cancel failed')
+                              // refresh list
+                              const listRes = await fetchWithAuth(`${API_URL}/api/pricing/unit-model`)
+                              const listData = await listRes.json()
+                              if (listRes.ok) setPricings(listData.pricings || [])
+                            } catch (e) {
+                              setError(e.message || String(e))
+                            }
+                          }}
+                          style={btn}
+                        >
+                          Cancel Request
+                        </button>
+                      ) : null}
+                      {!( (role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval') && !((role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id)) ? (
                         <span style={metaText}>—</span>
-                      )}
+                      ) : null}
                     </div>
                   </td>
                 </tr>

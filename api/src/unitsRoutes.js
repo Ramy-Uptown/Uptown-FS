@@ -15,9 +15,9 @@ router.get('/', authMiddleware, async (req, res) => {
     const where = []
     const params = []
     if (search) {
-      params.push(`%${search}%`)
+      const idx = params.push(`%${search}%`)
       // Use positional parameter placeholders ($1, $2, ...) correctly
-      where.push(`(LOWER(code) LIKE ${params.length} OR LOWER(description) LIKE ${params.length})`)
+      where.push(`(LOWER(code) LIKE ${idx} OR LOWER(description) LIKE ${idx})`)
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
@@ -25,14 +25,14 @@ router.get('/', authMiddleware, async (req, res) => {
     const total = countRes.rows[0]?.c || 0
 
     // Add LIMIT/OFFSET as bound parameters and reference them with placeholders
-    params.push(pageSize)
-    params.push(offset)
+    const limitIdx = params.push(pageSize)
+    const offsetIdx = params.push(offset)
     const listSql = `
       SELECT *
       FROM units
       ${whereSql}
       ORDER BY id DESC
-      LIMIT ${params.length - 1} OFFSET ${params.length}
+      LIMIT ${limitIdx} OFFSET ${offsetIdx}
     `
     const rows = await pool.query(listSql, params)
     return res.json({ ok: true, units: rows.rows, pagination: { page, pageSize, total } })
