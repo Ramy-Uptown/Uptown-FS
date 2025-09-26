@@ -228,13 +228,82 @@ app.get('/api/health', (req, res) => {
 
 // Lightweight metrics endpoint (admin can wire auth if desired)
 app.get('/api/metrics', (req, res) => {
-  const m = getCleanupMetrics()
-  res.json({
-    ok: true,
-    time: new Date().toISOString(),
-    cleanup: m
-  })
+  const m = getCleanupMetrics()
+  res.json({
+    ok: true,
+    time: new Date().toISOString(),
+    cleanup: m
+  })
 })
+
+// --- Schema capability check utilities ---
+async function getMissingColumns(table, columns) {
+  try {
+    const q = `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = $1
+    `
+    const r = await pool.query(q, [table])
+    const present = new Set(r.rows.map(row => row.column_name))
+    return columns.filter(c => !present.has(c))
+  } catch (e) {
+    return columns // if introspection failed, assume all missing
+  }
+}
+
+async function runSchemaCheck() {
+  const required = {
+    units: [
+      'id','code','unit_type','unit_type_id','base_price','currency','model_id','area','orientation',
+      'has_garden','garden_area','has_roof','roof_area','maintenance_price','garage_price','garden_price',
+      'roof_price','storage_price','available','unit_status'
+    ],
+    unit_types: ['id','name'],
+    unit_models: [
+      'id','model_name','model_code','area','orientation','has_garden','garden_area','has_roof','roof_area',
+      'garage_area','garage_standard_code'
+    ]
+  }
+  const missing = {}
+  for (const [table, cols] of Object.entries(required)) {
+    const miss = await getMissingColumns(table, cols)
+    if (miss.length) missing[table] = miss
+  }
+  return missing
+}
+
+// Endpoint to report schema readiness
+app.get('/api/schema-check', async (req, res) => {
+  try {
+    const missing = await runSchemaCheck()
+    const okAll = Object.keys(missing).length === 0
+    res.json({
+      ok: okAll,
+      missing,
+      timestamp: new Date().toISOString()
+    })
+  } catch (e) {
+    console.error('Schema check error:', e)
+    res.status(500).json({ ok: false, error: { message: 'Schema check failed' } })
+  }
+})
+
+// Run check at startup and log readable warning
+;(async () => {
+  try {
+    const missing = await runSchemaCheck()
+    if (Object.keys(missing).length) {
+      console.warn('Database schema check: missing columns detected:')
+      console.warn(JSON.stringify(missing, null, 2))
+      console.warn('Apply latest migrations to avoid runtime errors.')
+    } else {
+      console.log('Database schema check: OK')
+    }
+  } catch (e) {
+    console.warn('Database schema check failed to run:', e?.message || e)
+  }
+})()
 
 // Enforce auth on all /api routes except /api/auth/*
 import { authMiddleware } from './authRoutes.js'
