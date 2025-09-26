@@ -365,12 +365,15 @@ router.get('/types', authMiddleware, requireRole(['admin','superadmin','sales_ma
   }
 })
 
-// List available units (with optional search/pagination/model filter). Only units with an approved model link.
+// List available units (with optional search/pagination/model filter).
+// - For sales/consultants, only show available units with an approved model link.
+// - For admin/financial roles, show all units including drafts.
 router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_manager','property_consultant','financial_manager','financial_admin','ceo','chairman','vice_chairman']), async (req, res) => {
   try {
     const { search } = req.query || {}
     const typeId = num(req.query.unit_type_id)
     const modelId = num(req.query.model_id)
+    const userRole = req.user?.role
 
     // Pagination defaults:
     // - If consumer didn't pass page/pageSize and requested by unit_type_id (calculator use), default to 200.
@@ -382,11 +385,19 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
     const ps = Math.max(1, Math.min(200, Number(req.query.pageSize) || defaultPs))
     const off = (p - 1) * ps
 
-    const clauses = ['u.available = TRUE', "u.unit_status='AVAILABLE'", 'u.model_id IS NOT NULL']
+    const clauses = []
     const params = []
     let placeholderCount = 1
 
-    // ✅ FIXED: Added $ prefix to all parameter placeholders
+    // Role-based default filtering
+    const adminRoles = ['admin','superadmin','financial_manager','financial_admin']
+    if (adminRoles.includes(userRole)) {
+      // No default status filters for admin roles
+    } else {
+      // For others (sales, consultants), only show fully available, linked units
+      clauses.push('u.available = TRUE', "u.unit_status='AVAILABLE'", 'u.model_id IS NOT NULL')
+    }
+
     if (typeId) {
       clauses.push(`u.unit_type_id = $${placeholderCount++}`)
       params.push(typeId)
@@ -398,17 +409,18 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
 
     if (search) {
       const s = `%${String(search).toLowerCase()}%`
-      const ph = `$${placeholderCount++}`  // ✅ FIXED: Added $ prefix
+      const ph = `$${placeholderCount++}`
       clauses.push(`(
         LOWER(u.code) LIKE ${ph}
         OR LOWER(COALESCE(u.description, '')) LIKE ${ph}
         OR LOWER(COALESCE(u.unit_type, '')) LIKE ${ph}
         OR LOWER(COALESCE(ut.name, '')) LIKE ${ph}
       )`)
+      // push same placeholder value for each use
       params.push(s)
     }
 
-    const where = `WHERE ${clauses.join(' AND ')}`
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
     const countParams = [...params]
 
     // Count total
@@ -421,7 +433,7 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
       countParams
     )
 
-    // ✅ FIXED: Added $ prefix to LIMIT and OFFSET placeholders
+    // Paged rows
     const limitPlaceholder = `$${placeholderCount++}`
     const offsetPlaceholder = `$${placeholderCount++}`
     params.push(ps, off)
