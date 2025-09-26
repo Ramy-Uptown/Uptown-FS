@@ -389,12 +389,20 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
     const params = []
     let placeholderCount = 1
 
+<<<<<<< HEAD
     // Role-based default filtering
     const adminRoles = ['admin','superadmin','financial_manager','financial_admin']
     if (adminRoles.includes(userRole)) {
       // No default status filters for admin roles
     } else {
       // For others (sales, consultants), only show fully available, linked units
+=======
+    // Role-based filtering:
+    // - Sales roles only see available units ready for deals.
+    // - Admin roles see all units.
+    const salesRoles = ['property_consultant', 'sales_manager']
+    if (salesRoles.includes(req.user.role)) {
+>>>>>>> origin/fix/units-catalog-role-filter
       clauses.push('u.available = TRUE', "u.unit_status='AVAILABLE'", 'u.model_id IS NOT NULL')
     }
 
