@@ -16,6 +16,11 @@ export default function Units() {
   const [models, setModels] = useState([])
   const [modelsError, setModelsError] = useState('')
   const [filterModelId, setFilterModelId] = useState('')
+  const modelMap = React.useMemo(() => {
+    const m = {}
+    models.forEach(x => { m[x.id] = x })
+    return m
+  }, [models])
 
   // current user role
   const role = JSON.parse(localStorage.getItem('auth_user') || '{}')?.role
@@ -263,7 +268,7 @@ export default function Units() {
               <tr>
                 <th style={th}>ID</th>
                 <th style={th}>Code</th>
-                <th style={th}>Description</th>
+                <th style={th}>Unit Mod</n<th</
                 <th style={th}>Area (m²)</th>
                 <th style={th}>Garden</th>
                 <th style={th}>Roof</th>
@@ -278,7 +283,13 @@ export default function Units() {
                 <tr key={unit.id}>
                   <td style={td}>{unit.id}</td>
                   <td style={td}>{unit.code}</td>
-                  <td style={td}>{unit.description || '-'}</td>
+                  <td style={td}>
+                    {(() => {
+                      const m = modelMap[unit.model_id]
+                      if (!m) return unit.model_id ? `#${unit.model_id}` : '-'
+                      return m.model_code ? `${m.model_code} — ${m.model_name}` : (m.model_name || `#${unit.model_id}`)
+                    })()}
+                  </td>
                   <td style={td}>{unit.area ? Number(unit.area).toLocaleString() : '-'}</td>
                   <td style={td}>{unit.garden_available ? `Yes (${Number(unit.garden_area).toLocaleString()} m²)` : 'No'}</td>
                   <td style={td}>{unit.roof_available ? `Yes (${Number(unit.roof_area).toLocaleString()} m²)` : 'No'}</td>
