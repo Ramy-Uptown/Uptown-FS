@@ -12,9 +12,10 @@ export default function Units() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
 
-  // unit models for linking (financial_admin)
+  // unit models (used for filter and FA linking)
   const [models, setModels] = useState([])
   const [modelsError, setModelsError] = useState('')
+  const [filterModelId, setFilterModelId] = useState('')
 
   // current user role
   const role = JSON.parse(localStorage.getItem('auth_user') || '{}')?.role
@@ -30,6 +31,7 @@ export default function Units() {
       setError('')
       const q = new URLSearchParams()
       if (search) q.set('search', search)
+      if (filterModelId) q.set('model_id', String(filterModelId))
       q.set('page', String(p))
       q.set('pageSize', String(pageSize))
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/units?${q.toString()}`)
@@ -44,26 +46,26 @@ export default function Units() {
     }
   }
 
-  // Load models for financial_admin linking
+  // Load models for filter and FA linking (attempt for any role; ignore auth errors)
   useEffect(() => {
-    if (role !== 'financial_admin') return
     let abort = false
     async function run() {
       try {
         setModelsError('')
-        const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models?page=1&pageSize=200`)
+        const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models?page=1&pageSize=500`)
         const data = await resp.json()
         if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load unit models')
         if (!abort) setModels(data.items || [])
       } catch (e) {
-        if (!abort) setModelsError(e.message || String(e))
+        // Silently ignore if not authorized; filter will be hidden
+        if (!abort) setModelsError(String(e.message || e))
       }
     }
     run()
     return () => { abort = true }
   }, [role])
 
-  useEffect(() => { load(1) }, [search, pageSize])
+  useEffect(() => { load(1) }, [search, pageSize, filterModelId])
   useEffect(() => { load(page) }, [page])
 
   function resetForm() {
@@ -232,8 +234,18 @@ export default function Units() {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
           <input placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} style={ctrl} />
+          {models.length > 0 && (
+            <select value={filterModelId} onChange={e => setFilterModelId(e.target.value)} style={ctrl}>
+              <option value="">All Models</option>
+              {models.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.model_code ? `${m.model_code} — ` : ''}{m.model_name}
+                </option>
+              ))}
+            </select>
+          )}
           <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} style={ctrl}>
             <option value={10}>10</option>
             <option value={20}>20</option>

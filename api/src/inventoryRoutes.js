@@ -365,11 +365,12 @@ router.get('/types', authMiddleware, requireRole(['admin','superadmin','sales_ma
   }
 })
 
-// List available units (with optional search/pagination). Only units with an approved model link.
+// List available units (with optional search/pagination/model filter). Only units with an approved model link.
 router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_manager','property_consultant','financial_manager','financial_admin','ceo','chairman','vice_chairman']), async (req, res) => {
   try {
     const { search } = req.query || {}
     const typeId = num(req.query.unit_type_id)
+    const modelId = num(req.query.model_id)
 
     // Pagination defaults:
     // - If consumer didn't pass page/pageSize and requested by unit_type_id (calculator use), default to 200.
@@ -388,6 +389,10 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
     if (typeId) {
       clauses.push(`u.unit_type_id = ${placeholderCount++}`)
       params.push(typeId)
+    }
+    if (modelId) {
+      clauses.push(`u.model_id = ${placeholderCount++}`)
+      params.push(modelId)
     }
 
     if (search) {
