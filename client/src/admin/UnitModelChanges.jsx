@@ -21,6 +21,7 @@ export default function UnitModelChanges() {
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const role = me?.role
   const isTop = role === 'ceo' || role === 'chairman' || role === 'vice_chairman'
+  const isFM = role === 'financial_manager'
 
   async function load() {
     try {
@@ -63,6 +64,20 @@ export default function UnitModelChanges() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Reject failed')
       setRejectReason(s => ({ ...s, [id]: '' }))
+      await load()
+    } catch (e) {
+      alert(e.message || String(e))
+    }
+  }
+
+  async function cancelChange(id, requestedBy) {
+    if (!isFM) return
+    if (requestedBy !== me?.id) return alert('You can only cancel your own requests.')
+    if (!window.confirm('Cancel this pending request? This cannot be undone.')) return
+    try {
+      const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/changes/${id}`, { method: 'DELETE' })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Cancel failed')
       await load()
     } catch (e) {
       alert(e.message || String(e))
@@ -131,7 +146,7 @@ export default function UnitModelChanges() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roof</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roof Area</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Garage Area</th>
-                {status === 'pending_approval' && isTop ? (
+                {status === 'pending_approval' && (isTop || isFM) ? (
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 ) : null}
               </tr>
@@ -139,6 +154,7 @@ export default function UnitModelChanges() {
             <tbody className="bg-white divide-y divide-gray-200">
               {changes.map(ch => {
                 const p = ch.payload || {}
+                const canCancel = status === 'pending_approval' && isFM && (ch.requested_by === me?.id)
                 return (
                 <tr key={ch.id}>
                   <td className="px-4 py-3">{ch.id}</td>
@@ -160,27 +176,39 @@ export default function UnitModelChanges() {
                   <td className="px-4 py-3">{p.roof_area != null ? Number(p.roof_area).toLocaleString() : '—'}</td>
                   <td className="px-4 py-3">{p.garage_area != null ? Number(p.garage_area).toLocaleString() : '—'}</td>
 
-                  {status === 'pending_approval' && isTop ? (
+                  {status === 'pending_approval' && (isTop || canCancel) ? (
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => approveChange(ch.id)}
-                          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-3 rounded text-sm"
-                        >
-                          Approve
-                        </button>
-                        <input
-                          placeholder="Reason (required)"
-                          value={rejectReason[ch.id] || ''}
-                          onChange={e => setRejectReason(s => ({ ...s, [ch.id]: e.target.value }))}
-                          className="px-3 py-2 border rounded-md"
-                        />
-                        <button
-                          onClick={() => rejectChange(ch.id)}
-                          className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-3 rounded text-sm"
-                        >
-                          Reject
-                        </button>
+                        {isTop ? (
+                          <>
+                            <button
+                              onClick={() => approveChange(ch.id)}
+                              className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-3 rounded text-sm"
+                            >
+                              Approve
+                            </button>
+                            <input
+                              placeholder="Reason (required)"
+                              value={rejectReason[ch.id] || ''}
+                              onChange={e => setRejectReason(s => ({ ...s, [ch.id]: e.target.value }))}
+                              className="px-3 py-2 border rounded-md"
+                            />
+                            <button
+                              onClick={() => rejectChange(ch.id)}
+                              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-3 rounded text-sm"
+                            >
+                              Reject
+                            </button>
+                          </>
+                        ) : null}
+                        {canCancel ? (
+                          <button
+                            onClick={() => cancelChange(ch.id, ch.requested_by)}
+                            className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-3 rounded text-sm"
+                          >
+                            Cancel Request
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   ) : null}
@@ -188,7 +216,7 @@ export default function UnitModelChanges() {
               )})}
               {changes.length === 0 && !loading && (
                 <tr>
-                  <td className="px-4 py-3" colSpan={status === 'pending_approval' && isTop ? 18 : 17}>
+                  <td className="px-4 py-3" colSpan={status === 'pending_approval' && (isTop || isFM) ? 18 : 17}>
                     No changes.
                   </td>
                 </tr>
@@ -198,7 +226,13 @@ export default function UnitModelChanges() {
         </div>
 
         <div className="mt-2 text-gray-500 text-sm">
-          Only CEO, Chairman, or Vice Chairman can approve or reject changes. All timestamps and reasons are preserved.
+          {isTop ? (
+            <>Only CEO, Chairman, or Vice Chairman can approve or reject changes.</>
+          ) : isFM ? (
+            <>You may cancel your own pending requests. Approval is by Top Management.</>
+          ) : (
+            <>Read-only view.</>
+          )}
         </div>
       </div>
     </div>
