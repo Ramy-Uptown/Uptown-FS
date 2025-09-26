@@ -476,17 +476,55 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
 // Create inventory unit (Financial Admin) -> goes into FM approval queue as INVENTORY_DRAFT
 router.post('/units', authMiddleware, requireRole(['financial_admin']), async (req, res) => {
   try {
-    const { code } = req.body || {}
+    const { code, model_id } = req.body || {}
     if (!code || typeof code !== 'string') return bad(res, 400, 'code is required')
+    const modelId = num(model_id)
+    if (!modelId) return bad(res, 400, 'model_id is required and must be numeric')
 
-    // Create minimal draft unit; other attributes flow in later via model link approval
+    // Ensure model exists
+    const mRes = await pool.query('SELECT * FROM unit_models WHERE id=$1', [modelId])
+    if (mRes.rows.length === 0) return bad(res, 404, 'Model not found')
+    const m = mRes.rows[0]
+
+    // Ensure model has approved standard pricing
+    const priceRes = await pool.query(
+      `SELECT price, maintenance_price, garage_price, garden_price, roof_price, storage_price
+       FROM unit_model_pricing
+       WHERE model_id=$1 AND status='approved'
+       ORDER BY id DESC LIMIT 1`,
+      [modelId]
+    )
+    if (priceRes.rows.length === 0) {
+      return bad(res, 400, 'Model has no approved pricing. Ask Financial Manager to approve pricing first.')
+    }
+    const basePrice = Number(priceRes.rows[0].price) || 0
+    const maintPrice = Number(priceRes.rows[0].maintenance_price ?? 0) || 0
+    const garPrice = Number(priceRes.rows[0].garage_price ?? 0) || 0
+    const gardenPrice = Number(priceRes.rows[0].garden_price ?? 0) || 0
+    const roofPrice = Number(priceRes.rows[0].roof_price ?? 0) || 0
+    const storagePrice = Number(priceRes.rows[0].storage_price ?? 0) || 0
+
+    // Create draft unit already linked to the model, with features and prices propagated
     let unit
     try {
       const r = await pool.query(
-        `INSERT INTO units (code, description, unit_type, unit_type_id, base_price, currency, model_id, available, unit_status, created_by)
-         VALUES ($1, NULL, NULL, NULL, 0, 'EGP', NULL, TRUE, 'INVENTORY_DRAFT', $2)
+        `INSERT INTO units (
+           code, description, unit_type, unit_type_id, base_price, currency, model_id, available, unit_status, created_by,
+           area, orientation, has_garden, garden_area, has_roof, roof_area,
+           maintenance_price, garage_price, garden_price, roof_price, storage_price
+         )
+         VALUES ($1, NULL, NULL, NULL, $2, 'EGP', $3, TRUE, 'INVENTORY_DRAFT', $4,
+                 $5, $6, $7, $8, $9, $10,
+                 $11, $12, $13, $14, $15)
          RETURNING *`,
-        [code.trim(), req.user.id]
+        [
+          code.trim(),
+          basePrice,
+          modelId,
+          req.user.id,
+          m.area, m.orientation, m.has_garden, m.garden_area, m.has_roof, m.roof_area,
+          maintPrice, garPrice, gardenPrice, roofPrice, storagePrice
+        ]
       )
       unit = r.rows[0]
     } catch (err) {
@@ -504,7 +542,7 @@ router.post('/units', authMiddleware, requireRole(['financial_admin']), async (r
       [unit.id]
     )
 
-    return ok(res, { unit, message: 'Unit created as draft. Awaiting Financial Manager approval.' })
+    return ok(res, { unit, message: 'Unit created as draft and linked to model. Awaiting Financial Manager approval.' })
   } catch (e) {
     console.error('POST /api/inventory/units error:', e)
     return bad(res, 500, 'Internal error')
@@ -515,7 +553,11 @@ router.post('/units', authMiddleware, requireRole(['financial_admin']), async (r
 router.get('/units/drafts', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT * FROM units WHERE unit_status='INVENTORY_DRAFT' ORDER BY updated_at DESC, id DESC`
+      `SELECT u.*, ru.email AS created_by_email
+       FROM units u
+       LEFT JOIN users ru ON ru.id = u.created_by
+       WHERE u.unit_status='INVENTORY_DRAFT'
+       ORDER BY u.updated_at DESC, u.id DESC`
     )
     return ok(res, { units: r.rows })
   } catch (e) {
@@ -585,14 +627,24 @@ router.post('/holds', authMiddleware, requireRole(['property_consultant']), asyn
     const uid = num(unit_id)
     if (!uid) return bad(res, 400, 'unit_id is required')
     const pid = payment_plan_id ? num(payment_plan_id) : null
-    // Check unit available
-    const u = await pool.query('SELECT id, available FROM units WHERE id=$1', [uid])
+
+    // Check unit exists, available, and properly linked to a model with approved pricing
+    const u = await pool.query('SELECT id, available, model_id FROM units WHERE id=$1', [uid])
     if (u.rows.length === 0) return bad(res, 404, 'Unit not found')
-    if (u.rows[0].available === false) return bad(res, 400, 'Unit is not available')
+    const unit = u.rows[0]
+    if (unit.available === false) return bad(res, 400, 'Unit is not available')
+    if (!unit.model_id) return bad(res, 400, 'Unit is not linked to a model. Linking with an approved standard price is required before requesting a hold.')
+    const p = await pool.query(
+      `SELECT 1 FROM unit_model_pricing WHERE model_id=$1 AND status='approved' LIMIT 1`,
+      [unit.model_id]
+    )
+    if (p.rows.length === 0) return bad(res, 400, 'Linked model has no approved pricing. Please wait for Financial Manager approval.')
+
     // Duration validation 1-7
     let days = Number(duration_days) || 7
     if (days < 1) days = 1
     if (days > 7) days = 7
+
     const r = await pool.query(
       `INSERT INTO holds (unit_id, payment_plan_id, requested_by, status, expires_at)
        VALUES ($1, $2, $3, 'pending_approval', now() + ($4 || ' days')::interval)

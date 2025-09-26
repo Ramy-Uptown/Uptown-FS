@@ -90,11 +90,11 @@ export default function Units() {
       let createdOrEditedId = editingId
 
       if (role === 'financial_admin') {
-        // FA: require model selection and create unit with code only (draft)
+        // FA: require model selection and create unit already linked to model (draft)
         if (!form.model_id) {
           throw new Error('Please select a unit model to link. It is required.')
         }
-        const faBody = { code: String(form.code || '').trim() }
+        const faBody = { code: String(form.code || '').trim(), model_id: Number(form.model_id) }
         if (!faBody.code) throw new Error('Code is required')
         resp = await fetchWithAuth(`${API_URL}/api/inventory/units`, { // Use inventory route
           method: 'POST',
@@ -104,19 +104,7 @@ export default function Units() {
         const data = await resp.json()
         if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
         createdOrEditedId = data?.unit?.id
-
-        // submit mandatory link-request
-        const lr = await fetchWithAuth(`${API_URL}/api/inventory/units/${createdOrEditedId}/link-request`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model_id: Number(form.model_id) })
-        })
-        const ld = await lr.json()
-        if (!lr.ok) {
-          throw new Error(ld?.error?.message || 'Link request failed')
-        } else {
-          alert('Unit draft created and link request submitted for approval.')
-        }
+        alert('Unit draft created and linked to model. Awaiting Financial Manager approval.')
       } else { // Superadmin path
         const body = {
           ...form,
@@ -259,7 +247,7 @@ export default function Units() {
                 {modelsError ? <div style={errorText}>{modelsError}</div> : null}
               </div>
               <div style={{ display: 'flex', alignItems: 'end' }}>
-                <span style={metaText}>Financial Admin must select a model. A link request will be sent to the Financial Manager for approval. Upon approval, all standard prices and areas are copied into the inventory.</span>
+                <span style={metaText}>Financial Admin must select a model with approved standard pricing. The unit will be created as a draft already linked to the selected model, with prices and areas propagated. Financial Manager approval>
               </div>
             </div>
           </div>

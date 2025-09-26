@@ -143,7 +143,7 @@ export default function InventoryDrafts() {
                   <td style={td}>{u.code}</td>
                   <td style={td}>{u.model_id ? `#${u.model_id}` : '-'}</td>
                   <td style={td}>{renderLinkCell(u)}</td>
-                  <td style={td}>{u.created_by || '-'}</td>
+                  <td style={td}>{u.created_by_email || '-'}</td>
                   <td style={td}>{u.unit_status}</td>
                   <td style={td}>{(u.created_at || '').replace('T', ' ').replace('Z', '')}</td>
                   <td style={td}>
@@ -161,8 +161,7 @@ export default function InventoryDrafts() {
           </table>
         </div>
         <p style={metaText}>
-          Notes: Draft units are created by Financial Admin with code only. Once approved, they become AVAILABLE and can be linked to models
-          via the Unit-Model link workflow. If a model link request exists, its status and model appear above.
+          Notes: Draft units are created by Financial Admin already linked to a Unit Model with approved standard pricing. Once approved, they become AVAILABLE.
         </p>
       </div>
     </div>
