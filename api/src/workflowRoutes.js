@@ -216,10 +216,10 @@ router.get(
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
       const sql = `
         SELECT stm.manager_user_id,
-               stm.consultant_user_id,
+               stm.consultant_user_id AS member_user_id,
                stm.active,
                m.email AS manager_email,
-               c.email AS consultant_email
+               c.email AS member_email
         FROM sales_team_members stm
         JOIN users m ON m.id = stm.manager_user_id
         JOIN users c ON c.id = stm.consultant_user_id
