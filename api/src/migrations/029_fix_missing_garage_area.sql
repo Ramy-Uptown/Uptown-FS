@@ -1,0 +1,1 @@
+ALTER TABLE units ADD COLUMN IF NOT EXISTS garage_area NUMERIC(10, 2);

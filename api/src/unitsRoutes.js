@@ -14,28 +14,47 @@ router.get('/', authMiddleware, async (req, res) => {
 
     const where = []
     const params = []
+    let placeholderCount = 1
+
     if (search) {
-      const idx = params.push(`%${search}%`)
-      // Use positional parameter placeholders ($1, $2, ...) correctly
-      where.push(`(LOWER(code) LIKE ${idx} OR LOWER(description) LIKE ${idx})`)
+      const searchPlaceholder = `$${placeholderCount++}`
+      where.push(`(LOWER(u.code) LIKE ${searchPlaceholder} OR LOWER(u.description) LIKE ${searchPlaceholder})`)
+      params.push(`%${search}%`)
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
-    const countRes = await pool.query(`SELECT COUNT(*)::int AS c FROM units ${whereSql}`, params)
+    const countRes = await pool.query(`SELECT COUNT(*)::int AS c FROM units u ${whereSql}`, params)
     const total = countRes.rows[0]?.c || 0
 
-    // Add LIMIT/OFFSET as bound parameters and reference them with placeholders
-    const limitIdx = params.push(pageSize)
-    const offsetIdx = params.push(offset)
+    const limitPlaceholder = `$${placeholderCount++}`
+    const offsetPlaceholder = `$${placeholderCount++}`
+    params.push(pageSize)
+    params.push(offset)
+
     const listSql = `
-      SELECT *
-      FROM units
+      SELECT
+        u.id, u.code, u.description, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+        u.base_price, u.currency, u.model_id, u.area, u.orientation,
+        u.has_garden, u.garden_area, u.has_roof, u.roof_area,
+        u.maintenance_price, u.garage_price, u.garden_price, u.roof_price, u.storage_price,
+        u.available, u.unit_status,
+        (COALESCE(u.has_garden, FALSE) AND COALESCE(u.garden_area, 0) > 0) AS garden_available,
+        (COALESCE(u.has_roof, FALSE) AND COALESCE(u.roof_area, 0) > 0) AS roof_available,
+        (COALESCE(u.garage_area, 0) > 0) AS garage_available,
+        (COALESCE(u.base_price,0)
+          + COALESCE(u.maintenance_price,0)
+          + COALESCE(u.garage_price,0)
+          + COALESCE(u.garden_price,0)
+          + COALESCE(u.roof_price,0)
+          + COALESCE(u.storage_price,0)) AS total_price
+      FROM units u
+      LEFT JOIN unit_types ut ON ut.id = u.unit_type_id
       ${whereSql}
-      ORDER BY id DESC
-      LIMIT ${limitIdx} OFFSET ${offsetIdx}
+      ORDER BY u.id DESC
+      LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}
     `
-    const rows = await pool.query(listSql, params)
-    return res.json({ ok: true, units: rows.rows, pagination: { page, pageSize, total } })
+    const { rows } = await pool.query(listSql, params)
+    return res.json({ ok: true, units: rows, pagination: { page, pageSize, total } })
   } catch (e) {
     console.error('GET /api/units error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })

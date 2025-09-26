@@ -32,7 +32,8 @@ export default function Units() {
       if (search) q.set('search', search)
       q.set('page', String(p))
       q.set('pageSize', String(pageSize))
-      const resp = await fetchWithAuth(`${API_URL}/api/units?${q.toString()}`)
+      // Use the inventory route to get the detailed data
+      const resp = await fetchWithAuth(`${API_URL}/api/inventory/units?${q.toString()}`)
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load units')
       setUnits(data.units || [])
@@ -85,7 +86,7 @@ export default function Units() {
         }
         const faBody = { code: String(form.code || '').trim() }
         if (!faBody.code) throw new Error('Code is required')
-        resp = await fetchWithAuth(`${API_URL}/api/units`, {
+        resp = await fetchWithAuth(`${API_URL}/api/inventory/units`, { // Use inventory route
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(faBody)
@@ -104,9 +105,9 @@ export default function Units() {
         if (!lr.ok) {
           throw new Error(ld?.error?.message || 'Link request failed')
         } else {
-          alert('Link request submitted for approval.')
+          alert('Unit draft created and link request submitted for approval.')
         }
-      } else {
+      } else { // Superadmin path
         const body = {
           ...form,
           base_price: Number(form.base_price) || 0,
@@ -244,6 +245,7 @@ export default function Units() {
 
         {error ? <p style={errorText}>{error}</p> : null}
 
+        {/* --- FIXED TABLE SECTION --- */}
         <div style={tableWrap}>
           <table style={table}>
             <thead>
@@ -251,51 +253,55 @@ export default function Units() {
                 <th style={th}>ID</th>
                 <th style={th}>Code</th>
                 <th style={th}>Description</th>
-                <th style={th}>Unit Type</th>
-                <th style={th}>Base Price</th>
+                <th style={th}>Area (m²)</th>
+                <th style={th}>Garden</th>
+                <th style={th}>Roof</th>
+                <th style={th}>Total Price</th>
                 <th style={th}>Currency</th>
-                <th style={th}>Model</th>
+                <th style={th}>Status</th>
                 <th style={th}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {units.map(u => (
-                <tr key={u.id}>
-                  <td style={td}>{u.id}</td>
-                  <td style={td}>{u.code}</td>
-                  <td style={td}>{u.description || ''}</td>
-                  <td style={td}>{u.unit_type || ''}</td>
-                  <td style={{ ...td, textAlign: 'right' }}>{Number(u.base_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                  <td style={td}>{u.currency}</td>
-                  <td style={td}>{u.model_id ? u.model_id : ''}</td>
+              {units.map(unit => (
+                <tr key={unit.id}>
+                  <td style={td}>{unit.id}</td>
+                  <td style={td}>{unit.code}</td>
+                  <td style={td}>{unit.description || '-'}</td>
+                  <td style={td}>{unit.area ? Number(unit.area).toLocaleString() : '-'}</td>
+                  <td style={td}>{unit.garden_available ? `Yes (${Number(unit.garden_area).toLocaleString()} m²)` : 'No'}</td>
+                  <td style={td}>{unit.roof_available ? `Yes (${Number(unit.roof_area).toLocaleString()} m²)` : 'No'}</td>
+                  <td style={td}>{unit.total_price ? Number(unit.total_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                  <td style={td}>{unit.currency}</td>
+                  <td style={td}>{unit.unit_status}</td>
                   <td style={td}>
-                    <button onClick={() => edit(u)} style={btn}>Edit</button>
-                    <button onClick={() => remove(u.id)} style={btn}>Delete</button>
+                    <button onClick={() => edit(unit)} style={btn}>Edit</button>
+                    <button onClick={() => remove(unit.id)} style={{...btn, marginLeft: 8}}>Delete</button>
                   </td>
                 </tr>
               ))}
               {units.length === 0 && !loading && (
                 <tr>
-                  <td style={td} colSpan={8}>No units.</td>
+                  <td style={td} colSpan={10}>No units found.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        {/* --- END OF FIXED TABLE SECTION --- */}
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
           <span style={metaText}>
-            Page {page} of {Math.max(1, Math.ceil(total / pageSize))} — {total} total
+            Page {page} of {totalPages} — {total} total
           </span>
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={() => setPage(1)} disabled={page === 1} style={btn}>First</button>
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btn}>Prev</button>
-            <button onClick={() => setPage(p => Math.min(Math.max(1, Math.ceil(total / pageSize)), p + 1))} disabled={page >= Math.max(1, Math.ceil(total / pageSize))} style={btn}>Next</button>
-            <button onClick={() => setPage(Math.max(1, Math.ceil(total / pageSize)))} disabled={page >= Math.max(1, Math.ceil(total / pageSize))} style={btn}>Last</button>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} style={btn}>Next</button>
+            <button onClick={() => setPage(totalPages)} disabled={page >= totalPages} style={btn}>Last</button>
           </div>
         </div>
       </div>
     </div>
   )
 }
-

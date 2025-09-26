@@ -44,24 +44,32 @@ router.get('/unit-models', authMiddleware, requireRole(['financial_manager', 'fi
     const { search, page = 1, pageSize = 20 } = req.query || {}
     const p = Math.max(1, Number(page) || 1)
     const ps = Math.max(1, Math.min(100, Number(pageSize) || 20))
+    const off = (p - 1) * ps
+
     const clauses = []
     const params = []
+    let placeholderCount = 1
+
     if (search) {
-      const s = `%${String(search).toLowerCase()}%`
-      const idx = params.push(s)
-      // Reuse same param index for both LIKEs with proper placeholders
-      clauses.push(`(LOWER(model_name) LIKE ${idx} OR LOWER(COALESCE(model_code, '')) LIKE ${idx})`)
+      const searchPlaceholder = `$${placeholderCount++}`
+      clauses.push(`(LOWER(model_name) LIKE ${searchPlaceholder} OR LOWER(COALESCE(model_code, '')) LIKE ${searchPlaceholder})`)
+      params.push(`%${String(search).toLowerCase()}%`)
     }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
-    const off = (p - 1) * ps
+
+    const countParams = [...params]
+    const tot = await pool.query(`SELECT COUNT(1) AS c FROM unit_models ${where}`, countParams)
+
+    const limitPlaceholder = `$${placeholderCount++}`
+    const offsetPlaceholder = `$${placeholderCount++}`
+    params.push(ps)
+    params.push(off)
+
     const list = await pool.query(
-      `SELECT * FROM unit_models ${where} ORDER BY id DESC LIMIT ${ps} OFFSET ${off}`,
+      `SELECT * FROM unit_models ${where} ORDER BY id DESC LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
       params
     )
-    const tot = await pool.query(
-      `SELECT COUNT(1) AS c FROM unit_models ${where}`,
-      params
-    )
+    
     return ok(res, { items: list.rows, pagination: { page: p, pageSize: ps, total: Number(tot.rows[0].c) } })
   } catch (e) {
     console.error('GET /api/inventory/unit-models error:', e)
@@ -265,6 +273,7 @@ router.patch('/unit-models/changes/:id/approve', authMiddleware, requireRole(['c
       const fields = []
       const params = []
       const updatedPreview = {}
+      let placeholderCount = 1
       for (const k of allow) {
         if (Object.prototype.hasOwnProperty.call(payload, k)) {
           let v = payload[k]
@@ -273,16 +282,19 @@ router.patch('/unit-models/changes/:id/approve', authMiddleware, requireRole(['c
           }
           if (['has_garden','has_roof'].includes(k)) v = !!v
           updatedPreview[k] = v
-          const idx = params.push(v)
-          fields.push(`${k}=${idx}`)
+          fields.push(`${k}=$${placeholderCount++}`)
+          params.push(v)
         }
       }
       if (fields.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'No fields to update') }
 
-      const updByIdx = params.push(req.user.id)
-      fields.push(`updated_by=${updByIdx}`)
-      const idIdx = params.push(ch.model_id)
-      const r = await client.query(`UPDATE unit_models SET ${fields.join(', ')}, updated_at=now() WHERE id=${idIdx} RETURNING *`, params)
+      fields.push(`updated_by=$${placeholderCount++}`)
+      params.push(req.user.id)
+      
+      const idPlaceholder = `$${placeholderCount++}`
+      params.push(ch.model_id)
+      
+      const r = await client.query(`UPDATE unit_models SET ${fields.join(', ')}, updated_at=now() WHERE id=${idPlaceholder} RETURNING *`, params)
       applied = r.rows[0]
       const diff = computeDiff(prev, updatedPreview)
       await client.query(
@@ -357,17 +369,36 @@ router.get('/types', authMiddleware, requireRole(['admin','superadmin','sales_ma
 router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_manager','property_consultant','financial_manager','financial_admin','ceo','chairman','vice_chairman']), async (req, res) => {
   try {
     const typeId = num(req.query.unit_type_id)
-    const clauses = ['available = TRUE', "unit_status='AVAILABLE'", 'model_id IS NOT NULL']
+    const clauses = ['u.available = TRUE', "u.unit_status='AVAILABLE'", 'u.model_id IS NOT NULL']
     const params = []
-    if (typeId) { const idx = params.push(typeId); clauses.push(`unit_type_id = ${idx}`) }
+    let placeholderCount = 1
+    
+    if (typeId) { 
+      clauses.push(`u.unit_type_id = $${placeholderCount++}`)
+      params.push(typeId)
+    }
     const where = `WHERE ${clauses.join(' AND ')}`
+
     const r = await pool.query(
-      `SELECT id, code, description, unit_type, unit_type_id, base_price, currency, model_id,
-              area, orientation, has_garden, garden_area, has_roof, roof_area,
-              maintenance_price, garage_price, garden_price, roof_price, storage_price
-       FROM units
+      `SELECT
+         u.id, u.code, u.description, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+         u.base_price, u.currency, u.model_id, u.area, u.orientation,
+         u.has_garden, u.garden_area, u.has_roof, u.roof_area,
+         u.maintenance_price, u.garage_price, u.garden_price, u.roof_price, u.storage_price,
+         u.available, u.unit_status,
+         (COALESCE(u.has_garden, FALSE) AND COALESCE(u.garden_area, 0) > 0) AS garden_available,
+         (COALESCE(u.has_roof, FALSE) AND COALESCE(u.roof_area, 0) > 0) AS roof_available,
+         (COALESCE(u.garage_area, 0) > 0) AS garage_available,
+         (COALESCE(u.base_price,0)
+           + COALESCE(u.maintenance_price,0)
+           + COALESCE(u.garage_price,0)
+           + COALESCE(u.garden_price,0)
+           + COALESCE(u.roof_price,0)
+           + COALESCE(u.storage_price,0)) AS total_price
+       FROM units u
+       LEFT JOIN unit_types ut ON ut.id = u.unit_type_id
        ${where}
-       ORDER BY id DESC
+       ORDER BY u.id DESC
        LIMIT 200`,
       params
     )
@@ -516,7 +547,12 @@ router.get('/holds', authMiddleware, requireRole(['financial_manager', 'sales_ma
     const { status } = req.query || {}
     const clauses = []
     const params = []
-    if (status) { const idx = params.push(String(status)); clauses.push(`status=${idx}`) }
+    let placeholderCount = 1
+
+    if (status) {
+      clauses.push(`status=$${placeholderCount++}`)
+      params.push(String(status))
+    }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
     const r = await pool.query(`SELECT * FROM holds ${where} ORDER BY id DESC`, params)
     return ok(res, { holds: r.rows })
