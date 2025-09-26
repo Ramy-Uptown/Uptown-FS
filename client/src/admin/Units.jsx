@@ -29,15 +29,30 @@ export default function Units() {
       setLoading(true)
       setError('')
       const q = new URLSearchParams()
+      // Backend endpoint does not support pagination; it returns up to 200 rows.
+      // We still pass search (ignored by API), then filter client-side for UX.
       if (search) q.set('search', search)
-      q.set('page', String(p))
-      q.set('pageSize', String(pageSize))
       // Use the inventory route to get the detailed data
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/units?${q.toString()}`)
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load units')
-      setUnits(data.units || [])
-      setTotal(data.pagination?.total || 0)
+      const all = data.units || []
+      const filtered = search
+        ? all.filter(u => {
+            const hay = [
+              u.code,
+              u.description,
+              u.unit_type,
+              u.unit_type_name,
+              u.currency,
+              u.unit_status
+            ].map(x => String(x || '').toLowerCase()).join(' ')
+            return hay.includes(String(search).toLowerCase())
+          })
+        : all
+      setUnits(filtered)
+      // Backend does not return pagination total; reflect the actual count.
+      setTotal(filtered.length)
     } catch (e) {
       setError(e.message || String(e))
     } finally {
