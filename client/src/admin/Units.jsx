@@ -30,9 +30,7 @@ export default function Units() {
   const [editingId, setEditingId] = useState(0)
   const [saving, setSaving] = useState(false)
 
-  // inline link-request state for existing units (FA)
-  const [linkRequestForId, setLinkRequestForId] = useState(0)
-  const [linkModelId, setLinkModelId] = useState('')
+  // Removed inline link-request state: link requests are disabled; units are created already linked to a model
 
   async function load(p = page) {
     try {
@@ -90,11 +88,11 @@ export default function Units() {
       let createdOrEditedId = editingId
 
       if (role === 'financial_admin') {
-        // FA: require model selection and create unit with code only (draft)
+        // FA: require model selection and create unit already linked to model (draft)
         if (!form.model_id) {
           throw new Error('Please select a unit model to link. It is required.')
         }
-        const faBody = { code: String(form.code || '').trim() }
+        const faBody = { code: String(form.code || '').trim(), model_id: Number(form.model_id) }
         if (!faBody.code) throw new Error('Code is required')
         resp = await fetchWithAuth(`${API_URL}/api/inventory/units`, { // Use inventory route
           method: 'POST',
@@ -104,19 +102,7 @@ export default function Units() {
         const data = await resp.json()
         if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
         createdOrEditedId = data?.unit?.id
-
-        // submit mandatory link-request
-        const lr = await fetchWithAuth(`${API_URL}/api/inventory/units/${createdOrEditedId}/link-request`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model_id: Number(form.model_id) })
-        })
-        const ld = await lr.json()
-        if (!lr.ok) {
-          throw new Error(ld?.error?.message || 'Link request failed')
-        } else {
-          alert('Unit draft created and link request submitted for approval.')
-        }
+        alert('Unit draft created and linked to model. Awaiting Financial Manager approval.')
       } else { // Superadmin path
         const body = {
           ...form,
@@ -172,27 +158,7 @@ export default function Units() {
     await load()
   }
 
-  async function submitLinkRequest(unitId) {
-    try {
-      if (!linkModelId) {
-        alert('Please select a model')
-        return
-      }
-      const resp = await fetchWithAuth(`${API_URL}/api/inventory/units/${unitId}/link-request`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_id: Number(linkModelId) })
-      })
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to submit link request')
-      alert('Link request submitted and awaiting Financial Manager approval.')
-      setLinkRequestForId(0)
-      setLinkModelId('')
-      await load()
-    } catch (e) {
-      alert(e.message || String(e))
-    }
-  }
+  // Removed submitLinkRequest: link requests are disabled; units must be created already linked to a model with approved pricing.
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
@@ -259,7 +225,7 @@ export default function Units() {
                 {modelsError ? <div style={errorText}>{modelsError}</div> : null}
               </div>
               <div style={{ display: 'flex', alignItems: 'end' }}>
-                <span style={metaText}>Financial Admin must select a model. A link request will be sent to the Financial Manager for approval. Upon approval, all standard prices and areas are copied into the inventory.</span>
+                <span style={metaText}>Financial Admin must select a model with approved standard pricing. The unit will be created as a draft already linked to the selected model, with prices and areas propagated. Financial Manager approval>
               </div>
             </div>
           </div>
@@ -330,28 +296,7 @@ export default function Units() {
                   <td style={td}>
                     <button onClick={() => edit(unit)} style={btn}>Edit</button>
                     <button onClick={() => remove(unit.id)} style={{...btn, marginLeft: 8}}>Delete</button>
-                    {role === 'financial_admin' && (
-                      <>
-                        {linkRequestForId === unit.id ? (
-                          <span style={{ marginLeft: 8, display: 'inline-flex', gap: 6 }}>
-                            <select value={linkModelId} onChange={e => setLinkModelId(e.target.value)} style={ctrl}>
-                              <option value="">— Select model —</option>
-                              {models.map(m => (
-                                <option key={m.id} value={m.id}>
-                                  {m.model_code ? `${m.model_code} — ` : ''}{m.model_name} {m.area ? `(${m.area} m²)` : ''}
-                                </option>
-                              ))}
-                            </select>
-                            <button onClick={() => submitLinkRequest(unit.id)} style={btnPrimary}>Request Link</button>
-                            <button onClick={() => { setLinkRequestForId(0); setLinkModelId('') }} style={btn}>Cancel</button>
-                          </span>
-                        ) : (
-                          <button onClick={() => { setLinkRequestForId(unit.id); setLinkModelId('') }} style={{...btn, marginLeft: 8}}>
-                            Link model
-                          </button>
-                        )}
-                      </>
-                    )}
+                    {/* Link model UI removed: link requests are disabled; use model selection during creation */}
                   </td>
                 </tr>
               ))}
