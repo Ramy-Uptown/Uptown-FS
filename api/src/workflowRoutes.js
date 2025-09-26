@@ -164,11 +164,11 @@ router.get(
       const params = []
       if (unitId) {
         params.push(unitId)
-        clauses.push(`unit_id = ${params.length}`)
+        clauses.push(`unit_id = $${params.length}`)
       }
       if (status) {
         params.push(String(status))
-        clauses.push(`status = ${params.length}`)
+        clauses.push(`status = $${params.length}`)
       }
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
       const q = `SELECT * FROM standard_pricing ${where} ORDER BY id DESC`
@@ -202,15 +202,15 @@ router.get(
 
       if (consultant_user_id) {
         params.push(ensureNumber(consultant_user_id))
-        clauses.push(`stm.consultant_user_id = ${params.length}`)
+        clauses.push(`stm.consultant_user_id = $${params.length}`)
       }
       if (manager_user_id) {
         params.push(ensureNumber(manager_user_id))
-        clauses.push(`stm.manager_user_id = ${params.length}`)
+        clauses.push(`stm.manager_user_id = $${params.length}`)
       }
       if (typeof active === 'boolean') {
         params.push(active)
-        clauses.push(`stm.active = ${params.length}`)
+        clauses.push(`stm.active = $${params.length}`)
       }
 
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
@@ -251,15 +251,15 @@ router.get(
 
       if (member_user_id) {
         params.push(ensureNumber(member_user_id))
-        clauses.push(`tm.member_user_id = ${params.length}`)
+        clauses.push(`tm.member_user_id = $${params.length}`)
       }
       if (manager_user_id) {
         params.push(ensureNumber(manager_user_id))
-        clauses.push(`tm.manager_user_id = ${params.length}`)
+        clauses.push(`tm.manager_user_id = $${params.length}`)
       }
       if (typeof active === 'boolean') {
         params.push(active)
-        clauses.push(`tm.active = ${params.length}`)
+        clauses.push(`tm.active = $${params.length}`)
       }
 
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
@@ -300,15 +300,15 @@ router.get(
 
       if (member_user_id) {
         params.push(ensureNumber(member_user_id))
-        clauses.push(`tm.member_user_id = ${params.length}`)
+        clauses.push(`tm.member_user_id = $${params.length}`)
       }
       if (manager_user_id) {
         params.push(ensureNumber(manager_user_id))
-        clauses.push(`tm.manager_user_id = ${params.length}`)
+        clauses.push(`tm.manager_user_id = $${params.length}`)
       }
       if (typeof active === 'boolean') {
         params.push(active)
-        clauses.push(`tm.active = ${params.length}`)
+        clauses.push(`tm.active = $${params.length}`)
       }
 
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
