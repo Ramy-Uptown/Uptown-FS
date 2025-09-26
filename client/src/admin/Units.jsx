@@ -30,6 +30,10 @@ export default function Units() {
   const [editingId, setEditingId] = useState(0)
   const [saving, setSaving] = useState(false)
 
+  // inline link-request state for existing units (FA)
+  const [linkRequestForId, setLinkRequestForId] = useState(0)
+  const [linkModelId, setLinkModelId] = useState('')
+
   async function load(p = page) {
     try {
       setLoading(true)
@@ -168,6 +172,28 @@ export default function Units() {
     await load()
   }
 
+  async function submitLinkRequest(unitId) {
+    try {
+      if (!linkModelId) {
+        alert('Please select a model')
+        return
+      }
+      const resp = await fetchWithAuth(`${API_URL}/api/inventory/units/${unitId}/link-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_id: Number(linkModelId) })
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to submit link request')
+      alert('Link request submitted and awaiting Financial Manager approval.')
+      setLinkRequestForId(0)
+      setLinkModelId('')
+      await load()
+    } catch (e) {
+      alert(e.message || String(e))
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   const handleLogout = async () => {
@@ -304,6 +330,28 @@ export default function Units() {
                   <td style={td}>
                     <button onClick={() => edit(unit)} style={btn}>Edit</button>
                     <button onClick={() => remove(unit.id)} style={{...btn, marginLeft: 8}}>Delete</button>
+                    {role === 'financial_admin' && (
+                      <>
+                        {linkRequestForId === unit.id ? (
+                          <span style={{ marginLeft: 8, display: 'inline-flex', gap: 6 }}>
+                            <select value={linkModelId} onChange={e => setLinkModelId(e.target.value)} style={ctrl}>
+                              <option value="">— Select model —</option>
+                              {models.map(m => (
+                                <option key={m.id} value={m.id}>
+                                  {m.model_code ? `${m.model_code} — ` : ''}{m.model_name} {m.area ? `(${m.area} m²)` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <button onClick={() => submitLinkRequest(unit.id)} style={btnPrimary}>Request Link</button>
+                            <button onClick={() => { setLinkRequestForId(0); setLinkModelId('') }} style={btn}>Cancel</button>
+                          </span>
+                        ) : (
+                          <button onClick={() => { setLinkRequestForId(unit.id); setLinkModelId('') }} style={{...btn, marginLeft: 8}}>
+                            Link model
+                          </button>
+                        )}
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
