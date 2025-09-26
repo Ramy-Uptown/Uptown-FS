@@ -382,11 +382,18 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
     const ps = Math.max(1, Math.min(200, Number(req.query.pageSize) || defaultPs))
     const off = (p - 1) * ps
 
-    const clauses = ['u.available = TRUE', "u.unit_status='AVAILABLE'", 'u.model_id IS NOT NULL']
+    const clauses = []
     const params = []
     let placeholderCount = 1
 
-    // ✅ FIXED: Added $ prefix to all parameter placeholders
+    // Role-based filtering:
+    // - Sales roles only see available units ready for deals.
+    // - Admin roles see all units.
+    const salesRoles = ['property_consultant', 'sales_manager']
+    if (salesRoles.includes(req.user.role)) {
+      clauses.push('u.available = TRUE', "u.unit_status='AVAILABLE'", 'u.model_id IS NOT NULL')
+    }
+
     if (typeId) {
       clauses.push(`u.unit_type_id = $${placeholderCount++}`)
       params.push(typeId)
