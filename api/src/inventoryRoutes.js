@@ -365,19 +365,66 @@ router.get('/types', authMiddleware, requireRole(['admin','superadmin','sales_ma
   }
 })
 
-// List available units for a given type (only units with an approved model link)
+// List available units (with optional search/pagination/model filter). Only units with an approved model link.
 router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_manager','property_consultant','financial_manager','financial_admin','ceo','chairman','vice_chairman']), async (req, res) => {
   try {
+    const { search } = req.query || {}
     const typeId = num(req.query.unit_type_id)
+    const modelId = num(req.query.model_id)
+
+    // Pagination defaults:
+    // - If consumer didn't pass page/pageSize and requested by unit_type_id (calculator use), default to 200.
+    // - Otherwise default to 20 for admin listing.
+    const pagePassed = Object.prototype.hasOwnProperty.call(req.query || {}, 'page')
+    const pageSizePassed = Object.prototype.hasOwnProperty.call(req.query || {}, 'pageSize')
+    const p = Math.max(1, Number(req.query.page) || 1)
+    const defaultPs = (!pagePassed && !pageSizePassed && typeId) ? 200 : 20
+    const ps = Math.max(1, Math.min(200, Number(req.query.pageSize) || defaultPs))
+    const off = (p - 1) * ps
+
     const clauses = ['u.available = TRUE', "u.unit_status='AVAILABLE'", 'u.model_id IS NOT NULL']
     const params = []
     let placeholderCount = 1
-    
-    if (typeId) { 
-      clauses.push(`u.unit_type_id = $${placeholderCount++}`)
+
+    if (typeId) {
+      clauses.push(`u.unit_type_id = ${placeholderCount++}`)
       params.push(typeId)
     }
+    if (modelId) {
+      clauses.push(`u.model_id = ${placeholderCount++}`)
+      params.push(modelId)
+    }
+
+    if (search) {
+      const s = `%${String(search).toLowerCase()}%`
+      const ph = `${placeholderCount++}`
+      clauses.push(`(
+        LOWER(u.code) LIKE ${ph}
+        OR LOWER(COALESCE(u.description, '')) LIKE ${ph}
+        OR LOWER(COALESCE(u.unit_type, '')) LIKE ${ph}
+        OR LOWER(COALESCE(ut.name, '')) LIKE ${ph}
+      )`)
+      // push same placeholder value for each use
+      params.push(s)
+    }
+
     const where = `WHERE ${clauses.join(' AND ')}`
+    const countParams = [...params]
+
+    // Count total
+    const tot = await pool.query(
+      `SELECT COUNT(1) AS c
+       FROM units u
+       LEFT JOIN unit_types ut ON ut.id = u.unit_type_id
+       LEFT JOIN unit_models m ON m.id = u.model_id
+       ${where}`,
+      countParams
+    )
+
+    // Paged rows
+    const limitPlaceholder = `${placeholderCount++}`
+    const offsetPlaceholder = `${placeholderCount++}`
+    params.push(ps, off)
 
     const r = await pool.query(
       `SELECT
@@ -386,6 +433,7 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
          u.has_garden, u.garden_area, u.has_roof, u.roof_area,
          u.maintenance_price, u.garage_price, u.garden_price, u.roof_price, u.storage_price,
          u.available, u.unit_status,
+         m.model_name AS model_name, m.model_code AS model_code,
          (COALESCE(u.has_garden, FALSE) AND COALESCE(u.garden_area, 0) > 0) AS garden_available,
          (COALESCE(u.has_roof, FALSE) AND COALESCE(u.roof_area, 0) > 0) AS roof_available,
          (COALESCE(u.garage_area, 0) > 0) AS garage_available,
@@ -397,12 +445,17 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
            + COALESCE(u.storage_price,0)) AS total_price
        FROM units u
        LEFT JOIN unit_types ut ON ut.id = u.unit_type_id
+       LEFT JOIN unit_models m ON m.id = u.model_id
        ${where}
        ORDER BY u.id DESC
-       LIMIT 200`,
+       LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
       params
     )
-    return ok(res, { units: r.rows })
+
+    return ok(res, {
+      units: r.rows,
+      pagination: { page: p, pageSize: ps, total: Number(tot.rows[0].c) }
+    })
   } catch (e) {
     console.error('GET /api/inventory/units error:', e)
     return bad(res, 500, 'Internal error')

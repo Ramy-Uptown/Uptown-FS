@@ -12,9 +12,15 @@ export default function Units() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
 
-  // unit models for linking (financial_admin)
+  // unit models (used for filter and FA linking)
   const [models, setModels] = useState([])
   const [modelsError, setModelsError] = useState('')
+  const [filterModelId, setFilterModelId] = useState('')
+  const modelMap = React.useMemo(() => {
+    const m = {}
+    models.forEach(x => { m[x.id] = x })
+    return m
+  }, [models])
 
   // current user role
   const role = JSON.parse(localStorage.getItem('auth_user') || '{}')?.role
@@ -30,14 +36,14 @@ export default function Units() {
       setError('')
       const q = new URLSearchParams()
       if (search) q.set('search', search)
+      if (filterModelId) q.set('model_id', String(filterModelId))
       q.set('page', String(p))
       q.set('pageSize', String(pageSize))
-      // Use the inventory route to get the detailed data
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/units?${q.toString()}`)
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load units')
       setUnits(data.units || [])
-      setTotal(data.pagination?.total || 0)
+      setTotal(Number(data.pagination?.total || 0))
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -45,26 +51,26 @@ export default function Units() {
     }
   }
 
-  // Load models for financial_admin linking
+  // Load models for filter and FA linking (attempt for any role; ignore auth errors)
   useEffect(() => {
-    if (role !== 'financial_admin') return
     let abort = false
     async function run() {
       try {
         setModelsError('')
-        const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models?page=1&pageSize=200`)
+        const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models?page=1&pageSize=500`)
         const data = await resp.json()
         if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load unit models')
         if (!abort) setModels(data.items || [])
       } catch (e) {
-        if (!abort) setModelsError(e.message || String(e))
+        // Silently ignore if not authorized; filter will be hidden
+        if (!abort) setModelsError(String(e.message || e))
       }
     }
     run()
     return () => { abort = true }
   }, [role])
 
-  useEffect(() => { load(1) }, [search, pageSize])
+  useEffect(() => { load(1) }, [search, pageSize, filterModelId])
   useEffect(() => { load(page) }, [page])
 
   function resetForm() {
@@ -233,8 +239,18 @@ export default function Units() {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
           <input placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} style={ctrl} />
+          {models.length > 0 && (
+            <select value={filterModelId} onChange={e => setFilterModelId(e.target.value)} style={ctrl}>
+              <option value="">All Models</option>
+              {models.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.model_code ? `${m.model_code} — ` : ''}{m.model_name}
+                </option>
+              ))}
+            </select>
+          )}
           <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} style={ctrl}>
             <option value={10}>10</option>
             <option value={20}>20</option>
@@ -252,7 +268,7 @@ export default function Units() {
               <tr>
                 <th style={th}>ID</th>
                 <th style={th}>Code</th>
-                <th style={th}>Description</th>
+                <th style={th}>Unit Model</th>
                 <th style={th}>Area (m²)</th>
                 <th style={th}>Garden</th>
                 <th style={th}>Roof</th>
@@ -267,7 +283,18 @@ export default function Units() {
                 <tr key={unit.id}>
                   <td style={td}>{unit.id}</td>
                   <td style={td}>{unit.code}</td>
-                  <td style={td}>{unit.description || '-'}</td>
+                  <td style={td}>
+                    {(() => {
+                      // Prefer fields returned directly from API
+                      const fromApi = unit.model_code ? `${unit.model_code} — ${unit.model_name || ''}`.trim() : (unit.model_name || '')
+                      if (fromApi) return fromApi
+                      // Fallback to loaded models map if available
+                      const m = modelMap[unit.model_id]
+                      if (m) return m.model_code ? `${m.model_code} — ${m.model_name}` : (m.model_name || `#${unit.model_id}`)
+                      // Final fallback
+                      return unit.model_id ? `#${unit.model_id}` : '-'
+                    })()}
+                  </td>
                   <td style={td}>{unit.area ? Number(unit.area).toLocaleString() : '-'}</td>
                   <td style={td}>{unit.garden_available ? `Yes (${Number(unit.garden_area).toLocaleString()} m²)` : 'No'}</td>
                   <td style={td}>{unit.roof_available ? `Yes (${Number(unit.roof_area).toLocaleString()} m²)` : 'No'}</td>
