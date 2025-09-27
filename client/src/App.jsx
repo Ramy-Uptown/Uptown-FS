@@ -915,6 +915,88 @@ export default function App(props) {
     const offerPV = Number((preview && preview.calculatedPV) ?? 0)
     const discountPercent = Number(inputs.salesDiscountPercent ?? 0)
     const deltaPV = offerPV - stdPV
+    const deltaPercentPV = stdPV ? (deltaPV / stdPV) * 100 : 0
+
+    // Payment structure metrics (percentages of total nominal)
+    const totalsNominal = Number(
+      (preview && preview.totalNominalPrice) ??
+      (genResult && genResult.totals && genResult.totals.totalNominal) ??
+      0
+    )
+
+    // First year sum (if split)
+    let firstYearNominal = 0
+    if (inputs.splitFirstYearPayments) {
+      for (const p of (firstYearPayments || [])) {
+        firstYearNominal += Number(p?.amount) || 0
+      }
+    } else {
+      // If not split, treat down payment as first-year component for percentage context
+      const dpBase = Number(stdPlan.totalPrice) || totalsNominal || 0
+      const actualDP = inputs.dpType === 'percentage'
+        ? dpBase * ((Number(inputs.downPaymentValue) || 0) / 100)
+        : (Number(inputs.downPaymentValue) || 0)
+      firstYearNominal = actualDP
+    }
+
+    // Subsequent year 1 (Year 2 if split) — take first entry in subsequentYears
+    let secondYearNominal = 0
+    if (Array.isArray(subsequentYears) && subsequentYears.length > 0) {
+      secondYearNominal = Number(subsequentYears[0]?.totalNominal) || 0
+    }
+
+    const handoverNominal = Number(inputs.additionalHandoverPayment) || 0
+
+    const pct = (part, total) => {
+      const t = Number(total) || 0
+      const p = Number(part) || 0
+      if (!t || t <= 0) return 0
+      return (p / t) * 100
+    }
+
+    const firstYearPercent = pct(firstYearNominal, totalsNominal)
+    const secondYearPercent = pct(secondYearNominal, totalsNominal)
+    const handoverPercent = pct(handoverNominal, totalsNominal)
+
+    // Optional thresholds from localStorage
+    let thresholds = {}
+    try {
+      const raw = localStorage.getItem('uptown_thresholds')
+      if (raw) thresholds = JSON.parse(raw) || {}
+    } catch {}
+
+    const check = (value, min, max) => {
+      if (min == null && max == null) return null
+      if (min != null && Number(value) < Number(min)) return false
+      if (max != null && Number(value) > Number(max)) return false
+      return true
+    }
+
+    return {
+      stdPV,
+      stdRate,
+      offerPV,
+      discountPercent,
+      deltaPV,
+      deltaPercentPV,
+      totalsNominal,
+      firstYearNominal,
+      secondYearNominal,
+      handoverNominal,
+      firstYearPercent,
+      secondYearPercent,
+      handoverPercent,
+      thresholds,
+      firstYearPass: check(firstYearPercent, thresholds.firstYearPercentMin, thresholds.firstYearPercentMax),
+      secondYearPass: check(secondYearPercent, thresholds.secondYearPercentMin, thresholds.secondYearPercentMax),
+      handoverPass: check(handoverPercent, thresholds.handoverPercentMin, thresholds.handoverPercentMax)
+    }
+  }, [stdPlan, preview, inputs, firstYearPayments, subsequentYears, genResult])
+    const stdPV = Number(stdPlan.calculatedPV ?? 0)
+    const stdRate = Number(stdPlan.financialDiscountRate ?? 0)
+    const offerPV = Number((preview && preview.calculatedPV) ?? 0)
+    const discountPercent = Number(inputs.salesDiscountPercent ?? 0)
+    const deltaPV = offerPV - stdPV
     constotalNominal) ??
       0
     )
@@ -1294,6 +1376,136 @@ export default function App(props) {
           <small style={styles.metaText}>
             Generate a plan to update the offer PV. The comparison uses the latest preview/generation results.
           </small>
+        </section>
+
+        {/* Payment Structure Metrics vs Thresholds */}
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Payment Structure Metrics</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            {/* First Year */}
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>First Year</h3>
+              <div>Nominal: {Number(comparison.firstYearNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <div>Percent of Total: {Number(comparison.firstYearPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
+              {comparison.firstYearPass !== null && (() => {
+                const pass = comparison.firstYearPass
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
+                  background: pass ? '#ecfdf5' : '#fef2f2',
+                  color: pass ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: pass ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
+                  </div>
+                )
+              })()}
+              {comparison.thresholds?.firstYearPercentMin != null && (
+                <small style={styles.metaText}>Min: {Number(comparison.thresholds.firstYearPercentMin).toLocaleString()}%</small>
+              )}
+              {comparison.thresholds?.firstYearPercentMax != null && (
+                <small style={styles.metaText}>Max: {Number(comparison.thresholds.firstYearPercentMax).toLocaleString()}%</small>
+              )}
+            </div>
+
+            {/* Second Year */}
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Second Year</h3>
+              <div>Nominal: {Number(comparison.secondYearNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <div>Percent of Total: {Number(comparison.secondYearPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
+              {comparison.secondYearPass !== null && (() => {
+                const pass = comparison.secondYearPass
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
+                  background: pass ? '#ecfdf5' : '#fef2f2',
+                  color: pass ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: pass ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
+                  </div>
+                )
+              })()}
+              {comparison.thresholds?.secondYearPercentMin != null && (
+                <small style={styles.metaText}>Min: {Number(comparison.thresholds.secondYearPercentMin).toLocaleString()}%</small>
+              )}
+              {comparison.thresholds?.secondYearPercentMax != null && (
+                <small style={styles.metaText}>Max: {Number(comparison.thresholds.secondYearPercentMax).toLocaleString()}%</small>
+              )}
+            </div>
+
+            {/* Handover */}
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Handover</h3>
+              <div>Nominal: {Number(comparison.handoverNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <div>Percent of Total: {Number(comparison.handoverPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
+              {comparison.handoverPass !== null && (() => {
+                const pass = comparison.handoverPass
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
+                  background: pass ? '#ecfdf5' : '#fef2f2',
+                  color: pass ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: pass ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
+                  </div>
+                )
+              })()}
+              {(comparison.thresholds?.handoverPercentMin != null || comparison.thresholds?.handoverPercentMax != null) && (
+                <small style={styles.metaText}>
+                  {comparison.thresholds?.handoverPercentMin != null ? `Min: ${Number(comparison.thresholds.handoverPercentMin).toLocaleString()}%` : ''}
+                  {comparison.thresholds?.handoverPercentMax != null ? `  Max: ${Number(comparison.thresholds.handoverPercentMax).toLocaleString()}%` : ''}
+                </small>
+              )}
+            </div>
+          </div>
+          <small style={styles.metaText}>Thresholds are optional. You can set them in localStorage key “uptown_thresholds”, e.g. {"{"}"firstYearPercentMin": 10, "secondYearPercentMin": 15, "handoverPercentMax": 5{"}"}.</small>
         </section>
 
         {/* Data Entry UI — New Sections */}
