@@ -139,6 +139,7 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'Unit Models', href: '/admin/unit-models' },
           { label: 'Holds', href: '/admin/holds' },
+          { label: 'Payment Thresholds', href: '/admin/payment-thresholds' },
        ]
       case 'financial_admin':
         return [
@@ -173,16 +174,16 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Hold Approvals', href: '/admin/hold-approvals' }
         ]
       // --- THIS SECTION IS MODIFIED ---
-      case 'ceo':
-      case 'chairman':
-      case 'vice_chairman':
-      case 'top_management':
-        return [
-          ...baseWithoutCalc,
+      case 'ceo':
+      case 'chairman':
+      case 'vice_chairman':
+      case 'top_management':
+        return [
+          ...baseWithoutCalc,
           { label: 'Unit Model Queue', href: '/deals/queues' },
           { label: 'Pricing Queue', href: '/admin/standard-pricing-approvals' },
-          { label: 'Workflow Logs', href: '/admin/workflow-logs' },
-          { label: 'Hold Approvals', href: '/admin/hold-approvals' }
+          { label: 'Payment Thresholds', href: '/admin/payment-thresholds' },
+          { label: 'Workflow Logs'/admin/hold-approvals' }
         ]
       // --- END OF MODIFICATION ---
       default:
