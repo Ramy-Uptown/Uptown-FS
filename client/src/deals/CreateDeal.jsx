@@ -36,11 +36,31 @@ export default function CreateDeal() {
     return { title, amount, unitType, details }
   }
 
+  // Minimal required fields for creating an offer:
+  // - Client name and primary phone
+  // - Unit data: at least unit_type and either unit_code or unit_number
+  function validateOfferSnapshot(snap) {
+    const client = snap?.clientInfo || {}
+    const unit = snap?.unitInfo || {}
+    const missing = []
+    if (!client.buyer_name || !String(client.buyer_name).trim()) missing.push('Client Name')
+    if (!client.phone_primary || !String(client.phone_primary).trim()) missing.push('Client Primary Phone')
+    if (!unit.unit_type || !String(unit.unit_type).trim()) missing.push('Unit Type')
+    if (!(unit.unit_code || unit.unit_number)) missing.push('Unit Code or Unit Number')
+    return { ok: missing.length === 0, missing }
+  }
+
   async function saveAsDraft() {
     try {
       setError('')
       setLoading(true)
       const payload = await buildPayloadFromSnapshot()
+      // Validate minimal offer info
+      const snap = payload.details?.calculator
+      const v = validateOfferSnapshot(snap)
+      if (!v.ok) {
+        throw new Error(`Missing required fields: ${v.missing.join(', ')}`)
+      }
       const resp = await fetchWithAuth(`${API_URL}/api/deals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -61,6 +81,12 @@ export default function CreateDeal() {
       setError('')
       setSubmitting(true)
       const payload = await buildPayloadFromSnapshot()
+      // Validate minimal offer info
+      const snap = payload.details?.calculator
+      const v = validateOfferSnapshot(snap)
+      if (!v.ok) {
+        throw new Error(`Missing required fields: ${v.missing.join(', ')}`)
+      }
       // Validation: ensure generated plan exists
       const plan = payload.details?.calculator?.generatedPlan
       if (!plan || !Array.isArray(plan.schedule) || plan.schedule.length === 0) {

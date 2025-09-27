@@ -1364,22 +1364,28 @@ export default function App(props) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={styles.sectionTitle}>Payment Schedule</h2>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => generateDocument('pricing_form')}
-                disabled={docLoading}
-                style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
-              >
-                {docLoading ? 'Generating…' : 'Generate Pricing Form'}
-              </button>
-              <button
-                type="button"
-                onClick={() => generateDocument('contract')}
-                disabled={docLoading}
-                style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
-              >
-                {docLoading ? 'Generating…' : 'Generate Contract'}
-              </button>
+              {/* Pricing Form generation — Financial Admin only */}
+              {authUser?.role === 'financial_admin' && (
+                <button
+                  type="button"
+                  onClick={() => generateDocument('pricing_form')}
+                  disabled={docLoading}
+                  style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
+                >
+                  {docLoading ? 'Generating…' : 'Generate Pricing Form'}
+                </button>
+              )}
+              {/* Contract generation — Contract Admin roles only */}
+              {(authUser?.role === 'contract_manager' || authUser?.role === 'contract_person') && (
+                <button
+                  type="button"
+                  onClick={() => generateDocument('contract')}
+                  disabled={docLoading}
+                  style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
+                >
+                  {docLoading ? 'Generating…' : 'Generate Contract'}
+                </button>
+              )}
               <button type="button" onClick={exportScheduleXLSX} disabled={!schedule.length} style={styles.btn}>
                 Export to Excel (.xlsx)
               </button>
