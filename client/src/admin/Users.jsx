@@ -50,9 +50,11 @@ export default function Users() {
         setIsLoading(true);
         setError('');
         try {
-            const [usersResp, memResp, meResp] = await Promise.all([
+            const [usersResp, salesResp, contractsResp, financeResp, meResp] = await Promise.all([
                 fetchWithAuth(`${API_URL}/api/auth/users`),
-                fetchWithAuth(`${API_URL}/api/workflow/sales-teams/memberships?active=true`),
+                fetchWithAuth(`${API_URL}/api/workflow/sales-teams/memberships?active=true`).catch(() => null),
+                fetchWithAuth(`${API_URL}/api/workflow/contracts-teams/memberships?active=true`).catch(() => null),
+                fetchWithAuth(`${API_URL}/api/workflow/finance-teams/memberships?active=true`).catch(() => null),
                 fetchWithAuth(`${API_URL}/api/auth/me`)
             ]);
 
@@ -60,16 +62,26 @@ export default function Users() {
             const usersData = await usersResp.json();
             setUsers(usersData.users || []);
 
-            if (memResp.ok) {
-                const memData = await memResp.json();
-                if (memData.memberships) {
-                    const map = memData.memberships.reduce((acc, m) => {
-                        acc[m.consultant_user_id] = String(m.manager_user_id);
-                        return acc;
-                    }, {});
-                    setAssignMap(map);
-                }
+            const assign = { sales: {}, contracts: {}, finance: {} };
+            if (salesResp && salesResp.ok) {
+                const memData = await salesResp.json();
+                (memData.memberships || []).forEach(m => {
+                    assign.sales[m.member_user_id] = String(m.manager_user_id);
+                });
             }
+            if (contractsResp && contractsResp.ok) {
+                const memData = await contractsResp.json();
+                (memData.memberships || []).forEach(m => {
+                    assign.contracts[m.member_user_id] = String(m.manager_user_id);
+                });
+            }
+            if (financeResp && financeResp.ok) {
+                const memData = await financeResp.json();
+                (memData.memberships || []).forEach(m => {
+                    assign.finance[m.member_user_id] = String(m.manager_user_id);
+                });
+            }
+            setAssignMap(assign);
 
             if (!meResp.ok) throw new Error('Failed to load current user profile');
             const meData = await meResp.json();
@@ -237,6 +249,17 @@ export default function Users() {
     const userById = Object.fromEntries(users.map(u => [u.id, u]));
     const isSuperAdmin = me?.role === 'superadmin';
 
+    // helper: resolve manager for a given user based on role
+    function getManagerIdForUser(u) {
+      if (!u) return null;
+      const r = String(u.role || '');
+      if (r === 'property_consultant') return assignMap?.sales?.[u.id] || null;
+      if (r === 'contract_person') return assignMap?.contracts?.[u.id] || null;
+      if (r === 'financial_admin') return assignMap?.finance?.[u.id] || null;
+      // other roles don't have a manager mapping here
+      return null;
+    }
+
     // --- Render ---
     return (
         <div className="bg-gray-50 min-h-screen font-sans">
@@ -352,7 +375,12 @@ export default function Users() {
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 text-xs text-gray-600">
-                                               {currentManagerId ? (userById[currentManagerId]?.email || `ID: ${currentManagerId}`) : 'N/A'}
+                                               {
+                                                 (() => {
+                                                   const mid = getManagerIdForUser(u);
+                                                   return mid ? (userById[mid]?.email || `ID: ${mid}`) : 'N/A';
+                                                 })()
+                                               }
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`px-2 py-1 text-xs font-medium rounded-full ${u.active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-800'}`}>
