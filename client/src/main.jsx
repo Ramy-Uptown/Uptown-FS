@@ -24,6 +24,7 @@ import InventoryDrafts from './admin/InventoryDrafts.jsx';
 import HoldsFM from './admin/HoldsFM.jsx'
 import HoldsCEO from './admin/HoldsCEO.jsx'
 import WorkflowLogs from './admin/WorkflowLogs.jsx'
+import PaymentThresholds from './admin/PaymentThresholds.jsx'
 
 function RoleBasedRoute({ children, allowedRoles }) {
   const token = localStorage.getItem('auth_token');
@@ -127,14 +128,22 @@ createRoot(document.getElementById('root')).render(
           }
         />
         {/* --- END OF NEW ROUTE --- */}
-        <Route
-          path="/admin/standard-pricing-rejected"
-          element={
-            <RoleBasedRoute allowedRoles={['financial_manager']}>
-              <RejectedPricings />
-            </RoleBasedRoute>
-          }
-        />
+         <Route
+           path="/admin/standard-pricing-rejected"
+           element={
+             <RoleBasedRoute allowedRoles={['financial_manager']}>
+               <RejectedPricings />
+             </RoleBasedRoute>
+           }
+         />
+         <Route
+           path="/admin/payment-thresholds"
+           element={
+             <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+               <PaymentThresholds />
+             </RoleBasedRoute>
+           }
+         />
         {/* Alias paths to avoid mismatched links */}
         <Route
           path="/admin/standard-pricing/rejected"
