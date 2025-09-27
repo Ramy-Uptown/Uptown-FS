@@ -181,6 +181,68 @@ export default function SalesTeam() {
     }
   }
 
+  // Admin helper: populate sales_people from existing users
+  async function syncFromUsers() {
+    if (!(isSuperAdmin || me?.role === 'admin')) {
+      alert('Only Admin or Superadmin can perform this action.')
+      return
+    }
+    try {
+      const usersResp = await fetchWithAuth(`${API_URL}/api/auth/users`)
+      const usersData = await usersResp.json()
+      if (!usersResp.ok) throw new Error(usersData?.error?.message || 'Failed to fetch users')
+
+      const users = usersData.users || []
+      const candidates = users.filter(u => u.active && (u.role === 'property_consultant' || u.role === 'sales_manager'))
+
+      if (candidates.length === 0) {
+        alert('No active property consultants or sales managers found in Users.')
+        return
+      }
+
+      const confirmMsg = `Create ${candidates.length} sales_people records from Users?`
+      if (!confirm(confirmMsg)) return
+
+      // Create or upsert by email if missing
+      let created = 0
+      for (const u of candidates) {
+        try {
+          const payload = {
+            user_id: Number(u.id),
+            name: String(u.meta?.full_name || '').trim() || u.email,
+            email: u.email,
+            role: u.role === 'sales_manager' ? 'manager' : 'sales',
+            active: true
+          }
+          const resp = await fetchWithAuth(`${API_URL}/api/sales`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+          const data = await resp.json()
+          if (resp.ok) {
+            created++
+          } else {
+            // If duplicate email constraint blocks insert, skip
+            const msg = data?.error?.message || ''
+            if (/duplicate key/i.test(msg) || /unique constraint/i.test(msg)) {
+              // ignore
+            } else {
+              console.warn('Sync failed for', u.email, msg)
+            }
+          }
+        } catch (err) {
+          console.warn('Sync error for', u.email, err?.message || err)
+        }
+      }
+
+      await load()
+      alert(`Sync complete. Created ${created} records.`)
+    } catch (e) {
+      alert(e.message || String(e))
+    }
+  }
+
   // Manager assignment handlers
   function openAssign(row) {
     setAssignFor(row.id)
@@ -480,7 +542,24 @@ export default function SalesTeam() {
               )})}
               {list.length === 0 && !loading && (
                 <tr>
-                  <td style={td} colSpan={8}>No sales people.</td>
+                  <td style={td} colSpan={8}>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      <div>No sales people.</div>
+                      {(isSuperAdmin || me?.role === 'admin') ? (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={metaText}>
+                            You can populate the Sales Team from existing app users with roles
+                            "property_consultant" and "sales_manager".
+                          </span>
+                          <button type="button" onClick={syncFromUsers} style={btnPrimary}>
+                            Populate from Users
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={metaText}>Ask an admin to add sales people.</span>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               )}
             </tbody>
