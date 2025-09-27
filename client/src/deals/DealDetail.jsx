@@ -448,23 +448,34 @@ export default function DealDetail() {
           await load()
         }} style={btnPrimary}>Submit for Approval</button>}
         <button onClick={printSchedule} style={btn}>Print Schedule</button>
-        {/* Print Offer (Pricing Form) — Financial Admin only and after manager approval */}
-        {(role === 'financial_admin') && (
+        {/* Pricing Form (Offer) — Property Consultant only and after Sales Manager approval */}
+        {(role === 'property_consultant') && (
           <button
             onClick={() => generateDocFromSaved('pricing_form')}
             disabled={deal.status !== 'approved'}
-            title={deal.status !== 'approved' ? 'Manager approval required to print the offer' : ''}
+            title={deal.status !== 'approved' ? 'Sales Manager approval required to print the offer' : ''}
             style={{ ...btn, opacity: deal.status !== 'approved' ? 0.6 : 1 }}
           >
             Print Offer (Pricing Form PDF)
           </button>
         )}
-        {/* Contract generation — Contract Admin roles only and after manager approval */}
+        {/* Reservation Form — Financial team only and after approval */}
+        {(role === 'financial_admin' || role === 'financial_manager') && (
+          <button
+            onClick={() => generateDocFromSaved('reservation_form')}
+            disabled={deal.status !== 'approved'}
+            title={deal.status !== 'approved' ? 'Sales Manager approval required before generating reservation form' : ''}
+            style={{ ...btn, opacity: deal.status !== 'approved' ? 0.6 : 1 }}
+          >
+            Generate Reservation Form (PDF)
+          </button>
+        )}
+        {/* Contract — Contracts team only and after approval */}
         {(role === 'contract_manager' || role === 'contract_person') && (
           <button
             onClick={() => generateDocFromSaved('contract')}
             disabled={deal.status !== 'approved'}
-            title={deal.status !== 'approved' ? 'Manager approval required to generate the contract' : ''}
+            title={deal.status !== 'approved' ? 'Sales Manager approval required to generate the contract' : ''}
             style={{ ...btn, opacity: deal.status !== 'approved' ? 0.6 : 1 }}
           >
             Generate Contract (PDF)

@@ -36,6 +36,7 @@ export default function DealsApp() {
           <Route path="create" element={<CreateDeal />} />
           <Route path="approvals" element={<Approvals />} />
           <Route path="queues" element={<PaymentPlanQueues />} />
+          <Route path="inventory" element={<InventoryList />} />
           <Route path=":id" element={<DealDetail />} />
           <Route path="*" element={<Navigate to="/deals" replace />} />
         </Routes>

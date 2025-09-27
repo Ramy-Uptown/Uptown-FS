@@ -99,7 +99,13 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>All Deals</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <h2 style={{ marginTop: 0 }}>All Deals</h2>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <a href="/deals/inventory" style={{ ...btn, textDecoration: 'none', display: 'inline-block' }}>Browse Inventory</a>
+          <a href="/deals/create" style={{ ...btn, textDecoration: 'none', display: 'inline-block' }}>Create Offer</a>
+        </div>
+      </div>
 
       {approverBanner.show && (
         <div style={{ margin: '8px 0 12px', padding: '10px 12px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

@@ -1364,8 +1364,8 @@ export default function App(props) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={styles.sectionTitle}>Payment Schedule</h2>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {/* Pricing Form generation — Financial Admin only */}
-              {authUser?.role === 'financial_admin' && (
+              {/* Pricing Form generation — Property Consultant only */}
+              {authUser?.role === 'property_consultant' && (
                 <button
                   type="button"
                   onClick={() => generateDocument('pricing_form')}
@@ -1375,7 +1375,18 @@ export default function App(props) {
                   {docLoading ? 'Generating…' : 'Generate Pricing Form'}
                 </button>
               )}
-              {/* Contract generation — Contract Admin roles only */}
+              {/* Reservation Form — Financial team only */}
+              {(authUser?.role === 'financial_admin' || authUser?.role === 'financial_manager') && (
+                <button
+                  type="button"
+                  onClick={() => generateDocument('reservation_form')}
+                  disabled={docLoading}
+                  style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
+                >
+                  {docLoading ? 'Generating…' : 'Generate Reservation Form'}
+                </button>
+              )}
+              {/* Contract generation — Contracts team only */}
               {(authUser?.role === 'contract_manager' || authUser?.role === 'contract_person') && (
                 <button
                   type="button"
