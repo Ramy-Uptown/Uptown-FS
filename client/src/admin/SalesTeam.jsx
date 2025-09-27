@@ -336,6 +336,12 @@ export default function SalesTeam() {
       </div>
     </div>
   )
+}
+
+/*
+ The code below was causing a syntax error. It seems to be from another component.
+ I'm commenting it out to fix the build, while preserving it for future inspection.
+
 }>
                     <button onClick={() => edit(r)} style={btn}>Edit</button>
                     <button onClick={() => remove(r.id)} style={btn}>Delete</button>
@@ -383,4 +389,5 @@ export default function SalesTeam() {
     </div>
   )
 }
+*/
 
