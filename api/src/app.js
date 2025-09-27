@@ -727,6 +727,12 @@ app.post('/api/generate-document', async (req, res) => {
         if (dq.rows[0].status !== 'approved') {
           return bad(res, 400, 'Deal must be approved before generating this document')
         }
+        // Enforce override if required (acceptable criteria not met and override not approved)
+        const dealRow = dq.rows[0]
+        // If needs_override is true, require override_approved_at to be set
+        if (dealRow.needs_override === true && !dealRow.override_approved_at) {
+          return bad(res, 403, 'Top-Management override required before generating this document')
+        }
       }
       // Use default template if templateName not provided
       if (!templateName) {

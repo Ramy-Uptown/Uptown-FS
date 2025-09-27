@@ -15,6 +15,42 @@ async function logHistory(dealId, userId, action, notes = null) {
   )
 }
 
+// Helper: update acceptability flags on a deal (optional, from client-calculated values)
+async function setAcceptabilityFlags(id, flags, user) {
+  if (!flags || typeof flags !== 'object') return null
+  const {
+    acceptable_pv,
+    acceptable_first_year,
+    acceptable_second_year,
+    acceptable_handover
+  } = flags
+  const upd = await pool.query(
+    `UPDATE deals
+     SET acceptable_pv=$1,
+         acceptable_first_year=$2,
+         acceptable_second_year=$3,
+         acceptable_handover=$4,
+         updated_at=now()
+     WHERE id=$5
+     RETURNING *`,
+    [
+      acceptable_pv == null ? null : !!acceptable_pv,
+      acceptable_first_year == null ? null : !!acceptable_first_year,
+      acceptable_second_year == null ? null : !!acceptable_second_year,
+      acceptable_handover == null ? null : !!acceptable_handover,
+      id
+    ]
+  )
+  const note = {
+    event: 'acceptability_flags_set',
+    by: { id: user.id, role: user.role },
+    flags: { acceptable_pv, acceptable_first_year, acceptable_second_year, acceptable_handover },
+    at: new Date().toISOString()
+  }
+  await logHistory(id, user.id, 'acceptability_flags_set', JSON.stringify(note))
+  return upd.rows[0]
+}
+
 function toNumber(v) {
   const n = Number(v)
   return isFinite(n) ? n : null
@@ -275,6 +311,11 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
     if (!isOwner && !isAdmin) return res.status(403).json({ error: { message: 'Forbidden' } })
     if (deal.status !== 'draft') return res.status(400).json({ error: { message: 'Deal must be draft to submit' } })
 
+    // Optional: acceptability flags passed by client to persist
+    if (req.body?.acceptability) {
+      await setAcceptabilityFlags(id, req.body.acceptability, req.user)
+    }
+
     const upd = await pool.query('UPDATE deals SET status=$1 WHERE id=$2 RETURNING *', ['pending_approval', id])
     const note = {
       event: 'deal_submitted',
@@ -410,6 +451,127 @@ router.post('/:id/reject', authMiddleware, async (req, res) => {
     return res.json({ ok: true, deal: upd.rows[0] })
   } catch (e) {
     console.error('POST /api/deals/:id/reject error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+/**
+ * Request Top-Management override for a deal (Sales Manager or Financial Manager)
+ * Does not change approval status; sets needs_override and timestamps; logs in deal_history.
+ */
+router.post('/:id/request-override', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['sales_manager', 'financial_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Sales Manager or Financial Manager role required' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+    const deal = q.rows[0]
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET needs_override=TRUE,
+           override_requested_by=$1,
+           override_requested_at=now(),
+           updated_at=now()
+       WHERE id=$2 RETURNING *`,
+      [req.user.id, id]
+    )
+
+    const note = {
+      event: 'override_requested',
+      by: { id: req.user.id, role },
+      reason: (req.body && req.body.reason) || null,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_requested', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/request-override error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+/**
+ * Approve Top-Management override (TM roles only)
+ * Records approver, timestamp and notes; logs in deal_history.
+ */
+router.post('/:id/override-approve', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['ceo', 'chairman', 'vice_chairman', 'top_management', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Top-Management role required to approve override' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+    const deal = q.rows[0]
+
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes : null
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET override_approved_by=$1,
+           override_approved_at=now(),
+           override_notes=$2,
+           updated_at=now()
+       WHERE id=$3 RETURNING *`,
+      [req.user.id, notes, id]
+    )
+
+    const note = {
+      event: 'override_approved',
+      by: { id: req.user.id, role },
+      notes,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_approved', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-approve error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+/**
+ * Reject Top-Management override (TM roles only)
+ */
+router.post('/:id/override-reject', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['ceo', 'chairman', 'vice_chairman', 'top_management', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Top-Management role required to reject override' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes : null
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET needs_override=FALSE,
+           override_notes=$1,
+           updated_at=now()
+       WHERE id=$2 RETURNING *`,
+      [notes, id]
+    )
+
+    const note = {
+      event: 'override_rejected',
+      by: { id: req.user.id, role },
+      notes,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_rejected', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-reject error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
   }
 })
