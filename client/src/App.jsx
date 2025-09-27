@@ -908,6 +908,30 @@ export default function App(props) {
     }
   }, [preview])
 
+  // Comparison: Approved Standard vs Current Offer
+  const comparison = useMemo(() => {
+    const stdNominal = Number(unitPricingBreakdown.totalExclMaintenance ?? stdPlan.totalPrice ?? 0)
+    const stdRate = Number(stdPlan.financialDiscountRate ?? 0)
+    const offerNominal = Number(
+      (preview && preview.totalNominalPrice) ??
+      (genResult && genResult.totals && genResult.totals.totalNominal) ??
+      0
+    )
+    const offerPV = Number((preview && preview.calculatedPV) ?? 0)
+    const discountPercent = Number(inputs.salesDiscountPercent ?? 0)
+    const deltaNominal = offerNominal - stdNominal
+    const deltaPercent = stdNominal ? (deltaNominal / stdNominal) * 100 : 0
+    return {
+      stdNominal,
+      stdRate,
+      offerNominal,
+      offerPV,
+      discountPercent,
+      deltaNominal,
+      deltaPercent
+    }
+  }, [unitPricingBreakdown, stdPlan, preview, genResult, inputs])
+
   // --- Handlers for dynamic arrays ---
   function addFirstYearPayment() {
     setFirstYearPayments(s => [...s, { amount: 0, month: 1, type: 'regular' }])
@@ -1202,6 +1226,40 @@ export default function App(props) {
               </button>
             </div>
           </form>
+        </section>
+
+        {/* Standard vs Offer Comparison */}
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Standard vs Offer</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12, background: '#fbfaf7' }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Approved Standard</h3>
+              <ul style={{ margin: 0, paddingLeft: 16 }}>
+                <li>Nominal Price (excl. maintenance): {Number(comparison.stdNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
+                <li>Financial Discount Rate: {Number(comparison.stdRate || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</li>
+              </ul>
+              <small style={styles.metaText}>
+                Set automatically from approved standard pricing for the selected unit/type.
+              </small>
+            </div>
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12, background: '#fff' }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Current Offer</h3>
+              <ul style={{ margin: 0, paddingLeft: 16 }}>
+                <li>Total Nominal: {Number(comparison.offerNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
+                <li>Calculated PV: {Number(comparison.offerPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
+                <li>Sales Discount Applied: {Number(comparison.discountPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</li>
+              </ul>
+              <div style={{ marginTop: 8, padding: 8, borderRadius: 8, background: '#f6efe3', border: '1px solid #ead9bd' }}>
+                <strong>Difference vs Standard:</strong>
+                <div>
+                  Nominal Delta: {Number(comparison.deltaNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} ({Number(comparison.deltaPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%)
+                </div>
+              </div>
+            </div>
+          </div>
+          <small style={styles.metaText}>
+            Generate a plan to update the offer totals. The comparison uses the latest preview/generation results.
+          </small>
         </section>
 
         {/* Data Entry UI — New Sections */}
