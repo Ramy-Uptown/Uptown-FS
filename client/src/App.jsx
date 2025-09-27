@@ -1017,28 +1017,6 @@ export default function App(props) {
       overallAcceptable
     }
   }, [stdPlan, preview, inputs, firstYearPayments, subsequentYears, genResult, thresholdsCfg])
-    const stdPV = Number(stdPlan.calculatedPV ?? 0)
-    const stdRate = Number(stdPlan.financialDiscountRate ?? 0)
-    const offerPV = Number((preview && preview.calculatedPV) ?? 0)
-    const discountPercent = Number(inputs.salesDiscountPercent ?? 0)
-    const deltaPV = offerPV - stdPV
-    constotalNominal) ??
-      0
-    )
-    const offerPV = Number((preview && preview.calculatedPV) ?? 0)
-    const discountPercent = Number(inputs.salesDiscountPercent ?? 0)
-    const deltaNominal = offerNominal - stdNominal
-    const deltaPercent = stdNominal ? (deltaNominal / stdNominal) * 100 : 0
-    return {
-      stdNominal,
-      stdRate,
-      offerNominal,
-      offerPV,
-      discountPercent,
-      deltaNominal,
-      deltaPercent
-    }
-  }, [unitPricingBreakdown, stdPlan, preview, genResult, inputs])
 
   // --- Handlers for dynamic arrays ---
   function addFirstYearPayment() {

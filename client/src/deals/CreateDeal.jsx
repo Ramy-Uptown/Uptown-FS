@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import CalculatorApp from '../App.jsx'
@@ -15,66 +15,6 @@ export default function CreateDeal() {
   const [ocrResult, setOcrResult] = useState(null)
   const [reviewFields, setReviewFields] = useState({ name: '', nationalId: '', address: '' })
 
-  const navigate = useNavigate()
-
-  // On mount: if unit_id is provided, fetch unit and prefill calculator
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const unitId = Number(params.get('unit_id'))
-    if (!Number.isFinite(unitId) || unitId <= 0) return
-    ;(async () => {
-      try {
-        const resp = await fetchWithAuth(`${API_URL}/api/units/${unitId}`)
-        const data = await resp.json()
-        if (!resp.ok) return
-        const u = data.unit || {}
-        // Compute breakdown similar to TypeAndUnitPicker
-        const base = Number(u.base_price || 0)
-        const garden = Number(u.garden_price || 0)
-        const roof = Number(u.roof_price || 0)
-        const storage = Number(u.storage_price || 0)
-        const garage = Number(u.garage_price || 0)
-        const maintenance = Number(u.maintenance_price || 0)
-        const total = base + garden + roof + storage + garage
-
-        // Prefill calculator
-        try {
-          setUnitInfo(s => ({
-            ...s,
-            unit_type: u.unit_type || s.unit_type,
-            unit_code: u.code || s.unit_code,
-            description: u.description || s.description,
-          }))
-          setStdPlan(s => ({ ...s, totalPrice: total }))
-          setUnitPricingBreakdown({
-            base, garden, roof, storage, garage, maintenance,
-            totalExclMaintenance: total
-          })
-          setCurrency(u.currency || 'EGP')
-        } catch {}
-      } catch {}
-    })()
-  }, [])
-
-  async function buildPayloadFromSnapshot() {
-    const snapFn = window.__uptown_calc_getSnapshot
-    if (typeof snapFn !== 'function') {
-      throw new Error('Calculator not ready yet. Please try again in a moment.')
-    }
-    const snap = snapFn()
-    // Build title, amount, unit type from snapshot
-    const titleParts = []
-    if (snap?.clientInfo?.buyer_name) titleParts.push(snap.clientInfo.buyer_name)
-    if (snap?.unitInfo?.unit_code || snap?.unitInfo?.unit_number) {
-      titleParts.push(snap.unitInfo.unit_code || snap.unitInfo.unit_number)
-    }
-    const title = titleParts.join(' - ') || 'New Deal'
-    const amount = Number(snap?.generatedPlan?.totals?.totalNominal ?? snap?.stdPlan?.totalPrice ?? 0)
-    const unitType = snap?.unitInfo?.unit_type || null
-    const details = { calculator: { ...snap } }
-    return { title, amount, unitType, details }
-  }</old_code>
-<new_code>
   const navigate = useNavigate()
 
   // On mount: if unit_id is provided, fetch unit and prefill calculator
