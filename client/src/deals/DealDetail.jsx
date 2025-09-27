@@ -449,34 +449,26 @@ export default function DealDetail() {
         }} style={btnPrimary}>Submit for Approval</button>}
         <button onClick={printSchedule} style={btn}>Print Schedule</button>
         {/* Pricing Form (Offer) — Property Consultant only and after Sales Manager approval */}
-        {(role === 'property_consultant') && (
+        {(role === 'property_consultant' && deal.status === 'approved') && (
           <button
             onClick={() => generateDocFromSaved('pricing_form')}
-            disabled={deal.status !== 'approved'}
-            title={deal.status !== 'approved' ? 'Sales Manager approval required to print the offer' : ''}
-            style={{ ...btn, opacity: deal.status !== 'approved' ? 0.6 : 1 }}
+            style={btn}
           >
             Print Offer (Pricing Form PDF)
           </button>
         )}
-        {/* Reservation Form — Financial team only and after approval */}
-        {(role === 'financial_admin' || role === 'financial_manager') && (
+        {( (role === 'financial_admin' || role === 'financial_manager') && deal.status === 'approved') && (
           <button
             onClick={() => generateDocFromSaved('reservation_form')}
-            disabled={deal.status !== 'approved'}
-            title={deal.status !== 'approved' ? 'Sales Manager approval required before generating reservation form' : ''}
-            style={{ ...btn, opacity: deal.status !== 'approved' ? 0.6 : 1 }}
+            style={btn}
           >
             Generate Reservation Form (PDF)
           </button>
         )}
-        {/* Contract — Contracts team only and after approval */}
-        {(role === 'contract_manager' || role === 'contract_person') && (
+        {( (role === 'contract_manager' || role === 'contract_person') && deal.status === 'approved') && (
           <button
             onClick={() => generateDocFromSaved('contract')}
-            disabled={deal.status !== 'approved'}
-            title={deal.status !== 'approved' ? 'Sales Manager approval required to generate the contract' : ''}
-            style={{ ...btn, opacity: deal.status !== 'approved' ? 0.6 : 1 }}
+            style={btn}
           >
             Generate Contract (PDF)
           </button>

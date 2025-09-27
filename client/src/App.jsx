@@ -153,7 +153,7 @@ export default function App(props) {
     splitFirstYearPayments: false
   })
 
-  // Current user (for role-based hints)
+  // Current user (for role-based UI and hints)
   const [authUser, setAuthUser] = useState(null)
   useEffect(() => {
     try {
@@ -161,6 +161,7 @@ export default function App(props) {
       if (raw) setAuthUser(JSON.parse(raw))
     } catch {}
   }, [])
+  const role = authUser?.role
 
   // Dynamic arrays
   const [firstYearPayments, setFirstYearPayments] = useState([])
@@ -1202,177 +1203,224 @@ export default function App(props) {
         {/* Data Entry UI — New Sections */}
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Client Information</h2>
-          <div style={styles.grid2}>
-            <div>
-              <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
+          {role === 'property_consultant' ? (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
+                <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>Nationality (<span style={styles.arInline}>[[الجنسية]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={clientInfo.nationality} onChange={e => setClientInfo(s => ({ ...s, nationality: e.target.value }))} />
+          ) : (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Nationality (<span style={styles.arInline}>[[الجنسية]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.nationality} onChange={e => setClientInfo(s => ({ ...s, nationality: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>National ID / Passport No. (<span style={styles.arInline}>[[رقم قومي/ رقم جواز]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.id_or_passport} onChange={e => setClientInfo(s => ({ ...s, id_or_passport: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>ID/Passport Issue Date (<span style={styles.arInline}>[[تاريخ الاصدار]]</span>)</label>
+                <input type="date" style={styles.input()} value={clientInfo.id_issue_date} onChange={e => setClientInfo(s => ({ ...s, id_issue_date: e.target.value }))} />
+              </div>
+              <div style={styles.blockFull}>
+                <label style={styles.label}>Address (<span style={styles.arInline}>[[العنوان]]</span>)</label>
+                <textarea dir="auto" style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
+                <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Secondary Phone No. (<span style={styles.arInline}>[[رقم الهاتف (2)]]</span>)</label>
+                <input style={styles.input()} value={clientInfo.phone_secondary} onChange={e => setClientInfo(s => ({ ...s, phone_secondary: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Email Address (<span style={styles.arInline}>[[البريد الالكتروني]]</span>)</label>
+                <input type="email" style={styles.input()} value={clientInfo.email} onChange={e => setClientInfo(s => ({ ...s, email: e.target.value }))} />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>National ID / Passport No. (<span style={styles.arInline}>[[رقم قومي/ رقم جواز]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={clientInfo.id_or_passport} onChange={e => setClientInfo(s => ({ ...s, id_or_passport: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>ID/Passport Issue Date (<span style={styles.arInline}>[[تاريخ الاصدار]]</span>)</label>
-              <input type="date" style={styles.input()} value={clientInfo.id_issue_date} onChange={e => setClientInfo(s => ({ ...s, id_issue_date: e.target.value }))} />
-            </div>
-            <div style={styles.blockFull}>
-              <label style={styles.label}>Address (<span style={styles.arInline}>[[العنوان]]</span>)</label>
-              <textarea dir="auto" style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
-              <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Secondary Phone No. (<span style={styles.arInline}>[[رقم الهاتف (2)]]</span>)</label>
-              <input style={styles.input()} value={clientInfo.phone_secondary} onChange={e => setClientInfo(s => ({ ...s, phone_secondary: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Email Address (<span style={styles.arInline}>[[البريد الالكتروني]]</span>)</label>
-              <input type="email" style={styles.input()} value={clientInfo.email} onChange={e => setClientInfo(s => ({ ...s, email: e.target.value }))} />
-            </div>
-          </div>
+          )}
         </section>
 
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Unit & Project Information</h2>
-          <div style={styles.grid2}>
-            <div>
-              <label style={styles.label}>Unit Type</label>
-              <TypeAndUnitPicker
-                unitInfo={unitInfo}
-                setUnitInfo={setUnitInfo}
-                setStdPlan={setStdPlan}
-                setInputs={setInputs}
-                setCurrency={setCurrency}
-                setFeeSchedule={setFeeSchedule}
-              />
-              <small style={styles.metaText}>
-                Choose a type to view available inventory. Selecting a unit will set price and details automatically.
-              </small>
+          {role === 'property_consultant' ? (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Unit Type</label>
+                <TypeAndUnitPicker
+                  unitInfo={unitInfo}
+                  setUnitInfo={setUnitInfo}
+                  setStdPlan={setStdPlan}
+                  setInputs={setInputs}
+                  setCurrency={setCurrency}
+                  setFeeSchedule={setFeeSchedule}
+                />
+                <small style={styles.metaText}>
+                  Choose a type to view available inventory. Selecting a unit will set price and details automatically.
+                </small>
+              </div>
+              <div>
+                <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
+          ) : (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Unit Type</label>
+                <TypeAndUnitPicker
+                  unitInfo={unitInfo}
+                  setUnitInfo={setUnitInfo}
+                  setStdPlan={setStdPlan}
+                  setInputs={setInputs}
+                  setCurrency={setCurrency}
+                  setFeeSchedule={setFeeSchedule}
+                />
+                <small style={styles.metaText}>
+                  Choose a type to view available inventory. Selecting a unit will set price and details automatically.
+                </small>
+              </div>
+              <div>
+                <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Description</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Floor (<span style={styles.arInline}>[[الدور]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.floor} onChange={e => setUnitInfo(s => ({ ...s, floor: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Building Number (<span style={styles.arInline}>[[مبنى رقم]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.building_number} onChange={e => setUnitInfo(s => ({ ...s, building_number: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Block / Sector (<span style={styles.arInline}>[[قطاع]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.block_sector} onChange={e => setUnitInfo(s => ({ ...s, block_sector: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Zone / Neighborhood (<span style={styles.arInline}>[[مجاورة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.zone} onChange={e => setUnitInfo(s => ({ ...s, zone: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Garden Details (<span style={styles.arInline}>[[مساحة الحديقة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.garden_details} onChange={e => setUnitInfo(s => ({ ...s, garden_details: e.target.value }))} placeholder='مثال: "و حديقة بمساحة ٥٠ م٢"' />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Unit Description</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
-            </div>
-            <div>
-              <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Floor (<span style={styles.arInline}>[[الدور]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.floor} onChange={e => setUnitInfo(s => ({ ...s, floor: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Building Number (<span style={styles.arInline}>[[مبنى رقم]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.building_number} onChange={e => setUnitInfo(s => ({ ...s, building_number: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Block / Sector (<span style={styles.arInline}>[[قطاع]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.block_sector} onChange={e => setUnitInfo(s => ({ ...s, block_sector: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Zone / Neighborhood (<span style={styles.arInline}>[[مجاورة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.zone} onChange={e => setUnitInfo(s => ({ ...s, zone: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Garden Details (<span style={styles.arInline}>[[مساحة الحديقة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.garden_details} onChange={e => setUnitInfo(s => ({ ...s, garden_details: e.target.value }))} placeholder='مثال: "و حديقة بمساحة ٥٠ م٢"' />
-            </div>
-          </div>
+          )}
         </section>
 
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Contract & Financial Details</h2>
-          <div style={styles.grid2}>
-            <div>
-              <label style={styles.label}>Reservation Form Date (<span style={styles.arInline}>[[تاريخ استمارة الحجز]]</span>)</label>
-              <input type="date" style={styles.input()} value={contractInfo.reservation_form_date} onChange={e => setContractInfo(s => ({ ...s, reservation_form_date: e.target.value }))} />
+        {(role === 'financial_admin' || role === 'financial_manager' || role === 'contract_manager' || role === 'contract_person') && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Contract & Financial Details</h2>
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Reservation Form Date (<span style={styles.arInline}>[[تاريخ استمارة الحجز]]</span>)</label>
+                <input type="date" style={styles.input()} value={contractInfo.reservation_form_date} onChange={e => setContractInfo(s => ({ ...s, reservation_form_date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Contract Date (<span style={styles.arInline}>[[تاريخ العقد]]</span>)</label>
+                <input type="date" style={styles.input()} value={contractInfo.contract_date} onChange={e => setContractInfo(s => ({ ...s, contract_date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Reservation Payment Amount (<span style={styles.arInline}>[[قيمة دفعة الحجز]]</span>)</label>
+                <input type="number" style={styles.input()} value={contractInfo.reservation_payment_amount} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_amount: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Reservation Payment Date (<span style={styles.arInline}>[[تاريخ سداد دفعة الحجز]]</span>)</label>
+                <input type="date" style={styles.input()} value={contractInfo.reservation_payment_date} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Maintenance Fee (<span style={styles.arInline}>[[مصاريف الصيانة بالأرقام]]</span>)</label>
+                <input type="number" style={styles.input()} value={contractInfo.maintenance_fee} onChange={e => setContractInfo(s => ({ ...s, maintenance_fee: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Delivery Period (<span style={styles.arInline}>[[مدة التسليم]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>Contract Date (<span style={styles.arInline}>[[تاريخ العقد]]</span>)</label>
-              <input type="date" style={styles.input()} value={contractInfo.contract_date} onChange={e => setContractInfo(s => ({ ...s, contract_date: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Reservation Payment Amount (<span style={styles.arInline}>[[قيمة دفعة الحجز]]</span>)</label>
-              <input type="number" style={styles.input()} value={contractInfo.reservation_payment_amount} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_amount: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Reservation Payment Date (<span style={styles.arInline}>[[تاريخ سداد دفعة الحجز]]</span>)</label>
-              <input type="date" style={styles.input()} value={contractInfo.reservation_payment_date} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_date: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Maintenance Fee (<span style={styles.arInline}>[[مصاريف الصيانة بالأرقام]]</span>)</label>
-              <input type="number" style={styles.input()} value={contractInfo.maintenance_fee} onChange={e => setContractInfo(s => ({ ...s, maintenance_fee: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Delivery Period (<span style={styles.arInline}>[[مدة التسليم]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
-            </div>
-          </div>
 
-          <div style={{ marginTop: 12, borderTop: '1px dashed #ead9bd', paddingTop: 12 }}>
-            <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Additional Fees Schedule (not included in PV)</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-              <div>
-                <label style={styles.label}>Maintenance Amount</label>
-                <input type="number" style={styles.input()} value={feeSchedule.maintenancePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentAmount: e.target.value }))} placeholder="e.g. 150000" />
+            <div style={{ marginTop: 12, borderTop: '1px dashed #ead9bd', paddingTop: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Additional Fees Schedule (not included in PV)</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={styles.label}>Maintenance Amount</label>
+                  <input type="number" style={styles.input()} value={feeSchedule.maintenancePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentAmount: e.target.value }))} placeholder="e.g. 150000" />
+                </div>
+                <div>
+                  <label style={styles.label}>Maintenance Due Month (from contract date)</label>
+                  <input type="number" min="0" style={styles.input()} value={feeSchedule.maintenancePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentMonth: e.target.value }))} placeholder="e.g. 0 for at contract" />
+                </div>
+                <div>
+                  <label style={styles.label}>Garage Amount</label>
+                  <input type="number" style={styles.input()} value={feeSchedule.garagePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentAmount: e.target.value }))} placeholder="e.g. 200000" />
+                </div>
+                <div>
+                  <label style={styles.label}>Garage Due Month (from contract date)</label>
+                  <input type="number" min="0" style={styles.input()} value={feeSchedule.garagePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentMonth: e.target.value }))} placeholder="e.g. 12" />
+                </div>
               </div>
-              <div>
-                <label style={styles.label}>Maintenance Due Month (from contract date)</label>
-                <input type="number" min="0" style={styles.input()} value={feeSchedule.maintenancePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentMonth: e.target.value }))} placeholder="e.g. 0 for at contract" />
-              </div>
-              <div>
-                <label style={styles.label}>Garage Amount</label>
-                <input type="number" style={styles.input()} value={feeSchedule.garagePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentAmount: e.target.value }))} placeholder="e.g. 200000" />
-              </div>
-              <div>
-                <label style={styles.label}>Garage Due Month (from contract date)</label>
-                <input type="number" min="0" style={styles.input()} value={feeSchedule.garagePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentMonth: e.target.value }))} placeholder="e.g. 12" />
-              </div>
+              <small style={styles.metaText}>These fees will be appended to the generated schedule with dates based on the contract date (or reservation form date if contract date is empty). They are not part of PV calculation.</small>
             </div>
-            <small style={styles.metaText}>These fees will be appended to the generated schedule with dates based on the contract date (or reservation form date if contract date is empty). They are not part of PV calculation.</small>
-          </div>
-        </section>
+          </section>
+        )}
 
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Custom Text Notes</h2>
-          <div>
-            <label style={styles.label}>Down Payment Explanation (<span style={styles.arInline}>[[بيان الباقي من دفعة التعاقد]]</span>)</label>
-            <textarea dir="auto" style={styles.textarea()} value={customNotes.dp_explanation} onChange={e => setCustomNotes(s => ({ ...s, dp_explanation: e.target.value }))} placeholder='مثال: "يسدد الباقي على شيكين"' />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <label style={styles.label}>Power of Attorney Clause (<span style={styles.arInline}>[[بيان التوكيل]]</span>)</label>
-            <textarea style={styles.textarea()} value={customNotes.poa_clause} onChange={e => setCustomNotes(s => ({ ...s, poa_clause: e.target.value }))} placeholder='بنود قانونية خاصة إن وجدت' />
-          </div>
-        </section>
+        {(role === 'contract_manager' || role === 'contract_person') && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Custom Text Notes</h2>
+            <div>
+              <label style={styles.label}>Down Payment Explanation (<span style={styles.arInline}>[[بيان الباقي من دفعة التعاقد]]</span>)</label>
+              <textarea dir="auto" style={styles.textarea()} value={customNotes.dp_explanation} onChange={e => setCustomNotes(s => ({ ...s, dp_explanation: e.target.value }))} placeholder='مثال: "يسدد الباقي على شيكين"' />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <label style={styles.label}>Power of Attorney Clause (<span style={styles.arInline}>[[بيان التوكيل]]</span>)</label>
+              <textarea style={styles.textarea()} value={customNotes.poa_clause} onChange={e => setCustomNotes(s => ({ ...s, poa_clause: e.target.value }))} placeholder='بنود قانونية خاصة إن وجدت' />
+            </div>
+          </section>
+        )}
 
         {/* Results Table */}
         <section style={styles.section}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={styles.sectionTitle}>Payment Schedule</h2>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {/* Pricing Form generation — Property Consultant only */}
+              {/* Pricing Form — Property Consultant only */}
               {authUser?.role === 'property_consultant' && (
                 <button
                   type="button"
                   onClick={() => generateDocument('pricing_form')}
-                  disabled={docLoading}
-                  style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
+                  style={styles.btnPrimary}
                 >
-                  {docLoading ? 'Generating…' : 'Generate Pricing Form'}
+                  Generate Pricing Form
                 </button>
               )}
               {/* Reservation Form — Financial team only */}
@@ -1380,21 +1428,19 @@ export default function App(props) {
                 <button
                   type="button"
                   onClick={() => generateDocument('reservation_form')}
-                  disabled={docLoading}
-                  style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
+                  style={styles.btnPrimary}
                 >
-                  {docLoading ? 'Generating…' : 'Generate Reservation Form'}
+                  Generate Reservation Form
                 </button>
               )}
-              {/* Contract generation — Contracts team only */}
+              {/* Contract — Contracts team only */}
               {(authUser?.role === 'contract_manager' || authUser?.role === 'contract_person') && (
                 <button
                   type="button"
                   onClick={() => generateDocument('contract')}
-                  disabled={docLoading}
-                  style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
+                  style={styles.btnPrimary}
                 >
-                  {docLoading ? 'Generating…' : 'Generate Contract'}
+                  Generate Contract
                 </button>
               )}
               <button type="button" onClick={exportScheduleXLSX} disabled={!schedule.length} style={styles.btn}>
