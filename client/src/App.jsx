@@ -238,6 +238,22 @@ export default function App(props) {
   const [docLoading, setDocLoading] = useState(false)
   const [docError, setDocError] = useState('')
 
+  // Centrally-managed payment thresholds (loaded from API)
+  const [thresholdsCfg, setThresholdsCfg] = useState({})
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const resp = await fetchWithAuth(`${API_URL}/api/config/payment-thresholds`)
+        const data = await resp.json()
+        if (mounted && resp.ok) {
+          setThresholdsCfg(data.thresholds || {})
+        }
+      } catch {}
+    })()
+    return () => { mounted = false }
+  }, [])
+
   // Load persisted state
   useEffect(() => {
     try {
@@ -958,13 +974,8 @@ export default function App(props) {
     const secondYearPercent = pct(secondYearNominal, totalsNominal)
     const handoverPercent = pct(handoverNominal, totalsNominal)
 
-    // Optional thresholds from localStorage
-    let thresholds = {}
-    try {
-      const raw = localStorage.getItem('uptown_thresholds')
-      if (raw) thresholds = JSON.parse(raw) || {}
-    } catch {}
-
+    // Use centrally-loaded thresholds
+    const thresholds = thresholdsCfg || {}
     const check = (value, min, max) => {
       if (min == null && max == null) return null
       if (min != null && Number(value) < Number(min)) return false
@@ -991,7 +1002,7 @@ export default function App(props) {
       secondYearPass: check(secondYearPercent, thresholds.secondYearPercentMin, thresholds.secondYearPercentMax),
       handoverPass: check(handoverPercent, thresholds.handoverPercentMin, thresholds.handoverPercentMax)
     }
-  }, [stdPlan, preview, inputs, firstYearPayments, subsequentYears, genResult])
+  }, [stdPlan, preview, inputs, firstYearPayments, subsequentYears, genResult, thresholdsCfg])
     const stdPV = Number(stdPlan.calculatedPV ?? 0)
     const stdRate = Number(stdPlan.financialDiscountRate ?? 0)
     const offerPV = Number((preview && preview.calculatedPV) ?? 0)
@@ -1505,7 +1516,7 @@ export default function App(props) {
               )}
             </div>
           </div>
-          <small style={styles.metaText}>Thresholds are optional. You can set them in localStorage key “uptown_thresholds”, e.g. {"{"}"firstYearPercentMin": 10, "secondYearPercentMin": 15, "handoverPercentMax": 5{"}"}.</small>
+          <small style={styles.metaText}>Thresholds are centrally managed and loaded from the server. Contact an admin to update them.</small>
         </section>
 
         {/* Data Entry UI — New Sections */}
