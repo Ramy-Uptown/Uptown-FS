@@ -113,20 +113,22 @@ export default function BrandHeader({ title, onLogout }) {
     const queuesLink = { label: `Queues${queueCount ? ` (${queueCount})` : ''}`, href: '/deals/queues' }
     switch (role) {
       case 'superadmin':
-        return [
-          { label: 'Users', href: '/admin/users' },
-          { label: 'Sales Team', href: '/admin/sales' },
-          { label: 'Contracts Team', href: '/admin/contracts-team' },
-          { label: 'Finance Team', href: '/admin/finance-team' },
-          { label: 'Commission Policies', href: '/admin/commission-policies' }
-        ]
-      case 'admin':
-        return [
-          { label: 'Users', href: '/admin/users' },
-          { label: 'Sales Team', href: '/admin/sales' },
-          { label: 'Contracts Team', href: '/admin/contracts-team' },
-          { label: 'Finance Team', href: '/admin/finance-team' }
-        ]
+        return [
+          { label: 'Users', href: '/admin/users' },
+          { label: 'Sales Team', href: '/admin/sales' },
+          { label: 'Contracts Team', href: '/admin/contracts-team' },
+          { label: 'Finance Team', href: '/admin/finance-team' },
+          { label: 'Commission Policies', href: '/admin/commission-policies' },
+          { label: 'Payment Thresholds', href: '/admin/payment-thresholds' }
+        ]
+      case 'admin':
+        return [
+          { label: 'Users', href: '/admin/users' },
+          { label: 'Sales Team', href: '/admin/sales' },
+          { label: 'Contracts Team', href: '/admin/contracts-team' },
+          { label: 'Finance Team', href: '/admin/finance-team' },
+          { label: 'Payment Thresholds', href: '/admin/payment-thresholds' }
+        ]
       case 'financial_manager':
         return [
           ...base,
