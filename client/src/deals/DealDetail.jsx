@@ -130,6 +130,7 @@ export default function DealDetail() {
       if (!snap) return alert('No saved calculator details found.')
       const body = {
         documentType,
+        deal_id: Number(deal.id),
         language: snap.language,
         currency: snap.currency,
         mode: snap.mode,
@@ -434,6 +435,7 @@ export default function DealDetail() {
         </div>
       )}
 
+      {/* Actions — restrict printing offer until approved */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {canEdit && !editCalc && <button onClick={() => setEditCalc(true)} style={btn}>Edit in Calculator</button>}
         {canSubmit && <button onClick={async () => {
@@ -447,8 +449,31 @@ export default function DealDetail() {
           await load()
         }} style={btnPrimary}>Submit for Approval</button>}
         <button onClick={printSchedule} style={btn}>Print Schedule</button>
-        <button onClick={() => generateDocFromSaved('pricing_form')} style={btn}>Generate Pricing Form (PDF)</button>
-        <button onClick={() => generateDocFromSaved('contract')} style={btn}>Generate Contract (PDF)</button>
+        {/* Pricing Form (Offer) — Property Consultant only and after Sales Manager approval */}
+        {(role === 'property_consultant' && deal.status === 'approved') && (
+          <button
+            onClick={() => generateDocFromSaved('pricing_form')}
+            style={btn}
+          >
+            Print Offer (Pricing Form PDF)
+          </button>
+        )}
+        {(role === 'financial_admin' && deal.status === 'approved') && (
+          <button
+            onClick={() => generateDocFromSaved('reservation_form')}
+            style={btn}
+          >
+            Generate Reservation Form (PDF)
+          </button>
+        )}
+        {(role === 'contract_person' && deal.status === 'approved') && (
+          <button
+            onClick={() => generateDocFromSaved('contract')}
+            style={btn}
+          >
+            Generate Contract (PDF)
+          </button>
+        )}
         <button onClick={generateChecksSheetFromSaved} style={btn}>Generate Checks Sheet (.xlsx)</button>
         <button onClick={async () => {
           if (!deal.sales_rep_id) return alert('Assign a Sales Rep first.')

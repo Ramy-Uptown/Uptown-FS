@@ -153,7 +153,7 @@ export default function App(props) {
     splitFirstYearPayments: false
   })
 
-  // Current user (for role-based hints)
+  // Current user (for role-based UI and hints)
   const [authUser, setAuthUser] = useState(null)
   useEffect(() => {
     try {
@@ -161,6 +161,7 @@ export default function App(props) {
       if (raw) setAuthUser(JSON.parse(raw))
     } catch {}
   }, [])
+  const role = authUser?.role
 
   // Dynamic arrays
   const [firstYearPayments, setFirstYearPayments] = useState([])
@@ -236,6 +237,22 @@ export default function App(props) {
   // Document generation state
   const [docLoading, setDocLoading] = useState(false)
   const [docError, setDocError] = useState('')
+
+  // Centrally-managed payment thresholds (loaded from API)
+  const [thresholdsCfg, setThresholdsCfg] = useState({})
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const resp = await fetchWithAuth(`${API_URL}/api/config/payment-thresholds`)
+        const data = await resp.json()
+        if (mounted && resp.ok) {
+          setThresholdsCfg(data.thresholds || {})
+        }
+      } catch {}
+    })()
+    return () => { mounted = false }
+  }, [])
 
   // Load persisted state
   useEffect(() => {
@@ -384,7 +401,9 @@ export default function App(props) {
                 ...s,
                 unit_type: u.unit_type || s.unit_type,
                 unit_code: u.code || s.unit_code,
+                unit_number: s.unit_number,
                 description: u.description || s.description,
+                unit_id: u.id
               }))
               if (setFeeSchedule) {
                 setFeeSchedule(fs => ({
@@ -523,6 +542,8 @@ export default function App(props) {
   function buildPayload() {
     return {
       mode,
+      // Pass unitId so server can load approved standard for this unit for comparison
+      unitId: Number(unitInfo.unit_id) || undefined,
       stdPlan: {
         totalPrice: Number(stdPlan.totalPrice),
         financialDiscountRate: Number(stdPlan.financialDiscountRate),
@@ -903,6 +924,122 @@ export default function App(props) {
     }
   }, [preview])
 
+  // Comparison: Approved Standard PV vs Current Offer PV
+  const comparison = useMemo(() => {
+    const stdPV = Number(stdPlan.calculatedPV ?? 0)
+    const stdRate = Number(stdPlan.financialDiscountRate ?? 0)
+    const offerPV = Number((preview && preview.calculatedPV) ?? 0)
+    const discountPercent = Number(inputs.salesDiscountPercent ?? 0)
+    const deltaPV = offerPV - stdPV
+    const deltaPercentPV = stdPV ? (deltaPV / stdPV) * 100 : 0
+
+    // Payment structure metrics (percentages of total nominal)
+    const totalsNominal = Number(
+      (preview && preview.totalNominalPrice) ??
+      (genResult && genResult.totals && genResult.totals.totalNominal) ??
+      0
+    )
+
+    // First year sum (if split)
+    let firstYearNominal = 0
+    if (inputs.splitFirstYearPayments) {
+      for (const p of (firstYearPayments || [])) {
+        firstYearNominal += Number(p?.amount) || 0
+      }
+    } else {
+      // If not split, treat down payment as first-year component for percentage context
+      const dpBase = Number(stdPlan.totalPrice) || totalsNominal || 0
+      const actualDP = inputs.dpType === 'percentage'
+        ? dpBase * ((Number(inputs.downPaymentValue) || 0) / 100)
+        : (Number(inputs.downPaymentValue) || 0)
+      firstYearNominal = actualDP
+    }
+
+    // Subsequent year 1 (Year 2 if split) — take first entry in subsequentYears
+    let secondYearNominal = 0
+    if (Array.isArray(subsequentYears) && subsequentYears.length > 0) {
+      secondYearNominal = Number(subsequentYears[0]?.totalNominal) || 0
+    }
+
+    const handoverNominal = Number(inputs.additionalHandoverPayment) || 0
+
+    const pct = (part, total) => {
+      const t = Number(total) || 0
+      const p = Number(part) || 0
+      if (!t || t <= 0) return 0
+      return (p / t) * 100
+    }
+
+    const firstYearPercent = pct(firstYearNominal, totalsNominal)
+    const secondYearPercent = pct(secondYearNominal, totalsNominal)
+    const handoverPercent = pct(handoverNominal, totalsNominal)
+
+    // Use centrally-loaded thresholds
+    const thresholds = thresholdsCfg || {}
+    const check = (value, min, max) => {
+      if (min == null && max == null) return null
+      if (min != null && Number(value) < Number(min)) return false
+      if (max != null && Number(value) > Number(max)) return false
+      return true
+    }
+
+    const pvPass = Number(offerPV || 0) >= Number(stdPV || 0)
+    const fyPass = check(firstYearPercent, thresholds.firstYearPercentMin, thresholds.firstYearPercentMax)
+    const syPass = check(secondYearPercent, thresholds.secondYearPercentMin, thresholds.secondYearPercentMax)
+    const hoPass = check(handoverPercent, thresholds.handoverPercentMin, thresholds.handoverPercentMax)
+
+    // Overall acceptability: PV must be >= standard AND all defined thresholds must pass
+    const overallAcceptable =
+      pvPass &&
+      (fyPass !== false) &&
+      (syPass !== false) &&
+      (hoPass !== false)
+
+    return {
+      stdPV,
+      stdRate,
+      offerPV,
+      discountPercent,
+      deltaPV,
+      deltaPercentPV,
+      totalsNominal,
+      firstYearNominal,
+      secondYearNominal,
+      handoverNominal,
+      firstYearPercent,
+      secondYearPercent,
+      handoverPercent,
+      thresholds,
+      firstYearPass: fyPass,
+      secondYearPass: syPass,
+      handoverPass: hoPass,
+      pvPass,
+      overallAcceptable
+    }
+  }, [stdPlan, preview, inputs, firstYearPayments, subsequentYears, genResult, thresholdsCfg])
+    const stdPV = Number(stdPlan.calculatedPV ?? 0)
+    const stdRate = Number(stdPlan.financialDiscountRate ?? 0)
+    const offerPV = Number((preview && preview.calculatedPV) ?? 0)
+    const discountPercent = Number(inputs.salesDiscountPercent ?? 0)
+    const deltaPV = offerPV - stdPV
+    constotalNominal) ??
+      0
+    )
+    const offerPV = Number((preview && preview.calculatedPV) ?? 0)
+    const discountPercent = Number(inputs.salesDiscountPercent ?? 0)
+    const deltaNominal = offerNominal - stdNominal
+    const deltaPercent = stdNominal ? (deltaNominal / stdNominal) * 100 : 0
+    return {
+      stdNominal,
+      stdRate,
+      offerNominal,
+      offerPV,
+      discountPercent,
+      deltaNominal,
+      deltaPercent
+    }
+  }, [unitPricingBreakdown, stdPlan, preview, genResult, inputs])
+
   // --- Handlers for dynamic arrays ---
   function addFirstYearPayment() {
     setFirstYearPayments(s => [...s, { amount: 0, month: 1, type: 'regular' }])
@@ -1199,187 +1336,469 @@ export default function App(props) {
           </form>
         </section>
 
+        {/* Standard vs Offer PV Comparison */}
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Standard PV vs Offer PV</h2>
+
+          {/* Overall acceptability (PV + thresholds) */}
+          {(() => {
+            const ok = !!comparison.overallAcceptable
+            const box = {
+              marginBottom: 12,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: `1px solid ${ok ? '#10b981' : '#ef4444'}`,
+              background: ok ? '#ecfdf5' : '#fef2f2',
+              color: ok ? '#065f46' : '#7f1d1d',
+              fontWeight: 600
+            }
+            return (
+              <div style={box}>
+                {ok ? 'Offer Acceptable' : 'Offer Not Acceptable'} — requires:
+                <span style={{ marginLeft: 8, fontWeight: 500 }}>
+                  PV ≥ Standard, First Year within threshold, Second Year within threshold, Handover within threshold
+                </span>
+              </div>
+            )
+          })()}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12, background: '#fbfaf7' }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Approved Standard</h3>
+              <ul style={{ margin: 0, paddingLeft: 16 }}>
+                <li>Calculated PV (Standard): {Number(comparison.stdPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
+                <li>Financial Discount Rate: {Number(comparison.stdRate || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</li>
+              </ul>
+              <small style={styles.metaText}>
+                Pulled from approved standard pricing for the selected unit/type.
+              </small>
+            </div>
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12, background: '#fff' }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Current Offer</h3>
+              <ul style={{ margin: 0, paddingLeft: 16 }}>
+                <li>Calculated PV (Offer): {Number(comparison.offerPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
+                <li>Sales Discount Applied: {Number(comparison.discountPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</li>
+              </ul>
+              {(() => {
+                const good = !!comparison.pvPass
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${good ? '#10b981' : '#ef4444'}`,
+                  background: good ? '#ecfdf5' : '#fef2f2',
+                  color: good ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: good ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{good ? 'Offer PV ≥ Standard PV' : 'Offer PV < Standard PV'}</span>
+                  </div>
+                )
+              })()}
+              <div style={{
+                marginTop: 8,
+                padding: 8,
+                borderRadius: 8,
+                background: '#f6efe3',
+                border: '1px solid #ead9bd'
+              }}>
+                <strong>PV Difference vs Standard:</strong>
+                <div>
+                  Delta PV: {Number(comparison.deltaPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} ({Number(comparison.deltaPercentPV || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%)
+                </div>
+              </div>
+            </div>
+          </div>
+          <small style={styles.metaText}>
+            Generate a plan to update the offer PV. The comparison uses the latest preview/generation results.
+          </small>
+        </section>
+
+        {/* Payment Structure Metrics vs Thresholds */}
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Payment Structure Metrics</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            {/* First Year */}
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>First Year</h3>
+              <div>Nominal: {Number(comparison.firstYearNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <div>Percent of Total: {Number(comparison.firstYearPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
+              {comparison.firstYearPass !== null && (() => {
+                const pass = comparison.firstYearPass
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
+                  background: pass ? '#ecfdf5' : '#fef2f2',
+                  color: pass ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: pass ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
+                  </div>
+                )
+              })()}
+              {comparison.thresholds?.firstYearPercentMin != null && (
+                <small style={styles.metaText}>Min: {Number(comparison.thresholds.firstYearPercentMin).toLocaleString()}%</small>
+              )}
+              {comparison.thresholds?.firstYearPercentMax != null && (
+                <small style={styles.metaText}>Max: {Number(comparison.thresholds.firstYearPercentMax).toLocaleString()}%</small>
+              )}
+            </div>
+
+            {/* Second Year */}
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Second Year</h3>
+              <div>Nominal: {Number(comparison.secondYearNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <div>Percent of Total: {Number(comparison.secondYearPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
+              {comparison.secondYearPass !== null && (() => {
+                const pass = comparison.secondYearPass
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
+                  background: pass ? '#ecfdf5' : '#fef2f2',
+                  color: pass ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: pass ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
+                  </div>
+                )
+              })()}
+              {comparison.thresholds?.secondYearPercentMin != null && (
+                <small style={styles.metaText}>Min: {Number(comparison.thresholds.secondYearPercentMin).toLocaleString()}%</small>
+              )}
+              {comparison.thresholds?.secondYearPercentMax != null && (
+                <small style={styles.metaText}>Max: {Number(comparison.thresholds.secondYearPercentMax).toLocaleString()}%</small>
+              )}
+            </div>
+
+            {/* Handover */}
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Handover</h3>
+              <div>Nominal: {Number(comparison.handoverNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <div>Percent of Total: {Number(comparison.handoverPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
+              {comparison.handoverPass !== null && (() => {
+                const pass = comparison.handoverPass
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
+                  background: pass ? '#ecfdf5' : '#fef2f2',
+                  color: pass ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: pass ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
+                  </div>
+                )
+              })()}
+              {(comparison.thresholds?.handoverPercentMin != null || comparison.thresholds?.handoverPercentMax != null) && (
+                <small style={styles.metaText}>
+                  {comparison.thresholds?.handoverPercentMin != null ? `Min: ${Number(comparison.thresholds.handoverPercentMin).toLocaleString()}%` : ''}
+                  {comparison.thresholds?.handoverPercentMax != null ? `  Max: ${Number(comparison.thresholds.handoverPercentMax).toLocaleString()}%` : ''}
+                </small>
+              )}
+            </div>
+          </div>
+          <small style={styles.metaText}>Thresholds are centrally managed and loaded from the server. Contact an admin to update them.</small>
+        </section>
+
         {/* Data Entry UI — New Sections */}
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Client Information</h2>
-          <div style={styles.grid2}>
-            <div>
-              <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
+          {role === 'property_consultant' ? (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
+                <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>Nationality (<span style={styles.arInline}>[[الجنسية]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={clientInfo.nationality} onChange={e => setClientInfo(s => ({ ...s, nationality: e.target.value }))} />
+          ) : (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Nationality (<span style={styles.arInline}>[[الجنسية]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.nationality} onChange={e => setClientInfo(s => ({ ...s, nationality: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>National ID / Passport No. (<span style={styles.arInline}>[[رقم قومي/ رقم جواز]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.id_or_passport} onChange={e => setClientInfo(s => ({ ...s, id_or_passport: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>ID/Passport Issue Date (<span style={styles.arInline}>[[تاريخ الاصدار]]</span>)</label>
+                <input type="date" style={styles.input()} value={clientInfo.id_issue_date} onChange={e => setClientInfo(s => ({ ...s, id_issue_date: e.target.value }))} />
+              </div>
+              <div style={styles.blockFull}>
+                <label style={styles.label}>Address (<span style={styles.arInline}>[[العنوان]]</span>)</label>
+                <textarea dir="auto" style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
+                <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Secondary Phone No. (<span style={styles.arInline}>[[رقم الهاتف (2)]]</span>)</label>
+                <input style={styles.input()} value={clientInfo.phone_secondary} onChange={e => setClientInfo(s => ({ ...s, phone_secondary: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Email Address (<span style={styles.arInline}>[[البريد الالكتروني]]</span>)</label>
+                <input type="email" style={styles.input()} value={clientInfo.email} onChange={e => setClientInfo(s => ({ ...s, email: e.target.value }))} />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>National ID / Passport No. (<span style={styles.arInline}>[[رقم قومي/ رقم جواز]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={clientInfo.id_or_passport} onChange={e => setClientInfo(s => ({ ...s, id_or_passport: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>ID/Passport Issue Date (<span style={styles.arInline}>[[تاريخ الاصدار]]</span>)</label>
-              <input type="date" style={styles.input()} value={clientInfo.id_issue_date} onChange={e => setClientInfo(s => ({ ...s, id_issue_date: e.target.value }))} />
-            </div>
-            <div style={styles.blockFull}>
-              <label style={styles.label}>Address (<span style={styles.arInline}>[[العنوان]]</span>)</label>
-              <textarea dir="auto" style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
-              <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Secondary Phone No. (<span style={styles.arInline}>[[رقم الهاتف (2)]]</span>)</label>
-              <input style={styles.input()} value={clientInfo.phone_secondary} onChange={e => setClientInfo(s => ({ ...s, phone_secondary: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Email Address (<span style={styles.arInline}>[[البريد الالكتروني]]</span>)</label>
-              <input type="email" style={styles.input()} value={clientInfo.email} onChange={e => setClientInfo(s => ({ ...s, email: e.target.value }))} />
-            </div>
-          </div>
+          )}
         </section>
 
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Unit & Project Information</h2>
-          <div style={styles.grid2}>
-            <div>
-              <label style={styles.label}>Unit Type</label>
-              <TypeAndUnitPicker
-                unitInfo={unitInfo}
-                setUnitInfo={setUnitInfo}
-                setStdPlan={setStdPlan}
-                setInputs={setInputs}
-                setCurrency={setCurrency}
-                setFeeSchedule={setFeeSchedule}
-              />
-              <small style={styles.metaText}>
-                Choose a type to view available inventory. Selecting a unit will set price and details automatically.
-              </small>
+          {role === 'property_consultant' ? (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Unit Type</label>
+                <TypeAndUnitPicker
+                  unitInfo={unitInfo}
+                  setUnitInfo={setUnitInfo}
+                  setStdPlan={setStdPlan}
+                  setInputs={setInputs}
+                  setCurrency={setCurrency}
+                  setFeeSchedule={setFeeSchedule}
+                />
+                <small style={styles.metaText}>
+                  Choose a type to view available inventory. Selecting a unit will set price and details automatically.
+                </small>
+              </div>
+              <div>
+                <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
+          ) : (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Unit Type</label>
+                <TypeAndUnitPicker
+                  unitInfo={unitInfo}
+                  setUnitInfo={setUnitInfo}
+                  setStdPlan={setStdPlan}
+                  setInputs={setInputs}
+                  setCurrency={setCurrency}
+                  setFeeSchedule={setFeeSchedule}
+                />
+                <small style={styles.metaText}>
+                  Choose a type to view available inventory. Selecting a unit will set price and details automatically.
+                </small>
+              </div>
+              <div>
+                <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Description</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Floor (<span style={styles.arInline}>[[الدور]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.floor} onChange={e => setUnitInfo(s => ({ ...s, floor: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Building Number (<span style={styles.arInline}>[[مبنى رقم]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.building_number} onChange={e => setUnitInfo(s => ({ ...s, building_number: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Block / Sector (<span style={styles.arInline}>[[قطاع]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.block_sector} onChange={e => setUnitInfo(s => ({ ...s, block_sector: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Zone / Neighborhood (<span style={styles.arInline}>[[مجاورة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.zone} onChange={e => setUnitInfo(s => ({ ...s, zone: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Garden Details (<span style={styles.arInline}>[[مساحة الحديقة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.garden_details} onChange={e => setUnitInfo(s => ({ ...s, garden_details: e.target.value }))} placeholder='مثال: "و حديقة بمساحة ٥٠ م٢"' />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Unit Description</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
-            </div>
-            <div>
-              <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Floor (<span style={styles.arInline}>[[الدور]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.floor} onChange={e => setUnitInfo(s => ({ ...s, floor: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Building Number (<span style={styles.arInline}>[[مبنى رقم]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.building_number} onChange={e => setUnitInfo(s => ({ ...s, building_number: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Block / Sector (<span style={styles.arInline}>[[قطاع]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.block_sector} onChange={e => setUnitInfo(s => ({ ...s, block_sector: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Zone / Neighborhood (<span style={styles.arInline}>[[مجاورة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.zone} onChange={e => setUnitInfo(s => ({ ...s, zone: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Garden Details (<span style={styles.arInline}>[[مساحة الحديقة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.garden_details} onChange={e => setUnitInfo(s => ({ ...s, garden_details: e.target.value }))} placeholder='مثال: "و حديقة بمساحة ٥٠ م٢"' />
-            </div>
-          </div>
+          )}
         </section>
 
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Contract & Financial Details</h2>
-          <div style={styles.grid2}>
-            <div>
-              <label style={styles.label}>Reservation Form Date (<span style={styles.arInline}>[[تاريخ استمارة الحجز]]</span>)</label>
-              <input type="date" style={styles.input()} value={contractInfo.reservation_form_date} onChange={e => setContractInfo(s => ({ ...s, reservation_form_date: e.target.value }))} />
+        {(role === 'financial_admin' || role === 'financial_manager' || role === 'contract_manager' || role === 'contract_person') && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Contract & Financial Details</h2>
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Reservation Form Date (<span style={styles.arInline}>[[تاريخ استمارة الحجز]]</span>)</label>
+                <input type="date" style={styles.input()} value={contractInfo.reservation_form_date} onChange={e => setContractInfo(s => ({ ...s, reservation_form_date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Contract Date (<span style={styles.arInline}>[[تاريخ العقد]]</span>)</label>
+                <input type="date" style={styles.input()} value={contractInfo.contract_date} onChange={e => setContractInfo(s => ({ ...s, contract_date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Reservation Payment Amount (<span style={styles.arInline}>[[قيمة دفعة الحجز]]</span>)</label>
+                <input type="number" style={styles.input()} value={contractInfo.reservation_payment_amount} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_amount: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Reservation Payment Date (<span style={styles.arInline}>[[تاريخ سداد دفعة الحجز]]</span>)</label>
+                <input type="date" style={styles.input()} value={contractInfo.reservation_payment_date} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Maintenance Fee (<span style={styles.arInline}>[[مصاريف الصيانة بالأرقام]]</span>)</label>
+                <input type="number" style={styles.input()} value={contractInfo.maintenance_fee} onChange={e => setContractInfo(s => ({ ...s, maintenance_fee: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Delivery Period (<span style={styles.arInline}>[[مدة التسليم]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>Contract Date (<span style={styles.arInline}>[[تاريخ العقد]]</span>)</label>
-              <input type="date" style={styles.input()} value={contractInfo.contract_date} onChange={e => setContractInfo(s => ({ ...s, contract_date: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Reservation Payment Amount (<span style={styles.arInline}>[[قيمة دفعة الحجز]]</span>)</label>
-              <input type="number" style={styles.input()} value={contractInfo.reservation_payment_amount} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_amount: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Reservation Payment Date (<span style={styles.arInline}>[[تاريخ سداد دفعة الحجز]]</span>)</label>
-              <input type="date" style={styles.input()} value={contractInfo.reservation_payment_date} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_date: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Maintenance Fee (<span style={styles.arInline}>[[مصاريف الصيانة بالأرقام]]</span>)</label>
-              <input type="number" style={styles.input()} value={contractInfo.maintenance_fee} onChange={e => setContractInfo(s => ({ ...s, maintenance_fee: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Delivery Period (<span style={styles.arInline}>[[مدة التسليم]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
-            </div>
-          </div>
 
-          <div style={{ marginTop: 12, borderTop: '1px dashed #ead9bd', paddingTop: 12 }}>
-            <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Additional Fees Schedule (not included in PV)</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-              <div>
-                <label style={styles.label}>Maintenance Amount</label>
-                <input type="number" style={styles.input()} value={feeSchedule.maintenancePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentAmount: e.target.value }))} placeholder="e.g. 150000" />
+            <div style={{ marginTop: 12, borderTop: '1px dashed #ead9bd', paddingTop: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Additional Fees Schedule (not included in PV)</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={styles.label}>Maintenance Amount</label>
+                  <input type="number" style={styles.input()} value={feeSchedule.maintenancePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentAmount: e.target.value }))} placeholder="e.g. 150000" />
+                </div>
+                <div>
+                  <label style={styles.label}>Maintenance Due Month (from contract date)</label>
+                  <input type="number" min="0" style={styles.input()} value={feeSchedule.maintenancePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentMonth: e.target.value }))} placeholder="e.g. 0 for at contract" />
+                </div>
+                <div>
+                  <label style={styles.label}>Garage Amount</label>
+                  <input type="number" style={styles.input()} value={feeSchedule.garagePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentAmount: e.target.value }))} placeholder="e.g. 200000" />
+                </div>
+                <div>
+                  <label style={styles.label}>Garage Due Month (from contract date)</label>
+                  <input type="number" min="0" style={styles.input()} value={feeSchedule.garagePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentMonth: e.target.value }))} placeholder="e.g. 12" />
+                </div>
               </div>
-              <div>
-                <label style={styles.label}>Maintenance Due Month (from contract date)</label>
-                <input type="number" min="0" style={styles.input()} value={feeSchedule.maintenancePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentMonth: e.target.value }))} placeholder="e.g. 0 for at contract" />
-              </div>
-              <div>
-                <label style={styles.label}>Garage Amount</label>
-                <input type="number" style={styles.input()} value={feeSchedule.garagePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentAmount: e.target.value }))} placeholder="e.g. 200000" />
-              </div>
-              <div>
-                <label style={styles.label}>Garage Due Month (from contract date)</label>
-                <input type="number" min="0" style={styles.input()} value={feeSchedule.garagePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentMonth: e.target.value }))} placeholder="e.g. 12" />
-              </div>
+              <small style={styles.metaText}>These fees will be appended to the generated schedule with dates based on the contract date (or reservation form date if contract date is empty). They are not part of PV calculation.</small>
             </div>
-            <small style={styles.metaText}>These fees will be appended to the generated schedule with dates based on the contract date (or reservation form date if contract date is empty). They are not part of PV calculation.</small>
-          </div>
-        </section>
+          </section>
+        )}
 
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Custom Text Notes</h2>
-          <div>
-            <label style={styles.label}>Down Payment Explanation (<span style={styles.arInline}>[[بيان الباقي من دفعة التعاقد]]</span>)</label>
-            <textarea dir="auto" style={styles.textarea()} value={customNotes.dp_explanation} onChange={e => setCustomNotes(s => ({ ...s, dp_explanation: e.target.value }))} placeholder='مثال: "يسدد الباقي على شيكين"' />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <label style={styles.label}>Power of Attorney Clause (<span style={styles.arInline}>[[بيان التوكيل]]</span>)</label>
-            <textarea style={styles.textarea()} value={customNotes.poa_clause} onChange={e => setCustomNotes(s => ({ ...s, poa_clause: e.target.value }))} placeholder='بنود قانونية خاصة إن وجدت' />
-          </div>
-        </section>
+        {(role === 'contract_manager' || role === 'contract_person') && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Custom Text Notes</h2>
+            <div>
+              <label style={styles.label}>Down Payment Explanation (<span style={styles.arInline}>[[بيان الباقي من دفعة التعاقد]]</span>)</label>
+              <textarea dir="auto" style={styles.textarea()} value={customNotes.dp_explanation} onChange={e => setCustomNotes(s => ({ ...s, dp_explanation: e.target.value }))} placeholder='مثال: "يسدد الباقي على شيكين"' />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <label style={styles.label}>Power of Attorney Clause (<span style={styles.arInline}>[[بيان التوكيل]]</span>)</label>
+              <textarea style={styles.textarea()} value={customNotes.poa_clause} onChange={e => setCustomNotes(s => ({ ...s, poa_clause: e.target.value }))} placeholder='بنود قانونية خاصة إن وجدت' />
+            </div>
+          </section>
+        )}
 
         {/* Results Table */}
         <section style={styles.section}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={styles.sectionTitle}>Payment Schedule</h2>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => generateDocument('pricing_form')}
-                disabled={docLoading}
-                style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
-              >
-                {docLoading ? 'Generating…' : 'Generate Pricing Form'}
-              </button>
-              <button
-                type="button"
-                onClick={() => generateDocument('contract')}
-                disabled={docLoading}
-                style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
-              >
-                {docLoading ? 'Generating…' : 'Generate Contract'}
-              </button>
+              {/* Pricing Form — Property Consultant only */}
+              {authUser?.role === 'property_consultant' && (
+                <button
+                  type="button"
+                  onClick={() => generateDocument('pricing_form')}
+                  style={styles.btnPrimary}
+                >
+                  Generate Pricing Form
+                </button>
+              )}
+              {/* Reservation Form — Financial Admin only */}
+              {authUser?.role === 'financial_admin' && (
+                <button
+                  type="button"
+                  onClick={() => generateDocument('reservation_form')}
+                  style={styles.btnPrimary}
+                >
+                  Generate Reservation Form
+                </button>
+              )}
+              {/* Contract — Contract Person only */}
+              {authUser?.role === 'contract_person' && (
+                <button
+                  type="button"
+                  onClick={() => generateDocument('contract')}
+                  style={styles.btnPrimary}
+                >
+                  Generate Contract
+                </button>
+              )}
               <button type="button" onClick={exportScheduleXLSX} disabled={!schedule.length} style={styles.btn}>
                 Export to Excel (.xlsx)
               </button>

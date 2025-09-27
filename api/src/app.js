@@ -27,6 +27,7 @@ import workflowRoutes from './workflowRoutes.js'
 import inventoryRoutes from './inventoryRoutes.js'
 import reportsRoutes from './reportsRoutes.js'
 import pricingRoutes from './pricingRoutes.js' // THIS LINE IS NEW
+import configRoutes from './configRoutes.js'
 
 // NEW IMPORTS - Add these
 import roleManagementRoutes from './roleManagement.js'
@@ -100,6 +101,7 @@ app.use('/api/workflow', workflowRoutes)
 app.use('/api/inventory', inventoryRoutes)
 app.use('/api/reports', reportsRoutes)
 app.use('/api/pricing', pricingRoutes) // THIS LINE IS NEW
+app.use('/api/config', configRoutes)
 
 // NEW ROUTE REGISTRATIONS - Add these
 app.use('/api/roles', roleManagementRoutes)
@@ -672,79 +674,140 @@ app.post('/api/generate-plan', async (req, res) => {
  * - Service will also add *_words fields for numeric values in data using the requested language
  */
 app.post('/api/generate-document', async (req, res) => {
-  try {
-    const { templateName, data, language, currency } = req.body || {}
+  try {
+    let { templateName, documentType, deal_id, data, language, currency } = req.body || {}
+    const role = req.user?.role
 
-    if (!templateName || typeof templateName !== 'string') {
-      return bad(res, 400, 'templateName is required and must be a string')
-    }
-    if (!isObject(data)) {
-      return bad(res, 400, 'data must be an object with key/value pairs for placeholders')
-    }
+    // Accept either templateName or documentType; enforce role-based rules when documentType is used
+    const type = documentType && String(documentType).trim()
+    // Accept either explicit "data" or the entire body as data if not provided
+    let docData = isObject(data) ? data : (isObject(req.body) ? { ...req.body } : null)
+    if (!docData) {
+      return bad(res, 400, 'data must be an object with key/value pairs for placeholders')
+    }
+    // Remove control keys from docData so they don't appear as placeholders
+    delete docData.templateName
+    delete docData.documentType
+    delete docData.deal_id
 
-    const lang = String(language || 'en').toLowerCase().startsWith('ar') ? 'ar' : 'en'
+    // Role-based access control and default template mapping
+    const TYPE_RULES = {
+      pricing_form: {
+        allowedRoles: ['property_consultant', 'sales_manager'],
+        defaultTemplate: 'pricing_form.docx'
+      },
+      reservation_form: {
+        allowedRoles: ['financial_admin'],
+        defaultTemplate: 'reservation_form.docx'
+      },
+      contract: {
+        allowedRoles: ['contract_person'],
+        defaultTemplate: 'contract.docx'
+      }
+    }
 
-    // Resolve template path safely within /api/templates
-    const templatesDir = path.join(process.cwd(), 'api', 'templates')
-    const requestedPath = path.join(templatesDir, templateName)
-    if (!requestedPath.startsWith(templatesDir)) {
-      return bad(res, 400, 'Invalid template path')
-    }
-    if (!fs.existsSync(requestedPath)) {
-      return bad(res, 404, `Template not found: ${templateName}`)
-    }
+    if (type) {
+      const rules = TYPE_RULES[type]
+      if (!rules) {
+        return bad(res, 400, `Unknown documentType: ${type}`)
+      }
+      if (!rules.allowedRoles.includes(role)) {
+        return bad(res, 403, `Forbidden: role ${role} cannot generate ${type}`)
+      }
+      // If a deal_id is provided, ensure the deal is approved before allowing generation
+      if (deal_id != null) {
+        const id = Number(deal_id)
+        if (!Number.isFinite(id) || id <= 0) {
+          return bad(res, 400, 'deal_id must be a positive number')
+        }
+        const dq = await pool.query('SELECT status FROM deals WHERE id=$1', [id])
+        if (dq.rows.length === 0) {
+          return bad(res, 404, 'Deal not found')
+        }
+        if (dq.rows[0].status !== 'approved') {
+          return bad(res, 400, 'Deal must be approved before generating this document')
+        }
+        // Enforce override if required (acceptable criteria not met and override not approved)
+        const dealRow = dq.rows[0]
+        // If needs_override is true, require override_approved_at to be set
+        if (dealRow.needs_override === true && !dealRow.override_approved_at) {
+          return bad(res, 403, 'Top-Management override required before generating this document')
+        }
+      }
+      // Use default template if templateName not provided
+      if (!templateName) {
+        templateName = rules.defaultTemplate
+      }
+    } else {
+      // If not using documentType, require explicit templateName
+      if (!templateName || typeof templateName !== 'string') {
+        return bad(res, 400, 'Provide either documentType or templateName (string)')
+      }
+    }
 
-    // Build rendering data:
-    // - Original keys
-    // - For numeric fields, add "<key>_words" using the convertToWords helper
-    const renderData = { ...data }
-    for (const [k, v] of Object.entries(data)) {
-      const num = Number(v)
-      if (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && isFinite(num))) {
-        renderData[`${k}_words`] = convertToWords(num, lang, { currency })
-      }
-    }
+    const lang = String(language || 'en').toLowerCase().startsWith('ar') ? 'ar' : 'en'
 
-    // Read, compile and render the docx
-    const content = fs.readFileSync(requestedPath, 'binary')
-    const zip = new PizZip(content)
-    const doc = new Docxtemplater(zip, {
-      paragraphLoop: true,
-      linebreaks: true,
-      delimiters: { start: '<<', end: '>>' } // Autocrat-style placeholders
-    })
+    // Resolve template path safely within /api/templates
+    const templatesDir = path.join(process.cwd(), 'api', 'templates')
+    const requestedPath = path.join(templatesDir, templateName)
+    if (!requestedPath.startsWith(templatesDir)) {
+      return bad(res, 400, 'Invalid template path')
+    }
+    if (!fs.existsSync(requestedPath)) {
+      return bad(res, 404, `Template not found: ${templateName}`)
+    }
 
-    doc.setData(renderData)
-    try {
-      doc.render()
-    } catch (e) {
-      console.error('Docxtemplater render error:', e)
-      return bad(res, 400, 'Failed to render document. Check placeholders and provided data.')
-    }
+    // Build rendering data:
+    // - Original keys
+    // - For numeric fields, add "<key>_words" using the convertToWords helper
+    const renderData = { ...data }
+    for (const [k, v] of Object.entries(data)) {
+      const num = Number(v)
+      if (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && isFinite(num))) {
+        renderData[`${k}_words`] = convertToWords(num, lang, { currency })
+      }
+    }
 
-    const docxBuffer = doc.getZip().generate({ type: 'nodebuffer' })
-    // Convert the filled DOCX to PDF
-    let pdfBuffer
-    try {
-      pdfBuffer = await new Promise((resolve, reject) => {
-        libre.convert(docxBuffer, '.pdf', undefined, (err, done) => {
-          if (err) return reject(err)
-          resolve(done)
-        })
-      })
-    } catch (convErr) {
-      console.error('DOCX -> PDF conversion error:', convErr)
-      return bad(res, 500, 'Failed to convert DOCX to PDF')
-    }
+    // Read, compile and render the docx
+    const content = fs.readFileSync(requestedPath, 'binary')
+    const zip = new PizZip(content)
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      delimiters: { start: '<<', end: '>>' } // Autocrat-style placeholders
+    })
 
-    const outName = path.basename(templateName, path.extname(templateName)) + '-filled.pdf'
-    res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader('Content-Disposition', `attachment; filename="${outName}"`)
-    return res.send(pdfBuffer)
-  } catch (err) {
-    console.error('POST /api/generate-document error:', err)
-    return bad(res, 500, 'Internal error during document generation')
-  }
+    doc.setData(renderData)
+    try {
+      doc.render()
+    } catch (e) {
+      console.error('Docxtemplater render error:', e)
+      return bad(res, 400, 'Failed to render document. Check placeholders and provided data.')
+    }
+
+    const docxBuffer = doc.getZip().generate({ type: 'nodebuffer' })
+    // Convert the filled DOCX to PDF
+    let pdfBuffer
+    try {
+      pdfBuffer = await new Promise((resolve, reject) => {
+        libre.convert(docxBuffer, '.pdf', undefined, (err, done) => {
+          if (err) return reject(err)
+          resolve(done)
+        })
+      })
+    } catch (convErr) {
+      console.error('DOCX -> PDF conversion error:', convErr)
+      return bad(res, 500, 'Failed to convert DOCX to PDF')
+    }
+
+    const outName = path.basename(templateName, path.extname(templateName)) + '-filled.pdf'
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${outName}"`)
+    return res.send(pdfBuffer)
+  } catch (err) {
+    console.error('POST /api/generate-document error:', err)
+    return bad(res, 500, 'Internal error during document generation')
+  }
 })
 
 // Global error handler

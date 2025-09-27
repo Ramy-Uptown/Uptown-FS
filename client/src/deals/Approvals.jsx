@@ -56,8 +56,8 @@ export default function Approvals() {
     }
   }
 
-  if (!(role === 'manager' || role === 'admin')) {
-    return <p>Access denied. Manager role required.</p>
+  if (!(role === 'sales_manager' || role === 'admin')) {
+    return <p>Access denied. Sales Manager role required.</p>
   }
 
   return (
