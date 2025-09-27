@@ -434,6 +434,7 @@ export default function DealDetail() {
         </div>
       )}
 
+      {/* Actions — restrict printing offer until approved */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {canEdit && !editCalc && <button onClick={() => setEditCalc(true)} style={btn}>Edit in Calculator</button>}
         {canSubmit && <button onClick={async () => {
@@ -447,8 +448,23 @@ export default function DealDetail() {
           await load()
         }} style={btnPrimary}>Submit for Approval</button>}
         <button onClick={printSchedule} style={btn}>Print Schedule</button>
-        <button onClick={() => generateDocFromSaved('pricing_form')} style={btn}>Generate Pricing Form (PDF)</button>
-        <button onClick={() => generateDocFromSaved('contract')} style={btn}>Generate Contract (PDF)</button>
+        {/* Print Offer (Pricing Form) — enabled only after manager approval */}
+        <button
+          onClick={() => generateDocFromSaved('pricing_form')}
+          disabled={deal.status !== 'approved'}
+          title={deal.status !== 'approved' ? 'Manager approval required to print the offer' : ''}
+          style={{ ...btn, opacity: deal.status !== 'approved' ? 0.6 : 1 }}
+        >
+          Print Offer (Pricing Form PDF)
+        </button>
+        <button
+          onClick={() => generateDocFromSaved('contract')}
+          disabled={deal.status !== 'approved'}
+          title={deal.status !== 'approved' ? 'Manager approval required to generate the contract' : ''}
+          style={{ ...btn, opacity: deal.status !== 'approved' ? 0.6 : 1 }}
+        >
+          Generate Contract (PDF)
+        </button>
         <button onClick={generateChecksSheetFromSaved} style={btn}>Generate Checks Sheet (.xlsx)</button>
         <button onClick={async () => {
           if (!deal.sales_rep_id) return alert('Assign a Sales Rep first.')
