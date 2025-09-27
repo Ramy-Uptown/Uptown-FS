@@ -983,6 +983,18 @@ export default function App(props) {
       return true
     }
 
+    const pvPass = Number(offerPV || 0) >= Number(stdPV || 0)
+    const fyPass = check(firstYearPercent, thresholds.firstYearPercentMin, thresholds.firstYearPercentMax)
+    const syPass = check(secondYearPercent, thresholds.secondYearPercentMin, thresholds.secondYearPercentMax)
+    const hoPass = check(handoverPercent, thresholds.handoverPercentMin, thresholds.handoverPercentMax)
+
+    // Overall acceptability: PV must be >= standard AND all defined thresholds must pass
+    const overallAcceptable =
+      pvPass &&
+      (fyPass !== false) &&
+      (syPass !== false) &&
+      (hoPass !== false)
+
     return {
       stdPV,
       stdRate,
@@ -998,9 +1010,11 @@ export default function App(props) {
       secondYearPercent,
       handoverPercent,
       thresholds,
-      firstYearPass: check(firstYearPercent, thresholds.firstYearPercentMin, thresholds.firstYearPercentMax),
-      secondYearPass: check(secondYearPercent, thresholds.secondYearPercentMin, thresholds.secondYearPercentMax),
-      handoverPass: check(handoverPercent, thresholds.handoverPercentMin, thresholds.handoverPercentMax)
+      firstYearPass: fyPass,
+      secondYearPass: syPass,
+      handoverPass: hoPass,
+      pvPass,
+      overallAcceptable
     }
   }, [stdPlan, preview, inputs, firstYearPayments, subsequentYears, genResult, thresholdsCfg])
     const stdPV = Number(stdPlan.calculatedPV ?? 0)
@@ -1325,6 +1339,29 @@ export default function App(props) {
         {/* Standard vs Offer PV Comparison */}
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Standard PV vs Offer PV</h2>
+
+          {/* Overall acceptability (PV + thresholds) */}
+          {(() => {
+            const ok = !!comparison.overallAcceptable
+            const box = {
+              marginBottom: 12,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: `1px solid ${ok ? '#10b981' : '#ef4444'}`,
+              background: ok ? '#ecfdf5' : '#fef2f2',
+              color: ok ? '#065f46' : '#7f1d1d',
+              fontWeight: 600
+            }
+            return (
+              <div style={box}>
+                {ok ? 'Offer Acceptable' : 'Offer Not Acceptable'} — requires:
+                <span style={{ marginLeft: 8, fontWeight: 500 }}>
+                  PV ≥ Standard, First Year within threshold, Second Year within threshold, Handover within threshold
+                </span>
+              </div>
+            )
+          })()}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12, background: '#fbfaf7' }}>
               <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Approved Standard</h3>
@@ -1343,7 +1380,7 @@ export default function App(props) {
                 <li>Sales Discount Applied: {Number(comparison.discountPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</li>
               </ul>
               {(() => {
-                const good = Number(comparison.offerPV || 0) >= Number(comparison.stdPV || 0)
+                const good = !!comparison.pvPass
                 const badgeStyle = {
                   display: 'inline-flex',
                   alignItems: 'center',
