@@ -691,15 +691,15 @@ app.post('/api/generate-document', async (req, res) => {
     // Role-based access control and default template mapping
     const TYPE_RULES = {
       pricing_form: {
-        allowedRoles: ['property_consultant', 'sales_manager', 'admin', 'superadmin'],
+        allowedRoles: ['property_consultant', 'sales_manager'],
         defaultTemplate: 'pricing_form.docx'
       },
       reservation_form: {
-        allowedRoles: ['financial_admin', 'financial_manager', 'admin', 'superadmin'],
+        allowedRoles: ['financial_admin'],
         defaultTemplate: 'reservation_form.docx'
       },
       contract: {
-        allowedRoles: ['contract_manager', 'contract_person', 'admin', 'superadmin'],
+        allowedRoles: ['contract_person'],
         defaultTemplate: 'contract.docx'
       }
     }

@@ -458,7 +458,7 @@ export default function DealDetail() {
             Print Offer (Pricing Form PDF)
           </button>
         )}
-        {( (role === 'financial_admin' || role === 'financial_manager') && deal.status === 'approved') && (
+        {(role === 'financial_admin' && deal.status === 'approved') && (
           <button
             onClick={() => generateDocFromSaved('reservation_form')}
             style={btn}
@@ -466,7 +466,7 @@ export default function DealDetail() {
             Generate Reservation Form (PDF)
           </button>
         )}
-        {( (role === 'contract_manager' || role === 'contract_person') && deal.status === 'approved') && (
+        {(role === 'contract_person' && deal.status === 'approved') && (
           <button
             onClick={() => generateDocFromSaved('contract')}
             style={btn}

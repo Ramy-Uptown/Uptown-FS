@@ -1427,8 +1427,8 @@ export default function App(props) {
                   Generate Pricing Form
                 </button>
               )}
-              {/* Reservation Form — Financial team only */}
-              {(authUser?.role === 'financial_admin' || authUser?.role === 'financial_manager') && (
+              {/* Reservation Form — Financial Admin only */}
+              {authUser?.role === 'financial_admin' && (
                 <button
                   type="button"
                   onClick={() => generateDocument('reservation_form')}
@@ -1437,8 +1437,8 @@ export default function App(props) {
                   Generate Reservation Form
                 </button>
               )}
-              {/* Contract — Contracts team only */}
-              {(authUser?.role === 'contract_manager' || authUser?.role === 'contract_person') && (
+              {/* Contract — Contract Person only */}
+              {authUser?.role === 'contract_person' && (
                 <button
                   type="button"
                   onClick={() => generateDocument('contract')}
