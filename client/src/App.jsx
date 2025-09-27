@@ -1249,7 +1249,41 @@ export default function App(props) {
                 <li>Calculated PV (Offer): {Number(comparison.offerPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
                 <li>Sales Discount Applied: {Number(comparison.discountPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</li>
               </ul>
-              <div style={{ marginTop: 8, padding: 8, borderRadius: 8, background: '#f6efe3', border: '1px solid #ead9bd' }}>
+              {(() => {
+                const good = Number(comparison.offerPV || 0) >= Number(comparison.stdPV || 0)
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${good ? '#10b981' : '#ef4444'}`,
+                  background: good ? '#ecfdf5' : '#fef2f2',
+                  color: good ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: good ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{good ? 'Offer PV ≥ Standard PV' : 'Offer PV < Standard PV'}</span>
+                  </div>
+                )
+              })()}
+              <div style={{
+                marginTop: 8,
+                padding: 8,
+                borderRadius: 8,
+                background: '#f6efe3',
+                border: '1px solid #ead9bd'
+              }}>
                 <strong>PV Difference vs Standard:</strong>
                 <div>
                   Delta PV: {Number(comparison.deltaPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} ({Number(comparison.deltaPercentPV || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%)
