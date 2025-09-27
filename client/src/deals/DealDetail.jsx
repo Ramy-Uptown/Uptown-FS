@@ -130,6 +130,7 @@ export default function DealDetail() {
       if (!snap) return alert('No saved calculator details found.')
       const body = {
         documentType,
+        deal_id: Number(deal.id),
         language: snap.language,
         currency: snap.currency,
         mode: snap.mode,

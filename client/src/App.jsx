@@ -385,7 +385,9 @@ export default function App(props) {
                 ...s,
                 unit_type: u.unit_type || s.unit_type,
                 unit_code: u.code || s.unit_code,
+                unit_number: s.unit_number,
                 description: u.description || s.description,
+                unit_id: u.id
               }))
               if (setFeeSchedule) {
                 setFeeSchedule(fs => ({
@@ -524,6 +526,8 @@ export default function App(props) {
   function buildPayload() {
     return {
       mode,
+      // Pass unitId so server can load approved standard for this unit for comparison
+      unitId: Number(unitInfo.unit_id) || undefined,
       stdPlan: {
         totalPrice: Number(stdPlan.totalPrice),
         financialDiscountRate: Number(stdPlan.financialDiscountRate),
