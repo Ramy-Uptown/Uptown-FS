@@ -6,6 +6,7 @@ import Approvals from './Approvals.jsx'
 import DealDetail from './DealDetail.jsx'
 import BrandHeader from '../lib/BrandHeader.jsx'
 import PaymentPlanQueues from './PaymentPlanQueues.jsx'
+import InventoryList from './InventoryList.jsx'
 
 export default function DealsApp() {
   const handleLogout = async () => {
