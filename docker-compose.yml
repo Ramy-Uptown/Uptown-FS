@@ -19,8 +19,9 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
-      args:
-        NODE_VERSION: 20.18.0-alpine
+      # For local development, we target the 'development' stage to skip LibreOffice installation.
+      # For production builds, change this to 'production'.
+      target: development
     container_name: app_api
     ports:
       - "3000:3000"
@@ -47,8 +48,6 @@ services:
     build:
       context: ./client
       dockerfile: Dockerfile
-      args:
-        NODE_VERSION: 20.18.0-alpine
     container_name: app_client
     ports:
       - "5173:5173"

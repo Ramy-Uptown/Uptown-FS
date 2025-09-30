@@ -1,18 +1,21 @@
-FROM node:20-alpine
-
+# Base stage for both development and production
+FROM node:20-alpine AS base
 WORKDIR /app
+COPY package*.json ./
+RUN npm install
 
-# System dependencies for LibreOffice-based DOCX -> PDF conversion and fonts
+# Development stage (no LibreOffice)
+FROM base AS development
+COPY . .
+EXPOSE 3000
+CMD ["npm", "run", "dev"]
+
+# Production stage (with LibreOffice)
+FROM base AS production
 RUN apk add --no-cache \
     libreoffice \
     ttf-dejavu \
     fontconfig
-
-COPY package*.json ./
-RUN npm install
-
 COPY . .
-
 EXPOSE 3000
-
-CMD ["npm", "run", "dev"]
+CMD ["npm", "start"]
