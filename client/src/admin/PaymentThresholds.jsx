@@ -1,9 +1,18 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import BrandHeader from '../lib/BrandHeader.jsx'
 
 export default function PaymentThresholds() {
   const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const role = user?.role
+  const isTopMgmt = ['ceo', 'chairman', 'vice_chairman', 'top_management'].includes(role)
+  const headerTitle = isTopMgmt ? 'Payment Threshold Approvals' : 'Payment Thresholds'
+  const [selectedTab, setSelectedTab] = useState(isTopMgmt ? 'proposals' : 'active')
+  const tabs = useMemo(() => ([
+    { key: 'active', label: 'Active', disabled: false },
+    { key: 'proposals', label: 'Proposals', disabled: false },
+    { key: 'history', label: 'History', disabled: false }
+  ]), [isTopMgmt])
 
   const [thresholds, setThresholds] = useState({
     firstYearPercentMin: '',
@@ -21,6 +30,10 @@ export default function PaymentThresholds() {
   const [proposals, setProposals] = useState([])
   const [proposalsLoading, setProposalsLoading] = useState(false)
   const [proposalMsg, setProposalMsg] = useState('')
+
+  const [history, setHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyMsg, setHistoryMsg] = useState('')
 
   async function loadActive() {
     const resp = await fetchWithAuth(`${API_URL}/api/config/payment-thresholds`)
@@ -53,6 +66,30 @@ export default function PaymentThresholds() {
     }
   }
 
+  async function loadHistory() {
+    setHistoryLoading(true)
+    setHistoryMsg('')
+    try {
+      let resp = await fetchWithAuth(`${API_URL}/api/config/payment-thresholds/history`)
+      let data = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        resp = await fetchWithAuth(`${API_URL}/api/config/payment-thresholds/proposals?status=approved`)
+        data = await resp.json().catch(() => ({}))
+      }
+      if (resp.ok) {
+        const items = data.history || data.items || data.proposals || []
+        setHistory(items)
+      } else {
+        setHistory([])
+        setHistoryMsg(data?.error?.message || 'Could not load approvals history')
+      }
+    } catch (e) {
+      setHistoryMsg(e.message || String(e))
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
   useEffect(() => {
     let mounted = true
     ;(async () => {
@@ -64,20 +101,19 @@ export default function PaymentThresholds() {
       } finally {
         setLoading(false)
       }
-      // Load proposals for FM and top management roles
       if (['financial_manager', 'ceo', 'chairman', 'vice_chairman', 'top_management'].includes(role)) {
         loadProposals().catch(() => {})
+        loadHistory().catch(() => {})
       }
     })()
     return () => { mounted = false }
-  }, [])
+  }, [role])
 
   const onChange = (key) => (e) => {
     const val = e.target.value
     setThresholds(s => ({ ...s, [key]: val }))
   }
 
-  // Financial Manager: submit proposal
   async function submitProposal() {
     try {
       setSaving(true)
@@ -101,7 +137,6 @@ export default function PaymentThresholds() {
     }
   }
 
-  // Top Management: approve/reject
   async function actOnProposal(id, action) {
     try {
       setProposalMsg('')
@@ -125,97 +160,208 @@ export default function PaymentThresholds() {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2 style={{ marginTop: 0 }}>Payment Thresholds</h2>
-      <p style={{ color: '#64748b' }}>
-        Financial Manager proposes thresholds. Top Management approves or rejects. Active thresholds are shown and used by the calculator.
-      </p>
-
-      {loading ? <p>Loading...</p> : null}
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
-      {success ? <p style={{ color: '#10b981' }}>{success}</p> : null}
-
-      <h3 style={{ marginTop: 16 }}>Active Thresholds</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, maxWidth: 640 }}>
-        <div>
-          <label>First Year Min (%)</label>
-          <input type="number" step="0.01" value={thresholds.firstYearPercentMin} onChange={onChange('firstYearPercentMin')} style={inputStyle} disabled={role !== 'financial_manager'} />
-        </div>
-        <div>
-          <label>First Year Max (%)</label>
-          <input type="number" step="0.01" value={thresholds.firstYearPercentMax} onChange={onChange('firstYearPercentMax')} style={inputStyle} disabled={role !== 'financial_manager'} />
-        </div>
-        <div>
-          <label>Second Year Min (%)</label>
-          <input type="number" step="0.01" value={thresholds.secondYearPercentMin} onChange={onChange('secondYearPercentMin')} style={inputStyle} disabled={role !== 'financial_manager'} />
-        </div>
-        <div>
-          <label>Second Year Max (%)</label>
-          <input type="number" step="0.01" value={thresholds.secondYearPercentMax} onChange={onChange('secondYearPercentMax')} style={inputStyle} disabled={role !== 'financial_manager'} />
-        </div>
-        <div>
-          <label>Handover Min (%)</label>
-          <input type="number" step="0.01" value={thresholds.handoverPercentMin} onChange={onChange('handoverPercentMin')} style={inputStyle} disabled={role !== 'financial_manager'} />
-        </div>
-        <div>
-          <label>Handover Max (%)</label>
-          <input type="number" step="0.01" value={thresholds.handoverPercentMax} onChange={onChange('handoverPercentMax')} style={inputStyle} disabled={role !== 'financial_manager'} />
-        </div>
+    <>
+      <div style={{ marginBottom: 16 }}>
+        <BrandHeader
+          title={headerTitle}
+          onLogout={async () => {
+            try {
+              const rt = localStorage.getItem('refresh_token')
+              if (rt) {
+                await fetch(`${API_URL}/api/auth/logout`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ refreshToken: rt })
+                }).catch(() => {})
+              }
+            } finally {
+              localStorage.removeItem('auth_token')
+              localStorage.removeItem('refresh_token')
+              localStorage.removeItem('auth_user')
+              window.location.href = '/login'
+            }
+          }}
+        />
       </div>
-
-      {role === 'financial_manager' && (
-        <div style={{ marginTop: 16 }}>
-          <button onClick={submitProposal} disabled={saving} style={btnPrimaryStyle}>
-            {saving ? 'Submitting...' : 'Submit for Approval'}
-          </button>
+      <div style={{ padding: 20 }}>
+        <h2 style={{ marginTop: 0 }}>{headerTitle}</h2>
+        <p style={{ color: '#64748b' }}>
+          Financial Manager proposes thresholds. Top Management approves or rejects. Active thresholds are shown and used by the calculator.
+        </p>
+        <div style={{ marginTop: 12, borderBottom: '1px solid #e6eaf0', display: 'flex', gap: 8 }}>
+          {tabs.map(t => {
+            const active = selectedTab === t.key
+            const disabled = t.disabled
+            const muted = isTopMgmt && t.key === 'active'
+            const btnStyle = {
+              padding: '8px 12px',
+              border: 'none',
+              background: active ? '#f6efe3' : 'transparent',
+              color: muted ? '#94a3b8' : (active ? '#5b4630' : '#475569'),
+              opacity: muted ? 0.8 : 1,
+              borderBottom: active ? '3px solid #A97E34' : '3px solid transparent',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              fontWeight: active ? 700 : 500
+            }
+            return (
+              <button
+                key={t.key}
+                style={btnStyle}
+                onClick={() => !disabled && setSelectedTab(t.key)}
+                disabled={disabled}
+              >
+                {t.label}
+              </button>
+            )
+          })}
         </div>
-      )}
 
-      {['financial_manager', 'ceo', 'chairman', 'vice_chairman', 'top_management'].includes(role) && (
-        <div style={{ marginTop: 24 }}>
-          <h3 style={{ marginTop: 0 }}>Pending Proposals</h3>
-          {proposalsLoading ? <p>Loading proposals...</p> : null}
-          {proposalMsg ? <p style={{ color: '#e11d48' }}>{proposalMsg}</p> : null}
-          {proposals.length === 0 ? (
-            <p style={{ color: '#64748b' }}>No pending proposals.</p>
-          ) : (
-            <div style={{ border: '1px solid #e6eaf0', borderRadius: 10, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={th}>ID</th>
-                    <th style={th}>Proposed By</th>
-                    <th style={th}>Date</th>
-                    <th style={th}>Summary</th>
-                    {['ceo', 'chairman', 'vice_chairman', 'top_management'].includes(role) && <th style={th}>Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {proposals.map(p => (
-                    <tr key={p.id}>
-                      <td style={td}>{p.id}</td>
-                      <td style={td}>{p.proposed_by}</td>
-                      <td style={td}>{p.proposed_at ? new Date(p.proposed_at).toLocaleString() : ''}</td>
-                      <td style={td}>
-                        FY: {p.thresholds.firstYearPercentMin ?? '-'}–{p.thresholds.firstYearPercentMax ?? '-'}%,
-                        SY: {p.thresholds.secondYearPercentMin ?? '-'}–{p.thresholds.secondYearPercentMax ?? '-'}%,
-                        HO: {p.thresholds.handoverPercentMin ?? '-'}–{p.thresholds.handoverPercentMax ?? '-'}%
-                      </td>
-                      {['ceo', 'chairman', 'vice_chairman', 'top_management'].includes(role) && (
-                        <td style={td}>
-                          <button onClick={() => actOnProposal(p.id, 'approve')} style={btnGreen}>Approve</button>
-                          <button onClick={() => actOnProposal(p.id, 'reject')} style={btnRed}>Reject</button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {loading ? <p>Loading...</p> : null}
+        {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+        {success ? <p style={{ color: '#10b981' }}>{success}</p> : null}
+
+        {/* Active tab */}
+        {selectedTab === 'active' && (
+          <>
+            <h3 style={{ marginTop: 16 }}>Active Thresholds</h3>
+            <p style={{ color: '#64748b', marginTop: 0 }}>
+              {role === 'financial_manager'
+                ? 'Edit values and then switch to the Proposals tab to submit for approval.'
+                : 'Read-only view of current active thresholds.'}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, maxWidth: 640, opacity: role === 'financial_manager' ? 1 : 0.8 }}>
+              <div>
+                <label>First Year Min (%)</label>
+                <input type="number" step="0.01" value={thresholds.firstYearPercentMin} onChange={onChange('firstYearPercentMin')} style={{...inputStyle, background: role === 'financial_manager' ? '#fff' : '#f8fafc', color: role === 'financial_manager' ? '#111827' : '#94a3b8'}} disabled={role !== 'financial_manager'} />
+              </div>
+              <div>
+                <label>First Year Max (%)</label>
+                <input type="number" step="0.01" value={thresholds.firstYearPercentMax} onChange={onChange('firstYearPercentMax')} style={{...inputStyle, background: role === 'financial_manager' ? '#fff' : '#f8fafc', color: role === 'financial_manager' ? '#111827' : '#94a3b8'}} disabled={role !== 'financial_manager'} />
+              </div>
+              <div>
+                <label>Second Year Min (%)</label>
+                <input type="number" step="0.01" value={thresholds.secondYearPercentMin} onChange={onChange('secondYearPercentMin')} style={{...inputStyle, background: role === 'financial_manager' ? '#fff' : '#f8fafc', color: role === 'financial_manager' ? '#111827' : '#94a3b8'}} disabled={role !== 'financial_manager'} />
+              </div>
+              <div>
+                <label>Second Year Max (%)</label>
+                <input type="number" step="0.01" value={thresholds.secondYearPercentMax} onChange={onChange('secondYearPercentMax')} style={{...inputStyle, background: role === 'financial_manager' ? '#fff' : '#f8fafc', color: role === 'financial_manager' ? '#111827' : '#94a3b8'}} disabled={role !== 'financial_manager'} />
+              </div>
+              <div>
+                <label>Handover Min (%)</label>
+                <input type="number" step="0.01" value={thresholds.handoverPercentMin} onChange={onChange('handoverPercentMin')} style={{...inputStyle, background: role === 'financial_manager' ? '#fff' : '#f8fafc', color: role === 'financial_manager' ? '#111827' : '#94a3b8'}} disabled={role !== 'financial_manager'} />
+              </div>
+              <div>
+                <label>Handover Max (%)</label>
+                <input type="number" step="0.01" value={thresholds.handoverPercentMax} onChange={onChange('handoverPercentMax')} style={{...inputStyle, background: role === 'financial_manager' ? '#fff' : '#f8fafc', color: role === 'financial_manager' ? '#111827' : '#94a3b8'}} disabled={role !== 'financial_manager'} />
+              </div>
             </div>
-          )}
-        </div>
-      )}
-    </div>
+          </>
+        )}
+
+        {role === 'financial_manager' && selectedTab === 'active' && (
+          <div style={{ marginTop: 16 }}>
+            <button onClick={submitProposal} disabled={saving} style={btnPrimaryStyle}>
+              {saving ? 'Submitting...' : 'Submit for Approval'}
+            </button>
+          </div>
+        )}
+
+        {selectedTab === 'proposals' && ['financial_manager', 'ceo', 'chairman', 'vice_chairman', 'top_management'].includes(role) && (
+          <div style={{ marginTop: 24 }}>
+            <h3 style={{ marginTop: 0 }}>Pending Proposals</h3>
+            {role === 'financial_manager' && (
+              <div style={{ margin: '8px 0 16px 0', padding: '10px 12px', border: '1px dashed #ead9bd', borderRadius: 10, background: '#fbfaf7' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <div style={{ color: '#5b4630' }}>
+                    Review and submit the Active tab values for approval.
+                  </div>
+                  <button onClick={submitProposal} disabled={saving} style={btnPrimaryStyle}>
+                    {saving ? 'Submitting...' : 'Submit for Approval'}
+                  </button>
+                </div>
+              </div>
+            )}
+            {proposalsLoading ? <p>Loading proposals...</p> : null}
+            {proposalMsg ? <p style={{ color: '#e11d48' }}>{proposalMsg}</p> : null}
+            {proposals.length === 0 ? (
+              <p style={{ color: '#64748b' }}>No pending proposals.</p>
+            ) : (
+              <div style={{ border: '1px solid #e6eaf0', borderRadius: 10, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={th}>ID</th>
+                      <th style={th}>Proposed By</th>
+                      <th style={th}>Date</th>
+                      <th style={th}>Summary</th>
+                      {isTopMgmt && <th style={th}>Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {proposals.map(p => (
+                      <tr key={p.id}>
+                        <td style={td}>{p.id}</td>
+                        <td style={td}>{p.proposed_by}</td>
+                        <td style={td}>{p.proposed_at ? new Date(p.proposed_at).toLocaleString() : ''}</td>
+                        <td style={td}>
+                          FY: {p.thresholds.firstYearPercentMin ?? '-'}–{p.thresholds.firstYearPercentMax ?? '-'}%,
+                          SY: {p.thresholds.secondYearPercentMin ?? '-'}–{p.thresholds.secondYearPercentMax ?? '-'}%,
+                          HO: {p.thresholds.handoverPercentMin ?? '-'}–{p.thresholds.handoverPercentMax ?? '-'}%
+                        </td>
+                        {isTopMgmt && (
+                          <td style={td}>
+                            <button onClick={() => actOnProposal(p.id, 'approve')} style={btnGreen}>Approve</button>
+                            <button onClick={() => actOnProposal(p.id, 'reject')} style={btnRed}>Reject</button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedTab === 'history' && ['financial_manager', 'ceo', 'chairman', 'vice_chairman', 'top_management'].includes(role) && (
+          <div style={{ marginTop: 24 }}>
+            <h3 style={{ marginTop: 0 }}>Approvals History</h3>
+            {historyLoading ? <p>Loading history...</p> : null}
+            {historyMsg ? <p style={{ color: '#e11d48' }}>{historyMsg}</p> : null}
+            {(!history || history.length === 0) ? (
+              <p style={{ color: '#64748b' }}>No approved threshold records.</p>
+            ) : (
+              <div style={{ border: '1px solid #e6eaf0', borderRadius: 10, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={th}>ID</th>
+                      <th style={th}>Approved By</th>
+                      <th style={th}>Approved At</th>
+                      <th style={th}>Summary</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map(h => (
+                      <tr key={h.id || `${h.approved_at}-${h.approved_by || ''}`}>
+                        <td style={td}>{h.id ?? '-'}</td>
+                        <td style={td}>{h.approved_by || h.actor || '-'}</td>
+                        <td style={td}>{h.approved_at ? new Date(h.approved_at).toLocaleString() : (h.date ? new Date(h.date).toLocaleString() : '')}</td>
+                        <td style={td}>
+                          FY: {(h.thresholds?.firstYearPercentMin ?? h.firstYearPercentMin) ?? '-'}–{(h.thresholds?.firstYearPercentMax ?? h.firstYearPercentMax) ?? '-'}%,
+                          SY: {(h.thresholds?.secondYearPercentMin ?? h.secondYearPercentMin) ?? '-'}–{(h.thresholds?.secondYearPercentMax ?? h.secondYearPercentMax) ?? '-'}%,
+                          HO: {(h.thresholds?.handoverPercentMin ?? h.handoverPercentMin) ?? '-'}–{(h.thresholds?.handoverPercentMax ?? h.handoverPercentMax) ?? '-'}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div> {/* ✅ This was missing! */}
+    </> // ✅ And this fragment closes properly
   )
 }
 
