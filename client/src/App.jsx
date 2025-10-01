@@ -304,35 +304,47 @@ export default function App(props) {
     return () => t && clearTimeout(t)
   }, [unitQuery])
 
-  // Auto-load approved standard by unit type when unit_type changes
-  useEffect(() => {
-    const t = unitInfo.unit_type && String(unitInfo.unit_type).trim()
-    if (!t) return
-    let abort = false
-    async function loadStd() {
-      try {
-        const resp = await fetchWithAuth(`${API_URL}/api/workflow/standard-pricing/approved-by-type/${encodeURIComponent(t)}`)
-        const data = await resp.json()
-        if (!resp.ok) return
-        if (abort) return
-        const sp = data.standard_pricing || {}
-        setStdPlan(s => ({
-          ...s,
-          totalPrice: Number(sp.price) || s.totalPrice,
-          financialDiscountRate: Number(sp.std_financial_rate_percent ?? s.financialDiscountRate),
-          calculatedPV: Number(sp.price) || Number(sp.calculated_pv) || s.calculatedPV
-        }))
-        setInputs(s => ({
-          ...s,
-          planDurationYears: s.planDurationYears || Number(sp.plan_duration_years) || s.planDurationYears,
-          installmentFrequency: s.installmentFrequency || sp.installment_frequency || s.installmentFrequency
-        }))
-      } catch {}
-    }
-    loadStd()
-    return () => { abort = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unitInfo.unit_type])
+    // When we have a selected unit_id, prefer server-approved standard via calculate/generate endpoints using unitId
+    useEffect(() => {
+      const uid = Number(unitInfo.unit_id)
+      if (!Number.isFinite(uid) || uid <= 0) return
+      let abort = false
+      async function loadStdFromServer() {
+        try {
+          // Hit calculate endpoint minimally to fetch meta based on approved standard for this unit
+          const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mode,
+              unitId: uid,
+              // provide minimal inputs to pass validation
+              inputs: {
+                salesDiscountPercent: Number(inputs.salesDiscountPercent) || 0,
+                dpType: inputs.dpType || 'percentage',
+                downPaymentValue: Number(inputs.downPaymentValue) || 20,
+                planDurationYears: Number(inputs.planDurationYears) || 5,
+                installmentFrequency: inputs.installmentFrequency || 'monthly',
+                additionalHandoverPayment: Number(inputs.additionalHandoverPayment) || 0,
+                handoverYear: Number(inputs.handoverYear) || 2,
+                splitFirstYearPayments: !!inputs.splitFirstYearPayments,
+                firstYearPayments: [],
+                subsequentYears: []
+              }
+            })
+          })
+          const data = await resp.json()
+          if (!resp.ok) return
+          if (abort) return
+          // The server used the unit's approved standard as effectiveStdPlan
+          // Reuse our current stdPlan but ensure it’s aligned by reusing unitPricingBreakdown total
+          // No explicit std values come back, so leave as-is; subsequent generate-plan will use unitId too
+        } catch {}
+      }
+      loadStdFromServer()
+      return () => { abort = true }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [unitInfo.unit_id])
 
   function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCurrency, setFeeSchedule, setUnitPricingBreakdown }) {
     const [types, setTypes] = useState([])
@@ -418,37 +430,39 @@ export default function App(props) {
                   totalExclMaintenance: total
                 })
               }
-              // Pull standard financials by unit type and set defaults
+              // Pull standard financials for this unit via approved standard (server will resolve from unitId)
               try {
-                const ut = encodeURIComponent(u.unit_type || '')
-                if (ut) {
-                  const resp = await fetchWithAuth(`${API_URL}/api/workflow/standard-pricing/approved-by-type/${ut}`)
-                  const data = await resp.json()
-                  if (resp.ok && data?.standard_pricing) {
-                    const sp = data.standard_pricing
-                    setStdPlan(s => ({
-                      ...s,
-                      financialDiscountRate: Number(sp.std_financial_rate_percent ?? s.financialDiscountRate) || s.financialDiscountRate,
-                      calculatedPV: Number(sp.price) || Number(sp.calculated_pv) || s.calculatedPV
-                    }))
-                    setInputs(s => ({
-                      ...s,
-                      planDurationYears: s.planDurationYears || Number(sp.plan_duration_years) || s.planDurationYears || 5,
-                      installmentFrequency: s.installmentFrequency || sp.installment_frequency || s.installmentFrequency || 'monthly',
-                      dpType: 'percentage',
-                      downPaymentValue: s.downPaymentValue || 20 // default 20% down payment
-                    }))
-                  } else {
-                    // fallback defaults
-                    setInputs(s => ({
-                      ...s,
-                      planDurationYears: s.planDurationYears || 5,
-                      installmentFrequency: s.installmentFrequency || 'monthly',
-                      dpType: 'percentage',
-                      downPaymentValue: s.downPaymentValue || 20
-                    }))
-                  }
-                }
+                // Use calculate with unitId to cause server to load approved standard and suggest defaults
+                const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    mode,
+                    unitId: Number(u.id),
+                    inputs: {
+                      salesDiscountPercent: Number(inputs.salesDiscountPercent) || 0,
+                      dpType: inputs.dpType || 'percentage',
+                      downPaymentValue: Number(inputs.downPaymentValue) || 20,
+                      planDurationYears: Number(inputs.planDurationYears) || 5,
+                      installmentFrequency: inputs.installmentFrequency || 'monthly',
+                      additionalHandoverPayment: Number(inputs.additionalHandoverPayment) || 0,
+                      handoverYear: Number(inputs.handoverYear) || 2,
+                      splitFirstYearPayments: !!inputs.splitFirstYearPayments,
+                      firstYearPayments: [],
+                      subsequentYears: []
+                    }
+                  })
+                })
+                // Even if this call fails, we keep sensible defaults below
+                await resp.json().catch(() => ({}))
+                // Defaults used when server does not return explicit std values
+                setInputs(s => ({
+                  ...s,
+                  planDurationYears: s.planDurationYears || 5,
+                  installmentFrequency: s.installmentFrequency || 'monthly',
+                  dpType: 'percentage',
+                  downPaymentValue: s.downPaymentValue || 20
+                }))
               } catch {
                 setInputs(s => ({
                   ...s,

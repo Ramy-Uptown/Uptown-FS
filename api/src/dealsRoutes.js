@@ -332,12 +332,12 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
   }
 })
 
-// Approve (manager or admin only; pending_approval -> approved)
+// Approve (sales_manager or admin only; pending_approval -> approved)
 router.post('/:id/approve', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
     const role = req.user.role
-    if (!(role === 'manager' || role === 'admin')) return res.status(403).json({ error: { message: 'Manager role required' } })
+    if (!(role === 'sales_manager' || role === 'admin' || role === 'superadmin')) return res.status(403).json({ error: { message: 'Sales Manager role required' } })
 
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
@@ -425,13 +425,13 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
   }
 })
 
-// Reject (manager or admin only; pending_approval -> rejected)
+// Reject (sales_manager or admin only; pending_approval -> rejected)
 router.post('/:id/reject', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
     const { reason } = req.body || {}
     const role = req.user.role
-    if (!(role === 'manager' || role === 'admin')) return res.status(403).json({ error: { message: 'Manager role required' } })
+    if (!(role === 'sales_manager' || role === 'admin' || role === 'superadmin')) return res.status(403).json({ error: { message: 'Sales Manager role required' } })
 
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
