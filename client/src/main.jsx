@@ -3,8 +3,11 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import './App.css'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { ToastContainer } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
 import App from './App.jsx'
 import Login from './Login.jsx'
+import Register from './Register.jsx'
 import DealsApp from './deals/App.jsx'
 import Users from './admin/Users.jsx'
 import UserEdit from './admin/UserEdit.jsx'
@@ -78,6 +81,7 @@ createRoot(document.getElementById('root')).render(
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
         <Route
           path="/calculator"
           element={
@@ -276,6 +280,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/" element={<HomeRedirect />} />
         <Route path="*" element={<Navigate to="/deals" replace />} />
       </Routes>
+      <ToastContainer position="top-right" newestOnTop closeOnClick pauseOnHover />
     </BrowserRouter>
   </React.StrictMode>
 )
