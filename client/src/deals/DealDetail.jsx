@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 import CalculatorApp from '../App.jsx'
 import * as XLSX from 'xlsx'
 
@@ -11,6 +12,9 @@ export default function DealDetail() {
   const [history, setHistory] = useState([])
   const [error, setError] = useState('')
   const [editCalc, setEditCalc] = useState(false)
+  const [savingCalc, setSavingCalc] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [calcCommissionLoading, setCalcCommissionLoading] = useState(false)
   const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const role = user?.role || 'user'
 
@@ -29,6 +33,7 @@ export default function DealDetail() {
       setHistory(histData.history || [])
     } catch (e) {
       setError(e.message || String(e))
+      notifyError(e, 'Failed to load deal')
     }
   }
 
@@ -43,6 +48,8 @@ export default function DealDetail() {
   const [policies, setPolicies] = useState([])
   const [policiesError, setPoliciesError] = useState('')
   const [expandedNotes, setExpandedNotes] = useState({})
+  const [assigning, setAssigning] = useState(false)
+  const [settingPolicy, setSettingPolicy] = useState(false)
   useEffect(() => {
     async function loadAux() {
       try {
@@ -63,6 +70,7 @@ export default function DealDetail() {
 
   async function saveCalculator() {
     try {
+      setSavingCalc(true)
       const snapFn = window.__uptown_calc_getSnapshot
       if (typeof snapFn !== 'function') {
         throw new Error('Calculator not ready yet.')
@@ -87,9 +95,12 @@ export default function DealDetail() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to save')
       setEditCalc(false)
+      notifySuccess('Deal updated')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Failed to save')
+    } finally {
+      setSavingCalc(false)
     }
   }
 
@@ -127,7 +138,10 @@ export default function DealDetail() {
   async function generateDocFromSaved(documentType) {
     try {
       const snap = deal?.details?.calculator
-      if (!snap) return alert('No saved calculator details found.')
+      if (!snap) {
+        notifyError('No saved calculator details found.')
+        return
+      }
       const body = {
         documentType,
         deal_id: Number(deal.id),
@@ -149,11 +163,12 @@ export default function DealDetail() {
           const j = await resp.json()
           errMsg = j?.error?.message || errMsg
         } catch {}
-        return alert(errMsg)
+        notifyError(errMsg)
+        return
       }
       const blob = await resp.blob()
       const cd = resp.headers.get('Content-Disposition') || ''
-      const match = /filename\*=UTF-8''([^;]+)|filename=\\"?([^\\";]+)\\"?/i.exec(cd)
+      const match = /filename\*=UTF-8''([^;]+)|filename=\"?([^\\";]+)\"?/i.exec(cd)
       let filename = ''
       if (match) filename = decodeURIComponent(match[1] || match[2] || '')
       if (!filename) {
@@ -166,8 +181,9 @@ export default function DealDetail() {
       a.download = filename
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       URL.revokeObjectURL(url)
+      notifySuccess('Document generated')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Failed to generate document')
     }
   }
 
@@ -231,7 +247,8 @@ export default function DealDetail() {
     const snap = deal?.details?.calculator
     const plan = snap?.generatedPlan
     if (!plan || !Array.isArray(plan.schedule) || plan.schedule.length === 0) {
-      return alert('No saved schedule found to generate checks sheet.')
+      notifyError('No saved schedule found to generate checks sheet.')
+      return
     }
     const buyer = snap?.clientInfo?.buyer_name || ''
     const unit = snap?.unitInfo?.unit_code || snap?.unitInfo?.unit_number || ''
@@ -309,6 +326,7 @@ export default function DealDetail() {
     a.download = `checks_sheet_${ts}.xlsx`
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     URL.revokeObjectURL(url)
+    notifySuccess('Checks sheet generated')
   }
 
   return (
@@ -327,18 +345,33 @@ export default function DealDetail() {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
             <strong>Sales Rep:</strong>
             <select
-              disabled={!canEdit}
+              disabled={!canEdit || assigning}
               value={deal.sales_rep_id || ''}
               onChange={async (e) => {
                 const salesRepId = e.target.value ? Number(e.target.value) : null
-                const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ salesRepId })
-                })
-                const data = await resp.json()
-                if (!resp.ok) return alert(data?.error?.message || 'Failed to assign sales rep')
-                await load()
+                setAssigning(true)
+                // optimistic UI
+                setDeal(d => ({ ...d, sales_rep_id: salesRepId }))
+                try {
+                  const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ salesRepId })
+                  })
+                  const data = await resp.json()
+                  if (!resp.ok) {
+                    notifyError(data || { message: 'Failed to assign sales rep' })
+                    // revert optimistic update
+                    setDeal(d => ({ ...d, sales_rep_id: deal.sales_rep_id || null }))
+                  } else {
+                    notifySuccess('Sales rep assigned')
+                  }
+                } catch (err) {
+                  notifyError(err, 'Failed to assign sales rep')
+                  setDeal(d => ({ ...d, sales_rep_id: deal.sales_rep_id || null }))
+                } finally {
+                  setAssigning(false)
+                }
               }}
               style={{ padding: 8, borderRadius: 8, border: '1px solid #d1d9e6' }}
             >
@@ -353,18 +386,32 @@ export default function DealDetail() {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
             <strong>Commission Policy:</strong>
             <select
-              disabled={!canEdit}
+              disabled={!canEdit || settingPolicy}
               value={deal.policy_id || ''}
               onChange={async (e) => {
                 const policyId = e.target.value ? Number(e.target.value) : null
-                const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ policyId })
-                })
-                const data = await resp.json()
-                if (!resp.ok) return alert(data?.error?.message || 'Failed to set policy')
-                await load()
+                setSettingPolicy(true)
+                // optimistic
+                setDeal(d => ({ ...d, policy_id: policyId }))
+                try {
+                  const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ policyId })
+                  })
+                  const data = await resp.json()
+                  if (!resp.ok) {
+                    notifyError(data || { message: 'Failed to set policy' })
+                    setDeal(d => ({ ...d, policy_id: deal.policy_id || null }))
+                  } else {
+                    notifySuccess('Policy set')
+                  }
+                } catch (err) {
+                  notifyError(err, 'Failed to set policy')
+                  setDeal(d => ({ ...d, policy_id: deal.policy_id || null }))
+                } finally {
+                  setSettingPolicy(false)
+                }
               }}
               style={{ padding: 8, borderRadius: 8, border: '1px solid #d1d9e6' }}
             >
@@ -425,8 +472,8 @@ export default function DealDetail() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
             <h3 style={{ margin: 0 }}>Edit in Calculator</h3>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={saveCalculator} style={btnPrimary}>Save</button>
-              <button onClick={() => setEditCalc(false)} style={btn}>Cancel</button>
+              <button onClick={saveCalculator} disabled={savingCalc} style={btnPrimary}>{savingCalc ? 'Saving…' : 'Save'}</button>
+              <button onClick={() => setEditCalc(false)} disabled={savingCalc} style={btn}>Cancel</button>
             </div>
           </div>
           <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
@@ -441,13 +488,25 @@ export default function DealDetail() {
         {canSubmit && <button onClick={async () => {
           const savedPlan = deal?.details?.calculator?.generatedPlan
           if (!savedPlan || !Array.isArray(savedPlan.schedule) || savedPlan.schedule.length === 0) {
-            return alert('Please generate and save a payment plan before submitting.')
+            notifyError('Please generate and save a payment plan before submitting.')
+            return
           }
-          const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/submit`, { method: 'POST' })
-          const data = await resp.json()
-          if (!resp.ok) return alert(data?.error?.message || 'Submit failed')
-          await load()
-        }} style={btnPrimary}>Submit for Approval</button>}
+          setSubmitting(true)
+          try {
+            const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/submit`, { method: 'POST' })
+            const data = await resp.json()
+            if (!resp.ok) {
+              notifyError(data || { message: 'Submit failed' })
+            } else {
+              notifySuccess('Deal submitted')
+              await load()
+            }
+          } catch (err) {
+            notifyError(err, 'Submit failed')
+          } finally {
+            setSubmitting(false)
+          }
+        }} disabled={submitting} style={btnPrimary}>{submitting ? 'Submitting…' : 'Submit for Approval'}</button>}
         <button onClick={printSchedule} style={btn}>Print Schedule</button>
         {/* Pricing Form (Offer) — Property Consultant only and after Sales Manager approval */}
         {(role === 'property_consultant' && deal.status === 'approved') && (
@@ -476,16 +535,30 @@ export default function DealDetail() {
         )}
         <button onClick={generateChecksSheetFromSaved} style={btn}>Generate Checks Sheet (.xlsx)</button>
         <button onClick={async () => {
-          if (!deal.sales_rep_id) return alert('Assign a Sales Rep first.')
-          const resp = await fetchWithAuth(`${API_URL}/api/commissions/calc-and-save`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deal_id: deal.id, sales_person_id: deal.sales_rep_id })
-          })
-          const data = await resp.json()
-          if (!resp.ok) return alert(data?.error?.message || 'Failed to calculate commission')
-          alert(`Commission calculated: ${Number(data.commission.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`)
-        }} style={btn}>Calculate Commission</button>
+          if (!deal.sales_rep_id) {
+            notifyError('Assign a Sales Rep first.')
+            return
+          }
+          setCalcCommissionLoading(true)
+          try {
+            const resp = await fetchWithAuth(`${API_URL}/api/commissions/calc-and-save`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ deal_id: deal.id, sales_person_id: deal.sales_rep_id })
+            })
+            const data = await resp.json()
+            if (!resp.ok) {
+              notifyError(data || { message: 'Failed to calculate commission' })
+            } else {
+              notifySuccess(`Commission calculated: ${Number(data.commission.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`)
+              await load()
+            }
+          } catch (err) {
+            notifyError(err, 'Failed to calculate commission')
+          } finally {
+            setCalcCommissionLoading(false)
+          }
+        }} disabled={calcCommissionLoading} style={btn}>{calcCommissionLoading ? 'Calculating…' : 'Calculate Commission'}</button>
       </div>
 
       <h3>Audit Trail</h3>
