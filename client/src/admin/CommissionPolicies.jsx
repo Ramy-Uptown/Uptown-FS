@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { th, td, ctrl, btn, btnPrimary, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
 import BrandHeader from '../lib/BrandHeader.jsx'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 export default function CommissionPolicies() {
   const [list, setList] = useState([])
@@ -10,10 +13,11 @@ export default function CommissionPolicies() {
   const [total, setTotal] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [rowLoading, setRowLoading] = useState({})
+  const [saving, setSaving] = useState(false)
 
   const [form, setForm] = useState({ name: '', description: '', rules: '{ "type": "percentage", "rate": 2.5 }', active: true })
   const [editingId, setEditingId] = useState(0)
-  const [saving, setSaving] = useState(false)
 
   async function load(p = page) {
     try {
@@ -28,7 +32,9 @@ export default function CommissionPolicies() {
       setList(data.policies || [])
       setTotal(data.pagination?.total || 0)
     } catch (e) {
-      setError(e.message || String(e))
+      const msg = e.message || String(e)
+      setError(msg)
+      notifyError(e, 'Failed to load policies')
     } finally {
       setLoading(false)
     }
@@ -65,10 +71,11 @@ export default function CommissionPolicies() {
       }
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
+      notifySuccess(editingId ? 'Policy updated' : 'Policy created')
       resetForm()
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Save failed')
     } finally {
       setSaving(false)
     }
@@ -82,10 +89,19 @@ export default function CommissionPolicies() {
 
   async function remove(id) {
     if (!confirm('Delete this policy?')) return
-    const resp = await fetchWithAuth(`${API_URL}/api/commission-policies/${id}`, { method: 'DELETE' })
-    const data = await resp.json()
-    if (!resp.ok) return alert(data?.error?.message || 'Delete failed')
-    await load()
+    const key = `delete:${id}`
+    try {
+      setRowLoading(s => ({ ...s, [key]: true }))
+      const resp = await fetchWithAuth(`${API_URL}/api/commission-policies/${id}`, { method: 'DELETE' })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Delete failed')
+      notifySuccess('Policy deleted')
+      await load()
+    } catch (e) {
+      notifyError(e, 'Delete failed')
+    } finally {
+      setRowLoading(s => ({ ...s, [key]: false }))
+    }
   }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -126,8 +142,8 @@ export default function CommissionPolicies() {
             <textarea value={form.rules} onChange={e => setForm(s => ({ ...s, rules: e.target.value }))} rows={10} style={{ ...ctrl, fontFamily: 'monospace' }} />
           </div>
           <div>
-            <button type="submit" disabled={saving} style={btnPrimary}>{saving ? 'Saving…' : (editingId ? 'Update' : 'Create')}</button>
-            {editingId ? <button type="button" onClick={resetForm} style={btn}>Cancel</button> : null}
+            <LoadingButton type="submit" loading={saving} variant="primary">{saving ? 'Saving…' : (editingId ? 'Update' : 'Create')}</LoadingButton>
+            {editingId ? <LoadingButton type="button" onClick={resetForm}>Cancel</LoadingButton> : null}
           </div>
         </form>
 
@@ -145,15 +161,22 @@ export default function CommissionPolicies() {
               </tr>
             </thead>
             <tbody>
-              {list.map(r => (
+              {loading && (
+                <>
+                  {Array.from({ length: pageSize }).map((_, i) => (
+                    <SkeletonRow key={i} widths={['sm','lg','sm','lg','lg']} tdStyle={td} />
+                  ))}
+                </>
+              )}
+              {!loading && list.map(r => (
                 <tr key={r.id}>
                   <td style={td}>{r.id}</td>
                   <td style={td}>{r.name}</td>
                   <td style={td}>{r.active ? 'Yes' : 'No'}</td>
                   <td style={td}>{r.updated_at ? new Date(r.updated_at).toLocaleString() : ''}</td>
-                  <td style={td}>
-                    <button onClick={() => edit(r)} style={btn}>Edit</button>
-                    <button onClick={() => remove(r.id)} style={btn}>Delete</button>
+                  <td style={{ ...td, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <LoadingButton onClick={() => edit(r)}>Edit</LoadingButton>
+                    <LoadingButton onClick={() => remove(r.id)} loading={rowLoading[`delete:${r.id}`]}>Delete</LoadingButton>
                   </td>
                 </tr>
               ))}
@@ -171,10 +194,10 @@ export default function CommissionPolicies() {
             Page {page} of {totalPages} — {total} total
           </span>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={() => setPage(1)} disabled={page === 1} style={btn}>First</button>
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btn}>Prev</button>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={btn}>Next</button>
-            <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={btn}>Last</button>
+            <LoadingButton onClick={() => setPage(1)} disabled={page === 1 || loading}>First</LoadingButton>
+            <LoadingButton onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}>Prev</LoadingButton>
+            <LoadingButton onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading}>Next</LoadingButton>
+            <LoadingButton onClick={() => setPage(totalPages)} disabled={page === totalPages || loading}>Last</LoadingButton>
           </div>
         </div>
       </div>
