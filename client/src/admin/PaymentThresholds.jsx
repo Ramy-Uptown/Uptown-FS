@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import BrandHeader from '../lib/BrandHeader.jsx'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 export default function PaymentThresholds() {
   const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
@@ -57,10 +60,14 @@ export default function PaymentThresholds() {
       if (resp.ok) {
         setProposals(data.proposals || [])
       } else {
-        setProposalMsg(data?.error?.message || 'Could not load proposals')
+        const msg = data?.error?.message || 'Could not load proposals'
+        setProposalMsg(msg)
+        notifyError(msg)
       }
     } catch (e) {
-      setProposalMsg(e.message || String(e))
+      const msg = e.message || String(e)
+      setProposalMsg(msg)
+      notifyError(e, 'Could not load proposals')
     } finally {
       setProposalsLoading(false)
     }
@@ -80,11 +87,15 @@ export default function PaymentThresholds() {
         const items = data.history || data.items || data.proposals || []
         setHistory(items)
       } else {
+        const msg = data?.error?.message || 'Could not load approvals history'
         setHistory([])
-        setHistoryMsg(data?.error?.message || 'Could not load approvals history')
+        setHistoryMsg(msg)
+        notifyError(msg)
       }
     } catch (e) {
-      setHistoryMsg(e.message || String(e))
+      const msg = e.message || String(e)
+      setHistoryMsg(msg)
+      notifyError(e, 'Could not load approvals history')
     } finally {
       setHistoryLoading(false)
     }
@@ -129,17 +140,22 @@ export default function PaymentThresholds() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to submit proposal')
       setSuccess('Proposal submitted for approval')
+      notifySuccess('Proposal submitted for approval')
       await loadProposals()
     } catch (e) {
-      setError(e.message || String(e))
+      const msg = e.message || String(e)
+      setError(msg)
+      notifyError(e, 'Failed to submit proposal')
     } finally {
       setSaving(false)
     }
   }
 
+  const [rowLoading, setRowLoading] = useState({})
   async function actOnProposal(id, action) {
     try {
       setProposalMsg('')
+      setRowLoading(s => ({ ...s, [id]: true }))
       const resp = await fetchWithAuth(`${API_URL}/api/config/payment-thresholds/proposals/${id}/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -149,13 +165,19 @@ export default function PaymentThresholds() {
       if (!resp.ok) throw new Error(data?.error?.message || `Failed to ${action} proposal`)
       if (action === 'approve') {
         setSuccess('Proposal approved and thresholds updated')
+        notifySuccess('Proposal approved')
         await loadActive()
       } else {
         setSuccess('Proposal rejected')
+        notifySuccess('Proposal rejected')
       }
       await loadProposals()
     } catch (e) {
-      setProposalMsg(e.message || String(e))
+      const msg = e.message || String(e)
+      setProposalMsg(msg)
+      notifyError(e, `Failed to ${action} proposal`)
+    } finally {
+      setRowLoading(s => ({ ...s, [id]: false }))
     }
   }
 
@@ -275,9 +297,9 @@ export default function PaymentThresholds() {
                   <div style={{ color: '#5b4630' }}>
                     Review and submit the Active tab values for approval.
                   </div>
-                  <button onClick={submitProposal} disabled={saving} style={btnPrimaryStyle}>
+                  <LoadingButton onClick={submitProposal} loading={saving} style={btnPrimaryStyle}>
                     {saving ? 'Submitting...' : 'Submit for Approval'}
-                  </button>
+                 ton>
                 </div>
               </div>
             )}
