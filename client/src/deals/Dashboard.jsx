@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [deletingIds, setDeletingIds] = useState(new Set())
 
   async function load(p = page) {
     try {
@@ -100,6 +101,42 @@ export default function Dashboard() {
     checkQueue()
     return () => { mounted = false }
   }, [])
+
+  async function handleDelete(deal) {
+    const id = deal.id
+    // optimistic remove
+    const prevDeals = deals
+    setDeals(d => d.filter(x => x.id !== id))
+    setTotal(t => Math.max(0, t - 1))
+    setDeletingIds(s => new Set([...s, id]))
+    try {
+      const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, { method: 'DELETE' })
+      let msg = ''
+      try {
+        const j = await resp.json()
+        msg = j?.error?.message || ''
+      } catch {}
+      if (!resp.ok) {
+        // rollback
+        setDeals(prevDeals)
+        setTotal(t => t + 1)
+        notifyError({ message: msg || 'Failed to delete deal' })
+      } else {
+        notifySuccess('Deal deleted')
+      }
+    } catch (e) {
+      // rollback
+      setDeals(prevDeals)
+      setTotal(t => t + 1)
+      notifyError(e, 'Failed to delete deal')
+    } finally {
+      setDeletingIds(s => {
+        const next = new Set(s)
+        next.delete(id)
+        return next
+      })
+    }
+  }
 
   return (
     <div>
@@ -199,8 +236,15 @@ export default function Dashboard() {
                 <td style={td}>{d.unit_type || '-'}</td>
                 <td style={td}>{d.created_by_email || '-'}</td>
                 <td style={td}>{d.created_at ? new Date(d.created_at).toLocaleString() : ''}</td>
-                <td style={td}>
+                <td style={{ ...td, display: 'flex', gap: 8 }}>
                   <Link to={`/deals/${d.id}`} style={{ textDecoration: 'none', color: '#1f6feb' }}>View</Link>
+                  <LoadingButton
+                    onClick={() => handleDelete(d)}
+                    loading={deletingIds.has(d.id)}
+                    style={{ ...btn, border: '1px solid #dc2626', color: '#dc2626' }}
+                  >
+                    Delete
+                  </LoadingButton>
                 </td>
               </tr>
             ))}
