@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchWithAuth } from '../lib/apiClient.js';
+import { notifyError, notifySuccess } from '../lib/notifications.js';
+import LoadingButton from '../components/LoadingButton.jsx';
+import SkeletonRow from '../components/SkeletonRow.jsx';
 import { th, td, ctrl, btnPrimary, btnSuccess, btnDanger, tableWrap, table, pageContainer, pageTitle, errorText, metaText, btn } from '../lib/ui.js';
 import BrandHeader from '../lib/BrandHeader.jsx';
 
@@ -99,6 +102,7 @@ export default function StandardPricing() {
         setModels(items);
       } catch (e) {
         setError(e.message || 'An error occurred');
+        notifyError(e, 'Failed to load standard pricing');
       } finally {
         setLoading(false);
       }
@@ -172,17 +176,22 @@ export default function StandardPricing() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || 'Failed to save pricing');
+      notifySuccess('Pricing request saved');
       // Refresh list
       const listRes = await fetchWithAuth(`${API_URL}/api/pricing/unit-model`);
       const listData = await listRes.json();
       if (listRes.ok) setPricings(listData.pricings || []);
     } catch (e) {
-      setError(e.message || String(e));
+      const msg = e.message || String(e);
+      setError(msg);
+      notifyError(e, 'Failed to save pricing');
     }
   };
 
+  const [rowLoading, setRowLoading] = useState({});
   const handleApproveStatus = async (id, status, reason) => {
     try {
+      setRowLoading(s => ({ ...s, [id]: true }));
       const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -191,8 +200,13 @@ export default function StandardPricing() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || 'Failed to update status');
       setPricings(p => p.map(x => x.id === id ? data.pricing : x));
+      notifySuccess(`Pricing ${status}`);
     } catch (e) {
-      setError(e.message || String(e));
+      const msg = e.message || String(e);
+      setError(msg);
+      notifyError(e, 'Failed to update status');
+    } finally {
+      setRowLoading(s => ({ ...s, [id]: false }));
     }
   };
 
@@ -268,7 +282,34 @@ export default function StandardPricing() {
     return (
       <div>
         <BrandHeader onLogout={handleLogout} />
-        <div style={pageContainer}>Loading...</div>
+        <div style={pageContainer}>
+          <div style={tableWrap}>
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={th}>Model</th>
+                  <th style={th}>Code</th>
+                  <th style={th}>Area</th>
+                  <th style={th}>Price</th>
+                  <th style={th}>Garden</th>
+                  <th style={th}>Roof</th>
+                  <th style={th}>Storage</th>
+                  <th style={th}>Garage</th>
+                  <th style={th}>Maintenance</th>
+                  <th style={th}>Status</th>
+                  <th style={th}>Created</th>
+                  <th style={th}>Approved</th>
+                  <th style={th}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <SkeletonRow key={i} widths={['lg','sm','sm','lg','sm','sm','sm','sm','sm','sm','lg','lg','sm']} tdStyle={td} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     );
   }
@@ -510,10 +551,10 @@ export default function StandardPricing() {
                   <td style={td}>{p.approved_by_email || ''}</td>
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <button onClick={() => openPricingHistory(p.id)} style={btn}>History</button>
+                      <LoadingButton onClick={() => openPricingHistory(p.id)}>History</LoadingButton>
                       {(role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval' ? (
                         <>
-                          <button onClick={() => handleApproveStatus(p.id, 'approved')} style={btnSuccess}>Approve</button>
+                          <LoadingButton onClick={() => handleApproveStatus(p.id, 'approved')} loading={rowLoading[p.id]} style={btnSuccess}>Approve</LoadingButton>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                             <input
                               placeholder="Reason (for rejection)"
@@ -521,30 +562,33 @@ export default function StandardPricing() {
                               onChange={e => setRejectReasons(s => ({ ...s, [p.id]: e.target.value }))}
                               style={ctrl}
                             />
-                            <button onClick={() => handleApproveStatus(p.id, 'rejected', rejectReasons[p.id])} style={btnDanger}>Reject</button>
+                            <LoadingButton onClick={() => handleApproveStatus(p.id, 'rejected', rejectReasons[p.id])} loading={rowLoading[p.id]} style={btnDanger}>Reject</LoadingButton>
                           </div>
                         </>
                       ) : null}
                       {(role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id) ? (
-                        <button
+                        <LoadingButton
                           onClick={async () => {
                             if (!window.confirm('Cancel this pending pricing request?')) return
                             try {
                               const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model/${p.id}`, { method: 'DELETE' })
                               const data = await res.json()
                               if (!res.ok) throw new Error(data?.error?.message || 'Cancel failed')
+                              notifySuccess('Request cancelled')
                               // refresh list
                               const listRes = await fetchWithAuth(`${API_URL}/api/pricing/unit-model`)
                               const listData = await listRes.json()
                               if (listRes.ok) setPricings(listData.pricings || [])
                             } catch (e) {
-                              setError(e.message || String(e))
+                              const msg = e.message || String(e)
+                              setError(msg)
+                              notifyError(e, 'Cancel failed')
                             }
                           }}
                           style={btn}
                         >
                           Cancel Request
-                        </button>
+                        </LoadingButton>
                       ) : null}
                       {!( (role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval') && !((role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id)) ? (
                         <span style={metaText}>—</span>
