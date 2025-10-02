@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
 import LoadingButton from '../components/LoadingButton.jsx'
+import { useLoader } from '../lib/loaderContext.jsx'
 import CalculatorApp from '../App.jsx'
 import * as XLSX from 'xlsx'
 
@@ -16,6 +17,7 @@ export default function DealDetail() {
   const [savingCalc, setSavingCalc] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [calcCommissionLoading, setCalcCommissionLoading] = useState(false)
+  const { setShow, setMessage } = useLoader()
   const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const role = user?.role || 'user'
 
@@ -153,6 +155,17 @@ export default function DealDetail() {
         inputs: snap.inputs,
         generatedPlan: snap.generatedPlan
       }
+      // Show full-page loader for this heavy operation
+      const label = documentType === 'pricing_form'
+        ? 'Generating Pricing Form…'
+        : documentType === 'reservation_form'
+        ? 'Generating Reservation Form…'
+        : documentType === 'contract'
+        ? 'Generating Contract…'
+        : 'Generating document…'
+      setMessage(label)
+      setShow(true)
+
       const resp = await fetchWithAuth(`${API_URL}/api/generate-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -185,6 +198,8 @@ export default function DealDetail() {
       notifySuccess('Document generated')
     } catch (e) {
       notifyError(e, 'Failed to generate document')
+    } finally {
+      setShow(false)
     }
   }
 
