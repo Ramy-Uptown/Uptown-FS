@@ -146,6 +146,14 @@ router.get('/', authMiddleware, async (req, res) => {
       where.push(`d.unit_type = ${params.length}`)
     }
 
+    // Role-based visibility: non-elevated users can only see their own deals
+    const elevatedRoles = new Set(['admin', 'superadmin', 'sales_manager', 'financial_manager'])
+    const isElevated = elevatedRoles.has(req.user?.role)
+    if (!isElevated) {
+      params.push(req.user.id)
+      where.push(`d.created_by = ${params.length}`)
+    }
+
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
     const sortCols = {
@@ -193,7 +201,13 @@ router.get('/:id', authMiddleware, async (req, res) => {
       [id]
     )
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
-    return res.json({ ok: true, deal: q.rows[0] })
+    const deal = q.rows[0]
+    const elevatedRoles = new Set(['admin', 'superadmin', 'sales_manager', 'financial_manager'])
+    const isElevated = elevatedRoles.has(req.user?.role)
+    if (!isElevated && deal.created_by !== req.user.id) {
+      return res.status(403).json({ error: { message: 'Forbidden' } })
+    }
+    return res.json({ ok: true, deal })
   } catch (e) {
     console.error('GET /api/deals/:id error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })

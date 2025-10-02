@@ -49,15 +49,25 @@ function toBoolMaybe(v) {
   return null
 }
 
-function authMiddleware(req, res, next) {
+async function authMiddleware(req, res, next) {
   const auth = req.headers['authorization'] || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
   if (!token) return res.status(401).json({ error: { message: 'Unauthorized' } })
   try {
     const payload = jwt.verify(token, JWT_SECRET)
-    req.user = payload
+    // Fetch the latest user state to ensure active flag and role are honored even if changed after token issuance
+    const result = await pool.query('SELECT id, email, role, active FROM users WHERE id=$1', [payload.id])
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: { message: 'Invalid token' } })
+    }
+    const user = result.rows[0]
+    if (user.active === false) {
+      return res.status(403).json({ error: { message: 'Account is deactivated' } })
+    }
+    // Attach the current user record to request
+    req.user = { id: user.id, email: user.email, role: user.role, active: user.active }
     next()
-  } catch {
+  } catch (e) {
     return res.status(401).json({ error: { message: 'Invalid token' } })
   }
 }
