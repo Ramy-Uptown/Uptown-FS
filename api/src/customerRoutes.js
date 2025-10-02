@@ -1,24 +1,18 @@
 import express from 'express'
 import { pool } from './db.js'
 import { authMiddleware } from './authRoutes.js'
+import { validate, customerCreateSchema, customerUpdateSchema, customerSearchQuerySchema } from './validation.js'
 
 const router = express.Router()
 
 // Create new customer
-router.post('/customers', authMiddleware, async (req, res) => {
+router.post('/customers', authMiddleware, validate(customerCreateSchema), async (req, res) => {
   const { 
     name, email, phone, nationality, id_number, id_type, 
     address, date_of_birth, occupation, company 
   } = req.body || {}
   
   try {
-    // Validate required fields
-    if (!name || !email || !phone) {
-      return res.status(400).json({ 
-        error: { message: 'Name, email, and phone are required' } 
-      })
-    }
-    
     // Check for existing customer
     const existing = await pool.query(
       'SELECT id FROM customers WHERE email = $1 OR phone = $2',
@@ -73,13 +67,13 @@ router.get('/customers', authMiddleware, async (req, res) => {
     
     if (search) {
       params.push(`%${search}%`)
-      query += ` AND (c.name ILIKE $${params.length} OR c.email ILIKE $${params.length} OR c.phone ILIKE $${params.length})`
+      query += ` AND (c.name ILIKE ${params.length} OR c.email ILIKE ${params.length} OR c.phone ILIKE ${params.length})`
     }
     
     // Sales reps can only see their own customers
     if (req.user.role === 'property_consultant') {
       params.push(req.user.id)
-      query += ` AND c.created_by = $${params.length}`
+      query += ` AND c.created_by = ${params.length}`
     }
     
     params.push(limitNum)
@@ -87,7 +81,7 @@ router.get('/customers', authMiddleware, async (req, res) => {
     query += `
       GROUP BY c.id, u.email
       ORDER BY c.created_at DESC
-      LIMIT $${params.length - 1} OFFSET $${params.length}
+      LIMIT ${params.length - 1} OFFSET ${params.length}
     `
     
     const customers = await pool.query(query, params)
@@ -102,12 +96,12 @@ router.get('/customers', authMiddleware, async (req, res) => {
     
     if (search) {
       countParams.push(`%${search}%`)
-      countQuery += ` AND (c.name ILIKE $${countParams.length} OR c.email ILIKE $${countParams.length} OR c.phone ILIKE $${countParams.length})`
+      countQuery += ` AND (c.name ILIKE ${countParams.length} OR c.email ILIKE ${countParams.length} OR c.phone ILIKE ${countParams.length})`
     }
     
     if (req.user.role === 'property_consultant') {
       countParams.push(req.user.id)
-      countQuery += ` AND c.created_by = $${countParams.length}`
+      countQuery += ` AND c.created_by = ${countParams.length}`
     }
     
     const totalCount = await pool.query(countQuery, countParams)
@@ -174,7 +168,7 @@ router.get('/customers/:id', authMiddleware, async (req, res) => {
 })
 
 // Update customer
-router.patch('/customers/:id', authMiddleware, async (req, res) => {
+router.patch('/customers/:id', authMiddleware, validate(customerUpdateSchema), async (req, res) => {
   const customerId = Number(req.params.id)
   if (!Number.isFinite(customerId)) return res.status(400).json({ error: { message: 'Invalid id' } })
   const updates = req.body || {}
@@ -202,7 +196,7 @@ router.patch('/customers/:id', authMiddleware, async (req, res) => {
     
     for (const [key, value] of Object.entries(updates)) {
       if (allowedFields.includes(key)) {
-        updateFields.push(`${key} = $${paramCount}`)
+        updateFields.push(`${key} = ${paramCount}`)
         values.push(key === 'email' ? String(value).toLowerCase() : value)
         paramCount++
       }
@@ -216,7 +210,7 @@ router.patch('/customers/:id', authMiddleware, async (req, res) => {
     values.push(customerId)
     
     const result = await pool.query(
-      `UPDATE customers SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+      `UPDATE customers SET ${updateFields.join(', ')} WHERE id = ${paramCount} RETURNING *`,
       values
     )
     
@@ -275,11 +269,8 @@ router.delete('/customers/:id', authMiddleware, async (req, res) => {
 })
 
 // Customer search for offer creation
-router.get('/customers/search', authMiddleware, async (req, res) => {
+router.get('/customers/search', authMiddleware, validate(customerSearchQuerySchema, 'query'), async (req, res) => {
   const q = req.query.q ? String(req.query.q) : ''
-  if (!q || q.length < 2) {
-    return res.status(400).json({ error: { message: 'Search query must be at least 2 characters' } })
-  }
   
   try {
     const params = [`%${q}%`]

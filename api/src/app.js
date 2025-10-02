@@ -37,6 +37,7 @@ import customerRoutes from './customerRoutes.js'
 import notificationService from './notificationService.js'
 import dashboardRoutes from './dashboardRoutes.js'
 import { errorHandler } from './errorHandler.js'
+import { validate, calculateSchema, generatePlanSchema, generateDocumentSchema } from './validation.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
@@ -415,7 +416,7 @@ function validateInputs(inputs) {
  *   splitFirstYearPayments, firstYearPayments[], subsequentYears[]
  * }
  */
-app.post('/api/calculate', async (req, res) => {
+app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
   try {
     const { mode, stdPlan, inputs, standardPricingId, unitId } = req.body || {}
 
@@ -509,7 +510,7 @@ app.post('/api/calculate', async (req, res) => {
  * - currency: optional. For English, can be code (EGP, USD, SAR, EUR, AED, KWD) or full name (e.g., "Egyptian Pounds")
  * Returns: { ok: true, schedule: [{label, month, amount, writtenAmount}], totals, meta }
  */
-app.post('/api/generate-plan', async (req, res) => {
+app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) => {
   try {
     const { mode, stdPlan, inputs, language, currency, languageForWrittenAmounts, standardPricingId, unitId } = req.body || {}
     if (!mode || !allowedModes.has(mode)) {
@@ -673,7 +674,7 @@ app.post('/api/generate-plan', async (req, res) => {
  * - Placeholders in the .docx should use Autocrat-style delimiters: <<placeholder_name>>
  * - Service will also add *_words fields for numeric values in data using the requested language
  */
-app.post('/api/generate-document', async (req, res) => {
+app.post('/api/generate-document', validate(generateDocumentSchema), async (req, res) => {
   try {
     let { templateName, documentType, deal_id, data, language, currency } = req.body || {}
     const role = req.user?.role

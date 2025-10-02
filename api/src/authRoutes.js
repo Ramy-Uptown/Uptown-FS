@@ -4,6 +4,20 @@ import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import nodemailer from 'nodemailer'
 import { pool } from './db.js'
+import {
+  validate,
+  authRegisterSchema,
+  authLoginSchema,
+  refreshSchema,
+  requestResetSchema,
+  resetPasswordSchema,
+  createUserSchema,
+  setRoleSchema,
+  setActiveSchema,
+  updateUserSchema,
+  setPasswordAdminSchema,
+  usersByRoleQuerySchema
+} from './validation.js'
 
 const router = express.Router()
 
@@ -93,15 +107,9 @@ async function issueRefreshToken(userId) {
 }
 
 // Registration
-router.post('/register', async (req, res) => {
+router.post('/register', validate(authRegisterSchema), async (req, res) => {
   try {
     const { email, password, role } = req.body || {}
-    if (!email || typeof email !== 'string') {
-      return res.status(400).json({ error: { message: 'Email is required' } })
-    }
-    if (!password || typeof password !== 'string' || password.length < 6) {
-      return res.status(400).json({ error: { message: 'Password must be at least 6 characters' } })
-    }
     const normalizedEmail = email.trim().toLowerCase()
 
     const existing = await pool.query('SELECT id FROM users WHERE email=$1', [normalizedEmail])
@@ -125,10 +133,9 @@ router.post('/register', async (req, res) => {
 })
 
 // Login
-router.post('/login', async (req, res) => {
+router.post('/login', validate(authLoginSchema), async (req, res) => {
   try {
     const { email, password } = req.body || {}
-    if (!email || !password) return res.status(400).json({ error: { message: 'Email and password are required' } })
     const normalizedEmail = String(email).trim().toLowerCase()
     const result = await pool.query('SELECT id, email, password_hash, role, active FROM users WHERE email=$1', [normalizedEmail])
     if (result.rows.length === 0) return res.status(401).json({ error: { message: 'Invalid credentials' } })
@@ -146,10 +153,9 @@ router.post('/login', async (req, res) => {
 })
 
 // Token refresh (rotate)
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', validate(refreshSchema), async (req, res) => {
   try {
     const { refreshToken } = req.body || {}
-    if (!refreshToken) return res.status(400).json({ error: { message: 'refreshToken is required' } })
     const now = new Date()
     const result = await pool.query('SELECT user_id, expires_at FROM refresh_tokens WHERE token=$1', [refreshToken])
     if (result.rows.length === 0) return res.status(401).json({ error: { message: 'Invalid refresh token' } })
@@ -173,7 +179,7 @@ router.post('/refresh', async (req, res) => {
 })
 
 // Logout (revoke refresh token)
-router.post('/logout', async (req, res) => {
+router.post('/logout', validate(refreshSchema), async (req, res) => {
   try {
     const { refreshToken } = req.body || {}
     if (refreshToken) {
@@ -187,10 +193,9 @@ router.post('/logout', async (req, res) => {
 })
 
 // Password reset: request
-router.post('/request-password-reset', async (req, res) => {
+router.post('/request-password-reset', validate(requestResetSchema), async (req, res) => {
   try {
     const { email } = req.body || {}
-    if (!email) return res.status(400).json({ error: { message: 'Email is required' } })
     const normalizedEmail = String(email).trim().toLowerCase()
     const result = await pool.query('SELECT id FROM users WHERE email=$1', [normalizedEmail])
     // Always respond ok to avoid user enumeration
@@ -243,11 +248,9 @@ router.post('/request-password-reset', async (req, res) => {
 })
 
 // Password reset: confirm
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', validate(resetPasswordSchema), async (req, res) => {
   try {
     const { token, newPassword } = req.body || {}
-    if (!token || !newPassword) return res.status(400).json({ error: { message: 'token and newPassword are required' } })
-    if (String(newPassword).length < 6) return res.status(400).json({ error: { message: 'Password must be at least 6 characters' } })
     const now = new Date()
     const result = await pool.query('SELECT user_id, expires_at, used FROM password_reset_tokens WHERE token=$1', [token])
     if (result.rows.length === 0) return res.status(400).json({ error: { message: 'Invalid token' } })
@@ -304,11 +307,9 @@ router.get('/users', authMiddleware, adminOnly, async (req, res) => {
 })
 
 // Limited: list users by role (for managers to assign teams)
-router.get('/users/by-role', authMiddleware, requireRole(['admin', 'superadmin', 'sales_manager', 'contract_manager', 'financial_manager']), async (req, res) => {
+router.get('/users/by-role', authMiddleware, requireRole(['admin', 'superadmin', 'sales_manager', 'contract_manager', 'financial_manager']), validate(usersByRoleQuerySchema, 'query'), async (req, res) => {
   try {
     const role = String(req.query.role || '').trim()
-    if (!role) return res.status(400).json({ error: { message: 'role query param is required' } })
-    if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: { message: 'Invalid role' } })
     // Only allow fetching limited fields and active users
     const r = await pool.query(
       `SELECT id, email, role, active, meta FROM users WHERE role=$1 AND active=TRUE ORDER BY id ASC`,
@@ -334,11 +335,10 @@ router.get('/users/:id', authMiddleware, adminOnly, async (req, res) => {
   }
 })
 
-router.patch('/users/:id/role', authMiddleware, requireRole(['superadmin']), async (req, res) => {
+router.patch('/users/:id/role', authMiddleware, requireRole(['superadmin']), validate(setRoleSchema), async (req, res) => {
   try {
     const { role } = req.body || {}
     const id = Number(req.params.id)
-    if (!role || typeof role !== 'string') return res.status(400).json({ error: { message: 'role is required' } })
     if (!VALID_ROLES.includes(role)) {
       return res.status(400).json({ error: { message: 'Invalid role specified' } })
     }
@@ -358,12 +358,9 @@ router.patch('/users/:id/role', authMiddleware, requireRole(['superadmin']), asy
 })
 
 // Create user (admin or superadmin). Admin cannot create superadmin users.
-router.post('/users', authMiddleware, adminOnly, async (req, res) => {
+router.post('/users', authMiddleware, adminOnly, validate(createUserSchema), async (req, res) => {
   try {
     const { email, password, role = 'user', notes, meta } = req.body || {}
-    if (!email || typeof email !== 'string') return res.status(400).json({ error: { message: 'Email is required' } })
-    if (!password || typeof password !== 'string' || password.length < 6) return res.status(400).json({ error: { message: 'Password must be at least 6 characters' } })
-    if (role && typeof role === 'string' && !VALID_ROLES.includes(role)) return res.status(400).json({ error: { message: 'Invalid role specified' } })
     const normalizedEmail = email.trim().toLowerCase()
     const existing = await pool.query('SELECT 1 FROM users WHERE email=$1', [normalizedEmail])
     if (existing.rows.length > 0) return res.status(409).json({ error: { message: 'Email already registered' } })
@@ -393,11 +390,10 @@ router.post('/users', authMiddleware, adminOnly, async (req, res) => {
 })
 
 // Update active flag (deactivate/reactivate); admin cannot change superadmin
-router.patch('/users/:id/active', authMiddleware, adminOnly, async (req, res) => {
+router.patch('/users/:id/active', authMiddleware, adminOnly, validate(setActiveSchema), async (req, res) => {
   try {
     const { active } = req.body || {}
     const id = Number(req.params.id)
-    if (typeof active !== 'boolean') return res.status(400).json({ error: { message: 'active must be boolean' } })
     const tgt = await pool.query('SELECT role FROM users WHERE id=$1', [id])
     if (tgt.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
     if (req.user.role === 'admin' && tgt.rows[0].role === 'superadmin') {
@@ -416,7 +412,7 @@ router.patch('/users/:id/active', authMiddleware, adminOnly, async (req, res) =>
 })
 
 // Update email (optional helper)
-router.patch('/users/:id', authMiddleware, adminOnly, async (req, res) => {
+router.patch('/users/:id', authMiddleware, adminOnly, validate(updateUserSchema), async (req, res) => {
   try {
     const id = Number(req.params.id)
     const { email, notes, meta } = req.body || {}
@@ -431,9 +427,6 @@ router.patch('/users/:id', authMiddleware, adminOnly, async (req, res) => {
     const audit = {}
 
     if (email != null) {
-      if (typeof email !== 'string' || email.trim() === '') {
-        return res.status(400).json({ error: { message: 'email must be non-empty string' } })
-      }
       const normalizedEmail = email.trim().toLowerCase()
       const existing = await pool.query('SELECT id FROM users WHERE email=$1 AND id<>$2', [normalizedEmail, id])
       if (existing.rows.length > 0) return res.status(409).json({ error: { message: 'Email already in use' } })
@@ -449,10 +442,6 @@ router.patch('/users/:id', authMiddleware, adminOnly, async (req, res) => {
     }
 
     if (meta !== undefined) {
-      // meta must be an object
-      if (!isObject(meta)) {
-        return res.status(400).json({ error: { message: 'meta must be an object' } })
-      }
       params.push(JSON.stringify(meta))
       updates.push(`meta=${params.length}`)
       audit.meta = true
@@ -505,13 +494,10 @@ router.delete('/users/:id', authMiddleware, adminOnly, async (req, res) => {
  * Admin set password for a user (without email token)
  * - Admin cannot change password for superadmin accounts.
  */
-router.patch('/users/:id/password', authMiddleware, adminOnly, async (req, res) => {
+router.patch('/users/:id/password', authMiddleware, adminOnly, validate(setPasswordAdminSchema), async (req, res) => {
   try {
     const id = Number(req.params.id)
     const { newPassword } = req.body || {}
-    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
-      return res.status(400).json({ error: { message: 'newPassword must be at least 6 characters' } })
-    }
     const tgt = await pool.query('SELECT role FROM users WHERE id=$1', [id])
     if (tgt.rows.length === 0) return res.status(404).json({ error: { message: 'User not found' } })
     if (req.user.role === 'admin' && tgt.rows[0].role === 'superadmin') {

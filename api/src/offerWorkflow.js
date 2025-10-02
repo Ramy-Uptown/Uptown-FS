@@ -1,6 +1,7 @@
 import express from 'express'
 import { pool } from './db.js'
 import { authMiddleware, requireRole } from './authRoutes.js'
+import { validate, offerStatusSchema, bulkOfferActionSchema } from './validation.js'
 
 const router = express.Router()
 
@@ -70,13 +71,10 @@ async function updateOfferStatusTx(client, offerId, newStatus, user, reason) {
 }
 
 // Update offer status with full workflow
-router.patch('/offers/:id/status', authMiddleware, async (req, res) => {
+router.patch('/offers/:id/status', authMiddleware, validate(offerStatusSchema), async (req, res) => {
   const { status, reason } = req.body || {}
   const offerId = parseInt(req.params.id, 10)
 
-  if (!status || typeof status !== 'string') {
-    return res.status(400).json({ error: { message: 'status is required' } })
-  }
   if (!Number.isFinite(offerId)) {
     return res.status(400).json({ error: { message: 'Invalid offer id' } })
   }
@@ -102,7 +100,7 @@ router.patch('/offers/:id/status', authMiddleware, async (req, res) => {
 // Get offer history
 router.get('/offers/:id/history', authMiddleware, async (req, res) => {
   const offerId = parseInt(req.params.id, 10)
-  if (!Number.isFinite(offerId)) return res.status(400).json({ error: { message: 'Invalid offer id' } })
+  if (!Number.isFinite(offerId)) return res.status(400).json({ error: { message: 'Invalid offer id' })
 
   try {
     const history = await pool.query(`
@@ -126,14 +124,8 @@ router.get('/offers/:id/history', authMiddleware, async (req, res) => {
 })
 
 // Bulk offer actions
-router.post('/offers/bulk-action', authMiddleware, requireRole(['sales_manager', 'financial_manager', 'superadmin']), async (req, res) => {
+router.post('/offers/bulk-action', authMiddleware, requireRole(['sales_manager', 'financial_manager', 'superadmin']), validate(bulkOfferActionSchema), async (req, res) => {
   const { offerIds, action, reason } = req.body || {}
-  if (!Array.isArray(offerIds) || offerIds.length === 0) {
-    return res.status(400).json({ error: { message: 'offerIds must be a non-empty array' } })
-  }
-  if (!action || typeof action !== 'string') {
-    return res.status(400).json({ error: { message: 'action is required' } })
-  }
 
   const client = await pool.connect()
   try {

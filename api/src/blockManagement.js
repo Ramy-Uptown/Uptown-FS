@@ -1,6 +1,7 @@
 import express from 'express'
 import { pool } from './db.js'
 import { authMiddleware, requireRole } from './authRoutes.js'
+import { validate, blockRequestSchema, blockApproveSchema, blockExtendSchema } from './validation.js'
 
 const router = express.Router()
 
@@ -17,7 +18,7 @@ async function createNotification(type, userId, refTable, refId, message) {
 }
 
 // Request unit block
-router.post('/blocks/request', authMiddleware, requireRole(['property_consultant']), async (req, res) => {
+router.post('/blocks/request', authMiddleware, requireRole(['property_consultant']), validate(blockRequestSchema), async (req, res) => {
   const { unitId, durationDays, reason } = req.body || {}
   try {
     // Validate unit availability
@@ -42,13 +43,8 @@ router.post('/blocks/request', authMiddleware, requireRole(['property_consultant
       return res.status(400).json({ error: { message: 'Unit is already blocked' } })
     }
 
-    // Validate duration (1-7 days)
-    const d = Number(durationDays)
-    if (!Number.isInteger(d) || d < 1 || d > 7) {
-      return res.status(400).json({ error: { message: 'Block duration must be between 1-7 days' } })
-    }
-
     // Create block request
+    const d = Number(durationDays)
     const result = await pool.query(
       `INSERT INTO blocks (unit_id, requested_by, duration_days, reason, status, blocked_until, created_at, updated_at)
        VALUES ($1, $2, $3, $4, 'pending', NOW() + ($3::text || ' days')::interval, NOW(), NOW())
@@ -67,10 +63,10 @@ router.post('/blocks/request', authMiddleware, requireRole(['property_consultant
 })
 
 // Approve/reject block request
-router.patch('/blocks/:id/approve', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+router.patch('/blocks/:id/approve', authMiddleware, requireRole(['financial_manager']), validate(blockApproveSchema), async (req, res) => {
   const { action, reason } = req.body || {} // action: 'approve' or 'reject'
   const blockId = Number(req.params.id)
-  if (!Number.isFinite(blockId)) return res.status(400).json({ error: { message: 'Invalid block id' } })
+  if (!Number.isFinite(blockId)) return res.status(400).json({ error: { message: 'Invalid block id' })
 
   try {
     const block = await pool.query('SELECT * FROM blocks WHERE id = $1', [blockId])
@@ -163,10 +159,10 @@ router.get('/blocks/current', authMiddleware, async (req, res) => {
 })
 
 // Extend block duration
-router.patch('/blocks/:id/extend', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+router.patch('/blocks/:id/extend', authMiddleware, requireRole(['financial_manager']), validate(blockExtendSchema), async (req, res) => {
   const { additionalDays, reason } = req.body || {}
   const blockId = Number(req.params.id)
-  if (!Number.isFinite(blockId)) return res.status(400).json({ error: { message: 'Invalid block id' } })
+  if (!Number.isFinite(blockId)) return res.status(400).json({ error: { message: 'Invalid block id' })
   const add = Number(additionalDays)
 
   try {
@@ -181,9 +177,6 @@ router.patch('/blocks/:id/extend', authMiddleware, requireRole(['financial_manag
     const currentDuration = Number(currentBlock.duration_days || 0) + (totalExtensions * 7)
     const newTotalDuration = currentDuration + (Number.isFinite(add) ? add : 0)
 
-    if (!Number.isFinite(add) || add <= 0) {
-      return res.status(400).json({ error: { message: 'additionalDays must be a positive number' } })
-    }
     if (newTotalDuration > 28) {
       return res.status(400).json({ error: { message: 'Maximum block duration (28 days) exceeded' } })
     }
