@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import LoadingButton from '../components/LoadingButton.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
+import PromptModal from '../components/PromptModal.jsx'
 
 export default function Approvals() {
   const [deals, setDeals] = useState([])
@@ -42,8 +43,13 @@ export default function Approvals() {
     }
   }
 
-  async function reject(id) {
-    const reason = prompt('Reason for rejection (optional):') || ''
+  const [promptRejectId, setPromptRejectId] = useState(0)
+
+  function reject(id) {
+    setPromptRejectId(id)
+  }
+
+  async function performReject(id, reason) {
     setBusyId(id)
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/reject`, {
@@ -102,8 +108,14 @@ export default function Approvals() {
           </tbody>
         </table>
       </div>
-    </div>
-  )
+     <dPromptModal
+        open={!!promptRejectId}
+        title="Reject Deal"
+        message="Optionally provide a reason for rejection:"
+        placeholder="Reason (optional)"
+        confirmText="Reject"
+        cancelText="Cancel"
+        onSubmit={(val) => { const id = promptRejectId; setPromptRejectId(0); performReject(id, val ||)
 }
 
 const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }

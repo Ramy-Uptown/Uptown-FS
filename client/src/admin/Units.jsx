@@ -5,6 +5,7 @@ import BrandHeader from '../lib/BrandHeader.jsx'
 import LoadingButton from '../components/LoadingButton.jsx'
 import SkeletonRow from '../components/SkeletonRow.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 
 export default function Units() {
   const [units, setUnits] = useState([])
@@ -156,8 +157,9 @@ export default function Units() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  async function remove(id) {
-    if (!confirm('Delete this unit?')) return
+  const [confirmDeleteId, setConfirmDeleteId] = useState(0)
+
+  async function performDelete(id) {
     // optimistic removal
     const prev = units
     setUnits(u => u.filter(x => x.id !== id))
@@ -175,7 +177,7 @@ export default function Units() {
         setTotal(t => t + 1)
         notifyError({ message: msg || 'Delete failed' })
       } else {
-        notifySuccess('Unit deleted')
+        notifySuccess('Unit deleted successfully.')
       }
     } catch (e) {
       setUnits(prev)
@@ -334,7 +336,7 @@ export default function Units() {
                   <td style={td}>{unit.unit_status}</td>
                   <td style={{ ...td, display: 'flex', gap: 8 }}>
                     <LoadingButton onClick={() => edit(unit)}>Edit</LoadingButton>
-                    <LoadingButton onClick={() => remove(unit.id)} loading={deletingIds.has(unit.id)} style={{ ...btn, border: '1px solid #dc2626', color: '#dc2626' }}>
+                    <LoadingButton onClick={() => setConfirmDeleteId(unit.id)} loading={deletingIds.has(unit.id)} style={{ ...btn, border: '1px solid #dc262#dc2626' }}>
                       Delete
                     </LoadingButton>
                     {/* Link model UI removed: link requests are disabled; use model selection during creation */}
@@ -363,6 +365,15 @@ export default function Units() {
           </div>
         </div>
       </div>
+      <ConfirmModal
+        open={!!confirmDeleteId}
+        title="Delete Unit"
+        message="Are you sure you want to delete this unit? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={() => { const id = confirmDeleteId; setConfirmDeleteId(0); performDelete(id) }}
+        onCancel={() => setConfirmDeleteId(0)}
+      />
     </div>
   )
 }

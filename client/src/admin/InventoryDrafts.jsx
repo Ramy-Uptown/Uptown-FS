@@ -5,6 +5,8 @@ import { th, td, btn, btnPrimary, tableWrap, table, pageContainer, pageTitle, me
 import LoadingButton from '../components/LoadingButton.jsx'
 import SkeletonRow from '../components/SkeletonRow.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
+import ConfirmModal from '../components/ConfirmModal.jsx'
+import PromptModal from '../components/PromptModal.jsx'
 
 export default function InventoryDrafts() {
   const [units, setUnits] = useState([])
@@ -54,8 +56,14 @@ export default function InventoryDrafts() {
 
   useEffect(() => { load() }, [])
 
+  const [confirmApproveId, setConfirmApproveId] = useState(0)
+  const [promptRejectId, setPromptRejectId] = useState(0)
+
   async function approve(id) {
-    if (!confirm('Approve this draft unit and make it AVAILABLE?')) return
+    setConfirmApproveId(id)
+  }
+
+  async function performApprove(id) {
     setBusyId(id)
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/units/${id}/approve`, { method: 'PATCH' })
@@ -70,9 +78,11 @@ export default function InventoryDrafts() {
     }
   }
 
-  async function reject(id) {
-    const reason = prompt('Reason for rejection (optional):') || ''
-    if (!confirm('Reject this draft unit?')) return
+  function reject(id) {
+    setPromptRejectId(id)
+  }
+
+  async function performReject(id, reason) {
     setBusyId(id)
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/units/${id}/reject`, {
@@ -146,6 +156,25 @@ export default function InventoryDrafts() {
           Notes: Draft units are created by Financial Admin already linked to a Unit Model with approved standard pricing. Once approved, they become AVAILABLE.
         </p>
       </div>
+      <ConfirmModal
+        open={!!confirmApproveId}
+        title="Approve Draft Unit"
+        message="Approve this draft unit and mark it AVAILABLE?"
+        confirmText="Approve"
+        cancelText="Cancel"
+        onConfirm={() => { const id = confirmApproveId; setConfirmApproveId(0); performApprove(id) }}
+        onCancel={() => setConfirmApproveId(0)}
+      />
+      <PromptModal
+        open={!!promptRejectId}
+        title="Reject Draft Unit"
+        message="Optionally provide a reason for rejection:"
+        placeholder="Reason (optional)"
+        confirmText="Reject"
+        cancelText="Cancel"
+        onSubmit={(val) => { const id = promptRejectId; setPromptRejectId(0); performReject(id, val || '') }}
+        onCancel={() => setPromptRejectId(0)}
+      />
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { th, td, ctrl, btn, btnPrimary, btnDanger, btnSuccess, tableWrap, table,
 import LoadingButton from '../components/LoadingButton.jsx';
 import SkeletonRow from '../components/SkeletonRow.jsx';
 import { notifyError, notifySuccess } from '../lib/notifications.js';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 export default function RejectedPricings() {
   const role = JSON.parse(localStorage.getItem('auth_user') || '{}')?.role;
@@ -75,8 +76,8 @@ export default function RejectedPricings() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  async function deletePricing(p) {
-    if (!confirm('Delete this rejected pricing request?')) return;
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  async function performDelete(p) {
     const key = `delete:${p.id}`;
     try {
       setRowLoading(s => ({ ...s, [key]: true }));
@@ -287,7 +288,7 @@ export default function RejectedPricings() {
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <LoadingButton onClick={() => startEdit(p)}>Edit & Resubmit</LoadingButton>
-                      <LoadingButton onClick={() => deletePricing(p)} loading={rowLoading[`delete:${p.id}`]} style={btnDanger}>Delete</LoadingButton>
+                      <LoadingButton onClick={() => setConfirmDelete(p)} loading={rowding[`delete:${p.id}`]} style={btnDanger}>Delete</LoadingButton>
                     </div>
                   </td>
                 </tr>
@@ -301,6 +302,11 @@ export default function RejectedPricings() {
           </table>
         </div>
       </div>
-    </div>
-  );
+     <dConfirmModal
+        open={!!confirmDelete}
+        title="Delete Rejected Pricing"
+        message="Are you sure you want to delete this rejected pricing request?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={() => { const p = confirmDelete; setConfirmDelete(null); perform;
 }
