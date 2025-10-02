@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
+import LoadingButton from '../components/LoadingButton.jsx'
 import CalculatorApp from '../App.jsx'
 import * as XLSX from 'xlsx'
 
@@ -333,7 +334,7 @@ export default function DealDetail() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <h2 style={{ marginTop: 0 }}>Deal #{deal.id}</h2>
-        <button onClick={() => navigate('/deals')} style={btn}>Back to Dashboard</button>
+        <LoadingButton onClick={() => navigate('/deals')}>Back to Dashboard</LoadingButton>
       </div>
 
       {!editCalc ? (
@@ -454,7 +455,7 @@ export default function DealDetail() {
                     <tr>
                       <td colSpan={3} style={{ ...td, textAlign: 'right', fontWeight: 700 }}>Total</td>
                       <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>
-                        {Number(totals.totalNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {Number(totals.totalNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
                       <td></td>
                     </tr>
@@ -472,8 +473,8 @@ export default function DealDetail() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
             <h3 style={{ margin: 0 }}>Edit in Calculator</h3>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={saveCalculator} disabled={savingCalc} style={btnPrimary}>{savingCalc ? 'Saving…' : 'Save'}</button>
-              <button onClick={() => setEditCalc(false)} disabled={savingCalc} style={btn}>Cancel</button>
+              <LoadingButton onClick={saveCalculator} loading={savingCalc} variant="primary">Save</LoadingButton>
+              <LoadingButton onClick={() => setEditCalc(false)} disabled={savingCalc}>Cancel</LoadingButton>
             </div>
           </div>
           <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
@@ -484,81 +485,78 @@ export default function DealDetail() {
 
       {/* Actions — restrict printing offer until approved */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {canEdit && !editCalc && <button onClick={() => setEditCalc(true)} style={btn}>Edit in Calculator</button>}
-        {canSubmit && <button onClick={async () => {
-          const savedPlan = deal?.details?.calculator?.generatedPlan
-          if (!savedPlan || !Array.isArray(savedPlan.schedule) || savedPlan.schedule.length === 0) {
-            notifyError('Please generate and save a payment plan before submitting.')
-            return
-          }
-          setSubmitting(true)
-          try {
-            const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/submit`, { method: 'POST' })
-            const data = await resp.json()
-            if (!resp.ok) {
-              notifyError(data || { message: 'Submit failed' })
-            } else {
-              notifySuccess('Deal submitted')
-              await load()
-            }
-          } catch (err) {
-            notifyError(err, 'Submit failed')
-          } finally {
-            setSubmitting(false)
-          }
-        }} disabled={submitting} style={btnPrimary}>{submitting ? 'Submitting…' : 'Submit for Approval'}</button>}
-        <button onClick={printSchedule} style={btn}>Print Schedule</button>
-        {/* Pricing Form (Offer) — Property Consultant only and after Sales Manager approval */}
-        {(role === 'property_consultant' && deal.status === 'approved') && (
-          <button
-            onClick={() => generateDocFromSaved('pricing_form')}
-            style={btn}
+        {canEdit && !editCalc && <LoadingButton onClick={() => setEditCalc(true)}>Edit in Calculator</LoadingButton>}
+        {canSubmit && (
+          <LoadingButton
+            onClick={async () => {
+              const savedPlan = deal?.details?.calculator?.generatedPlan
+              if (!savedPlan || !Array.isArray(savedPlan.schedule) || savedPlan.schedule.length === 0) {
+                notifyError('Please generate and save a payment plan before submitting.')
+                return
+              }
+              setSubmitting(true)
+              try {
+                const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/submit`, { method: 'POST' })
+                const data = await resp.json()
+                if (!resp.ok) {
+                  notifyError(data || { message: 'Submit failed' })
+                } else {
+                  notifySuccess('Deal submitted')
+                  await load()
+                }
+              } catch (err) {
+                notifyError(err, 'Submit failed')
+              } finally {
+                setSubmitting(false)
+              }
+            }}
+            loading={submitting}
+            variant="primary"
           >
-            Print Offer (Pricing Form PDF)
-          </button>
+            Submit for Approval
+          </LoadingButton>
+        )}
+        <LoadingButton onClick={printSchedule}>Print Schedule</LoadingButton>
+        {(role === 'property_consultant' && deal.status === 'approved') && (
+          <LoadingButton onClick={() => generateDocFromSaved('pricing_form')}>Print Offer (Pricing Form PDF)</LoadingButton>
         )}
         {(role === 'financial_admin' && deal.status === 'approved') && (
-          <button
-            onClick={() => generateDocFromSaved('reservation_form')}
-            style={btn}
-          >
-            Generate Reservation Form (PDF)
-          </button>
+          <LoadingButton onClick={() => generateDocFromSaved('reservation_form')}>Generate Reservation Form (PDF)</LoadingButton>
         )}
         {(role === 'contract_person' && deal.status === 'approved') && (
-          <button
-            onClick={() => generateDocFromSaved('contract')}
-            style={btn}
-          >
-            Generate Contract (PDF)
-          </button>
+          <LoadingButton onClick={() => generateDocFromSaved('contract')}>Generate Contract (PDF)</LoadingButton>
         )}
-        <button onClick={generateChecksSheetFromSaved} style={btn}>Generate Checks Sheet (.xlsx)</button>
-        <button onClick={async () => {
-          if (!deal.sales_rep_id) {
-            notifyError('Assign a Sales Rep first.')
-            return
-          }
-          setCalcCommissionLoading(true)
-          try {
-            const resp = await fetchWithAuth(`${API_URL}/api/commissions/calc-and-save`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ deal_id: deal.id, sales_person_id: deal.sales_rep_id })
-            })
-            const data = await resp.json()
-            if (!resp.ok) {
-              notifyError(data || { message: 'Failed to calculate commission' })
-            } else {
-              notifySuccess(`Commission calculated: ${Number(data.commission.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`)
-              await load()
+        <LoadingButton onClick={generateChecksSheetFromSaved}>Generate Checks Sheet (.xlsx)</LoadingButton>
+        <LoadingButton
+          onClick={async () => {
+            if (!deal.sales_rep_id) {
+              notifyError('Assign a Sales Rep first.')
+              return
             }
-          } catch (err) {
-            notifyError(err, 'Failed to calculate commission')
-          } finally {
-            setCalcCommissionLoading(false)
-          }
-        }} disabled={calcCommissionLoading} style={btn}>{calcCommissionLoading ? 'Calculating…' : 'Calculate Commission'}</button>
+            setCalcCommissionLoading(true)
+            try {
+              const resp = await fetchWithAuth(`${API_URL}/api/commissions/calc-and-save`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deal_id: deal.id, sales_person_id: deal.sales_rep_id })
+              })
+              const data = await resp.json()
+              if (!resp.ok) {
+                notifyError(data || { message: 'Failed to calculate commission' })
+              } else {
+                notifySuccess(`Commission calculated: ${Number(data.commission.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`)
+                await load()
+              }
+            } catch (err) {
+              notifyError(err, 'Failed to calculate commission')
+            } finally {
+              setCalcCommissionLoading(false)
+            }
+          }}
+          loading={calcCommissionLoading}
+        >
+          Calculate Commission
+        </LoadingButton>
       </div>
 
       <h3>Audit Trail</h3>
@@ -630,7 +628,5 @@ export default function DealDetail() {
   )
 }
 
-const btn = { marginLeft: 8, padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
-const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #1f6feb', background: '#1f6feb', color: '#fff', fontWeight: 600 }
 const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
 const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }

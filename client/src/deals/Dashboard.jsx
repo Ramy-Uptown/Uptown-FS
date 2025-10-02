@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
 import * as XLSX from 'xlsx'
 
 export default function Dashboard() {
@@ -99,19 +101,6 @@ export default function Dashboard() {
     return () => { mounted = false }
   }, [])
 
-  const skeletonRow = (
-    <tr>
-      <td style={td}><div style={skeleton} /></td>
-      <td style={td}><div style={skeletonWide} /></td>
-      <td style={{ ...td, textAlign: 'right' }}><div style={skeleton} /></td>
-      <td style={td}><div style={skeleton} /></td>
-      <td style={td}><div style={skeletonWide} /></td>
-      <td style={td}><div style={skeletonWide} /></td>
-      <td style={td}><div style={skeleton} /></td>
-      <td style={td}><div style={skeleton} /></td>
-    </tr>
-  )
-
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -176,7 +165,7 @@ export default function Dashboard() {
           <option value={20}>20</option>
           <option value={50}>50</option>
         </select>
-        <button onClick={() => load(1)} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Refresh'}</button>
+        <LoadingButton onClick={() => load(1)} loading={loading} style={btn}>Refresh</LoadingButton>
       </div>
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
       <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
@@ -196,7 +185,9 @@ export default function Dashboard() {
           <tbody>
             {loading && (
               <>
-                {Array.from({ length: pageSize }).map((_, i) => <React.Fragment key={i}>{skeletonRow}</React.Fragment>)}
+                {Array.from({ length: pageSize }).map((_, i) => (
+                  <SkeletonRow key={i} widths={['sm','lg','sm','sm','lg','lg','sm','sm']} tdStyle={td} />
+                ))}
               </>
             )}
             {!loading && deals.map(d => (
@@ -226,12 +217,12 @@ export default function Dashboard() {
           Page {page} of {totalPages} — {total} total
         </span>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button onClick={() => setPage(1)} disabled={page === 1 || loading} style={btn}>First</button>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading} style={btn}>Prev</button>
-          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading} style={btn}>Next</button>
-          <button onClick={() => setPage(totalPages)} disabled={page === totalPages || loading} style={btn}>Last</button>
-          <button onClick={exportCSV} disabled={loading || total === 0} style={btn}>{loading ? 'Working…' : 'Export CSV'}</button>
-          <button onClick={exportXLSX} disabled={loading || total === 0} style={btn}>{loading ? 'Working…' : 'Export Excel'}</button>
+          <LoadingButton onClick={() => setPage(1)} disabled={page === 1 || loading}>First</LoadingButton>
+          <LoadingButton onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}>Prev</LoadingButton>
+          <LoadingButton onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading}>Next</LoadingButton>
+          <LoadingButton onClick={() => setPage(totalPages)} disabled={page === totalPages || loading}>Last</LoadingButton>
+          <LoadingButton onClick={exportCSV} loading={loading} disabled={total === 0}>Export CSV</LoadingButton>
+          <LoadingButton onClick={exportXLSX} loading={loading} disabled={total === 0}>Export Excel</LoadingButton>
         </div>
       </div>
     </div>
@@ -362,5 +353,3 @@ const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', 
 const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
 const ctrl = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6' }
 const btn = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
-const skeleton = { height: 12, background: '#eef2f7', borderRadius: 6 }
-const skeletonWide = { height: 12, background: '#eef2f7', borderRadius: 6, width: '60%' }
