@@ -118,6 +118,42 @@ async function run() {
   const dispRes = calculateByMode(CalculationModes.CalculateForTargetPV, stdPlan, inputs)
   assertAlmostEqual(dispRes.calculatedPV, stdPlan.calculatedPV, 1e-3, 'Dispatcher PV match')
 
+  // Custom structure: subsequent year without frequency should default to main frequency
+  const customSubsequentDefaults = customYearlyThenEqualUseStdPrice(stdPlan, {
+    dpType: 'amount',
+    downPaymentValue: 100000,
+    planDurationYears: 5,
+    installmentFrequency: Frequencies.Monthly, // Main frequency
+    additionalHandoverPayment: 0,
+    handoverYear: 0,
+    splitFirstYearPayments: false,
+    firstYearPayments: [],
+    subsequentYears: [
+      { totalNominal: 120000 } // Year 1, frequency omitted
+    ]
+  });
+
+  // Manually calculate the PV to verify the logic.
+  // The bug would cause this to be calculated Annually (1 payment). The fix is Monthly (12 payments).
+  const monthlyRateForDefaultTest = monthlyRateFromAnnual(stdPlan.financialDiscountRate);
+  const year1Months = getPaymentMonths(12, Frequencies.Monthly, 0);
+  let year1PV = 0;
+  for (const m of year1Months) {
+    year1PV += (120000 / 12) / Math.pow(1 + monthlyRateForDefaultTest, m);
+  }
+
+  // The rest of the payments are equal installments for the remaining 4 years (48 months)
+  const remainingNominal = stdPlan.totalPrice - 100000 - 120000;
+  const equalInstallment = remainingNominal / 48;
+  const equalMonths = getPaymentMonths(48, Frequencies.Monthly, 1);
+  let equalInstallmentsPV = 0;
+  for (const m of equalMonths) {
+    equalInstallmentsPV += equalInstallment / Math.pow(1 + monthlyRateForDefaultTest, m);
+  }
+
+  const expectedPV = 100000 + year1PV + equalInstallmentsPV;
+  assertAlmostEqual(customSubsequentDefaults.calculatedPV, expectedPV, 1e-3, 'Subsequent year frequency defaults to main frequency');
+
   console.log('All calculationService tests passed.')
 }
 
