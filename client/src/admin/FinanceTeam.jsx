@@ -62,8 +62,8 @@ export default function FinanceTeam() {
   }
 
   async function assign() {
-    if (!memberId) { notifyError('Select a member'); return }
-    if (!managerId) { notifyError('Select a manager'); return }
+    if (!memberId) { notifyError('Please select a member.'); return }
+    if (!managerId) { notifyError('Please select a manager.'); return }
     try {
       setAssigning(true)
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/finance-teams/assign`, {
@@ -72,12 +72,12 @@ export default function FinanceTeam() {
         body: JSON.stringify({ member_user_id: Number(memberId), manager_user_id: Number(managerId) })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Assign failed')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to assign')
       setMemberId(''); setManagerId(''); setMemberSearch(''); setManagerSearch('')
-      notifySuccess('Member assigned')
+      notifySuccess('Assignment updated successfully.')
       await load()
     } catch (e) {
-      notifyError(e, 'Assign failed')
+      notifyError(e, 'Unable to assign')
     } finally {
       setAssigning(false)
     }
@@ -93,11 +93,11 @@ export default function FinanceTeam() {
         body: JSON.stringify({ manager_user_id: Number(mgr), member_user_id: Number(mem), active: false })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to clear')
-      notifySuccess('Membership cleared')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to clear')
+      notifySuccess('Assignment cleared successfully.')
       await load()
     } catch (e) {
-      notifyError(e, 'Failed to clear membership')
+      notifyError(e, 'Unable to clear assignment')
     } finally {
       setRowLoading(s => ({ ...s, [key]: false }))
     }

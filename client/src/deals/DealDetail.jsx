@@ -98,7 +98,7 @@ export default function DealDetail() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to save')
       setEditCalc(false)
-      notifySuccess('Deal updated')
+      notifySuccess('Deal updated successfully.')
       await load()
     } catch (e) {
       notifyError(e, 'Failed to save')
@@ -195,7 +195,7 @@ export default function DealDetail() {
       a.download = filename
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      notifySuccess('Document generated')
+      notifySuccess('Document generated successfully.')
     } catch (e) {
       notifyError(e, 'Failed to generate document')
     } finally {
@@ -380,7 +380,8 @@ export default function DealDetail() {
                     // revert optimistic update
                     setDeal(d => ({ ...d, sales_rep_id: deal.sales_rep_id || null }))
                   } else {
-                    notifySuccess('Sales rep assigned')
+                    notifySuccess('Sales rep assigned successfull_codey.new'</)
+')
                   }
                 } catch (err) {
                   notifyError(err, 'Failed to assign sales rep')
@@ -420,7 +421,8 @@ export default function DealDetail() {
                     notifyError(data || { message: 'Failed to set policy' })
                     setDeal(d => ({ ...d, policy_id: deal.policy_id || null }))
                   } else {
-                    notifySuccess('Policy set')
+                    notifySuccess('Commission policy updated successfull_codey.new'</)
+')
                   }
                 } catch (err) {
                   notifyError(err, 'Failed to set policy')
@@ -516,7 +518,8 @@ export default function DealDetail() {
                 if (!resp.ok) {
                   notifyError(data || { message: 'Submit failed' })
                 } else {
-                  notifySuccess('Deal submitted')
+                  notifySuccess('Deal submitted successfull_codey.new'</)
+')
                   await load()
                 }
               } catch (err) {

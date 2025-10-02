@@ -25,8 +25,7 @@ export default function SalesAssignments() {
     } catch (e) {
       const msg = e.message || String(e)
       setError(msg)
-      notifyError(e, 'Failed to load assignments')
-    } finally {
+      notifyError(e, 'Unable to load assignmen_code    } finally {
       setLoading(false)
     }
   }
@@ -46,9 +45,9 @@ export default function SalesAssignments() {
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Assign failed')
-      notifySuccess('Assignment updated')
+      notifySuccess('Assignment updated successfully.')
     } catch (e) {
-      notifyError(e, 'Assign failed')
+      notifyError(e, 'Unable to assign.')
     } finally {
       setLoading(false)
     }
@@ -69,9 +68,9 @@ export default function SalesAssignments() {
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Update failed')
-      notifySuccess('Assignment updated')
+      notifySuccess('Assignment updated successfully.')
     } catch (e) {
-      notifyError(e, 'Update failed')
+      notifyError(e, 'Unable to update assignment.')
     } finally {
       setLoading(false)
     }

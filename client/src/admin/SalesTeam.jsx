@@ -50,14 +50,14 @@ export default function SalesTeam() {
         fetchWithAuth(`${API_URL}/api/workflow/sales-teams/memberships?active=true`)
       ])
       const usersData = await usersResp.json()
-      if (!usersResp.ok) throw new Error(usersData?.error?.message || 'Failed to load users')
+      if (!usersResp.ok) throw new Error(usersData?.error?.message || 'Unable to load users')
 
       const allUsers = usersData.users || []
       setConsultants(allUsers.filter(u => u.role === 'property_consultant'))
       setManagers(allUsers.filter(u => u.role === 'sales_manager'))
 
       const memData = await memResp.json()
-      if (!memResp.ok) throw new Error(memData?.error?.message || 'Failed to load memberships')
+      if (!memResp.ok) throw new Error(memData?.error?.message || 'Unable to load memberships')
       const map = {}
       ;(memData.memberships || []).forEach(m => {
         map[m.member_user_id] = String(m.manager_user_id)
@@ -66,7 +66,7 @@ export default function SalesTeam() {
     } catch (e) {
       const msg = e.message || String(e)
       setError(msg)
-      notifyError(e, 'Failed to load team data')
+      notifyError(e, 'Unable to load team data')
     } finally {
       setLoading(false)
     }
@@ -126,7 +126,7 @@ export default function SalesTeam() {
 
   const [rowLoading, setRowLoading] = useState({})
   async function saveAssign(consultantUserId) {
-    if (!assignManagerId) { notifyError('Select a manager'); return }
+    if (!assignManagerId) { notifyError('Please select a manager.'); return }
     const key = `assign:${consultantUserId}`
     try {
       setRowLoading(s => ({ ...s, [key]: true }))
@@ -139,12 +139,12 @@ export default function SalesTeam() {
         })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to assign')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to assign manager')
       setAssignFor(0)
-      notifySuccess('Manager assigned')
+      notifySuccess('Assignment updated successfully.')
       await load()
     } catch (e) {
-      notifyError(e, 'Failed to assign')
+      notifyError(e, 'Unable to assign manager')
     } finally {
       setRowLoading(s => ({ ...s, [key]: false }))
     }

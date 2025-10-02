@@ -141,7 +141,7 @@ export default function Users() {
                 throw new Error(errorData.error?.message || 'Failed to create user');
             }
             setCreateForm({ email: '', password: '', role: 'user', fullName: '' }); // Reset form
-        }, 'User created').finally(() => setCreating(false));
+        }, 'User created successfully.').finally(() => setCreating(false));
     };
 
     const saveEmail = (userId) => {
@@ -157,7 +157,7 @@ export default function Users() {
             }
             setEditingId(null);
             setEditEmail('');
-        }, 'Email saved');
+        }, 'Email updated successfully.');
     };
 
     // Position history modal actions
@@ -212,7 +212,7 @@ export default function Users() {
                 const errorData = await resp.json().catch(() => ({ error: { message: 'An unknown error occurred' } }));
                 throw new Error(errorData.error?.message || 'Failed to change role');
             }
-        }, 'Role changed');
+        }, 'Role updated successfully.');
     };
 
     const toggleActive = (user) => {
@@ -226,7 +226,7 @@ export default function Users() {
                 const errorData = await resp.json().catch(() => ({ error: { message: 'An unknown error occurred' } }));
                 throw new Error(errorData.error?.message || 'Failed to toggle active status');
             }
-        }, user.active ? 'User deactivated' : 'User activated');
+        }, user.active ? 'User deactivated successfully.' : 'User activated successfully_code.'new)</;
     };
 
     const handleLogout = () => {

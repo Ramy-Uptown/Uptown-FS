@@ -38,12 +38,12 @@ export default function ContractsTeam() {
       setError('')
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/contracts-teams/memberships?active=true`)
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load memberships')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to load memberships')
       setMemberships(data.memberships || [])
     } catch (e) {
       const msg = e.message || String(e)
       setError(msg)
-      notifyError(e, 'Failed to load contracts team')
+      notifyError(e, 'Unable to load contracts team')
     } finally {
       setLoading(false)
     }
@@ -60,8 +60,8 @@ export default function ContractsTeam() {
   }
 
   async function assign() {
-    if (!memberId) { notifyError('Select a member'); return }
-    if (!managerId) { notifyError('Select a manager'); return }
+    if (!memberId) { notifyError('Please select a member.'); return }
+    if (!managerId) { notifyError('Please select a manager.'); return }
     try {
       setAssigning(true)
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/contracts-teams/assign`, {
@@ -70,12 +70,12 @@ export default function ContractsTeam() {
         body: JSON.stringify({ member_user_id: Number(memberId), manager_user_id: Number(managerId) })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Assign failed')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to assign')
       setMemberId(''); setManagerId(''); setMemberSearch(''); setManagerSearch('')
-      notifySuccess('Member assigned')
+      notifySuccess('Assignment updated successfully.')
       await load()
     } catch (e) {
-      notifyError(e, 'Assign failed')
+      notifyError(e, 'Unable to assign')
     } finally {
       setAssigning(false)
     }
@@ -91,11 +91,11 @@ export default function ContractsTeam() {
         body: JSON.stringify({ manager_user_id: Number(mgr), member_user_id: Number(mem), active: false })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to clear')
-      notifySuccess('Membership cleared')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to clear')
+      notifySuccess('Assignment cleared successfully.')
       await load()
     } catch (e) {
-      notifyError(e, 'Failed to clear membership')
+      notifyError(e, 'Unable to clear')
     } finally {
       setRowLoading(s => ({ ...s, [key]: false }))
     }
@@ -201,6 +201,32 @@ export default function ContractsTeam() {
               )}
               {!loading && (memberships || []).map((m, idx) => {
                 const key = `${m.manager_user_id}:${m.member_user_id}`
+                return (
+                <tr key={idx}>
+                  <td style={td}>{m.manager_user_id} {m.manager_email ? <span style={metaText}>({m.manager_email})</span> : null}</td>
+                  <td style={td}>{m.member_user_id} {m.member_email ? <span style={metaText}>({m.member_email})</span> : null}</td>
+                  <td style={td}>{m.active ? 'Yes' : 'No'}</td>
+                  <td style={td}>
+                    {m.active && canAssign ? (
+                      <LoadingButton onClick={() => clearMembership(m.manager_user_id, m.member_user_id)} loading={rowLoading[key]}>Clear</LoadingButton>
+                    ) : (
+                      !canAssign ? <span style={metaText}>No actions</span> : null
+                    )}
+                  </td>
+                </tr>
+              )})}
+              {memberships.length === 0 && !loading && (
+                <tr>
+                  <td style={td} colSpan={4}>No memberships.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}:${m.member_user_id}`
                 return (
                 <tr key={idx}>
                   <td style={td}>{m.manager_user_id} {m.manager_email ? <span style={metaText}>({m.manager_email})</span> : null}</td>

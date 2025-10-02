@@ -3,6 +3,8 @@ import BrandHeader from '../lib/BrandHeader.jsx';
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js';
 import LoadingButton from '../components/LoadingButton.jsx';
 import { notifyError, notifySuccess } from '../lib/notifications.js';
+import * as XLSX from 'xlsx';
+import { useLoader } from '../lib/loaderContext.jsx';
 
 /**
  * CommissionsReport Component
@@ -27,6 +29,8 @@ export default function CommissionsReport() {
         endDate: '',
     });
 
+    const { setShow, setMessage } = useLoader();
+
     // Effect to load data for the filter dropdowns on initial component mount
     useEffect(() => {
         async function loadFilterOptions() {
@@ -41,8 +45,8 @@ export default function CommissionsReport() {
                 if (policiesRes?.policies) setPolicies(policiesRes.policies);
 
             } catch (err) {
-                setError("Could not load filter options. Please try again later.");
-                notifyError(err, 'Failed to load filter options');
+                setError("Unable to load filter options. Please try again later.");
+                notifyError(err, 'Unable to load filter options');
             }
         }
         loadFilterOptions();
@@ -64,17 +68,17 @@ export default function CommissionsReport() {
             const data = await resp.json();
 
             if (!resp.ok) {
-                throw new Error(data?.error?.message || 'Failed to load report');
+                throw new Error(data?.error?.message || 'Unable to load report');
             }
 
             setRows(data.commissions || []);
             setTotal(Number(data.total || 0));
-            notifySuccess('Report loaded');
+            notifySuccess('Report loaded successfully.');
 
         } catch (e) {
             const msg = e.message || String(e);
             setError(msg);
-            notifyError(e, 'Failed to load report');
+            notifyError(e, 'Unable to load report');
         } finally {
             setIsLoading(false);
         }
@@ -127,6 +131,70 @@ export default function CommissionsReport() {
         return new Date(dateString).toLocaleString();
     };
 
+    function exportXLSX() {
+        if (!rows || rows.length === 0) return;
+        try {
+            setMessage('Generating report, please wait...');
+            setShow(true);
+
+            const headers = [
+                { key: 'id', label: 'ID' },
+                { key: 'deal_title', label: 'Deal' },
+                { key: 'sales_name', label: 'Sales Person' },
+                { key: 'policy_name', label: 'Policy' },
+                { key: 'amount', label: 'Amount' },
+                { key: 'calculated_at', label: 'Calculated At' },
+            ];
+            const aoa = [headers.map(h => h.label), ...rows.map(r => headers.map(h => r[h.key] ?? ''))];
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!cols'] = [ { wch: 8 }, { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 20 } ];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Commissions');
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const ts = new Date().toISOString().replace(/[:.]/g, '-');
+            a.download = `commissions_report_${ts}.xlsx`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            notifySuccess('Export completed successfully.');
+        } catch (e) {
+            notifyError(e, 'Export failed');
+        } finally {
+            setShow(false);
+        }
+    }
+
+    function exportCSV() {
+        if (!rows || rows.length === 0) return;
+        try {
+            setMessage('Generating report, please wait...');
+            setShow(true);
+            const headers = ['ID', 'Deal', 'Sales Person', 'Policy', 'Amount', 'Calculated At'];
+            const getRow = (r) => [r.id, r.deal_title ?? r.deal_id, r.sales_name ?? r.sales_person_id, r.policy_name ?? r.policy_id, r.amount, r.calculated_at];
+            const csv = [headers.join(','), ...rows.map(r => getRow(r).map(v => {
+                const s = v == null ? '' : String(v);
+                return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+            }).join(','))].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const ts = new Date().toISOString().replace(/[:.]/g, '-');
+            a.download = `commissions_report_${ts}.csv`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            notifySuccess('Export completed successfully.');
+        } catch (e) {
+            notifyError(e, 'Export failed');
+        } finally {
+            setShow(false);
+        }
+    }
+
     return (
         <div className="bg-gray-50 min-h-screen font-sans">
             <BrandHeader onLogout={handleLogout} />
@@ -136,7 +204,7 @@ export default function CommissionsReport() {
 
                 {/* Filter Controls */}
                 <div className="bg-white p-4 rounded-lg shadow-sm mb-6 print:hidden">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 items-end">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
                         <div className="flex flex-col">
                             <label htmlFor="sales_person_id" className="text-sm font-medium text-gray-600 mb-1">Sales Person</label>
                             <select id="sales_person_id" name="sales_person_id" value={filters.sales_person_id} onChange={handleFilterChange} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
@@ -166,6 +234,8 @@ export default function CommissionsReport() {
                         <LoadingButton onClick={loadReport} loading={isLoading} variant="primary">
                             {isLoading ? 'Loading...' : 'Apply Filters'}
                         </LoadingButton>
+                        <LoadingButton onClick={exportXLSX} disabled={!rows || rows.length === 0}>Export XLSX</LoadingButton>
+                        <LoadingButton onClick={exportCSV} disabled={!rows || rows.length === 0}>Export CSV</LoadingButton>
                     </div>
                 </div>
 

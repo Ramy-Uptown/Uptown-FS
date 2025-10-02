@@ -71,7 +71,7 @@ export default function CommissionPolicies() {
       }
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
-      notifySuccess(editingId ? 'Policy updated' : 'Policy created')
+      notifySuccess(editingId ? 'Commission policy updated successfully.' : 'Commission policy created successfully.')
       resetForm()
       await load()
     } catch (e) {
@@ -95,7 +95,7 @@ export default function CommissionPolicies() {
       const resp = await fetchWithAuth(`${API_URL}/api/commission-policies/${id}`, { method: 'DELETE' })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Delete failed')
-      notifySuccess('Policy deleted')
+      notifySuccess('Commission policy deleted successfully.')
       await load()
     } catch (e) {
       notifyError(e, 'Delete failed')

@@ -85,7 +85,7 @@ export default function RejectedPricings() {
       if (!res.ok) throw new Error(data?.error?.message || 'Delete failed');
       setPricings(pricings => pricings.filter(x => x.id !== p.id));
       if (editing?.id === p.id) setEditing(null);
-      notifySuccess('Rejected request deleted');
+      notifySuccess('Rejected pricing request deleted successfully.');
     } catch (e) {
       notifyError(e, 'Delete failed');
     } finally {

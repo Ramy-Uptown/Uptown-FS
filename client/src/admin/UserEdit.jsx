@@ -211,7 +211,7 @@ export default function UserEdit() {
   }
 
   async function assignManager() {
-    if (!assignManagerId) return alert('Select a manager')
+    if (!assignManagerId) { notifyError('Please select a manager.'); return }
     setBusy(true)
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
@@ -223,18 +223,18 @@ export default function UserEdit() {
         })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to assign manager')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to assign manager')
       setCurrentManagerId(assignManagerId)
-      alert('Manager assigned.')
+      notifySuccess('Manager assigned successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to assign manager')
     } finally {
       setBusy(false)
     }
   }
 
   async function clearManager() {
-    if (!currentManagerId) return alert('No current manager to clear.')
+    if (!currentManagerId) { notifyError('No current manager to clear.'); return }
     setBusy(true)
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
@@ -247,12 +247,12 @@ export default function UserEdit() {
         })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to clear manager')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to clear manager')
       setCurrentManagerId('')
       setAssignManagerId('')
-      alert('Manager cleared.')
+      notifySuccess('Manager assignment cleared successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to clear manager')
     } finally {
       setBusy(false)
     }
