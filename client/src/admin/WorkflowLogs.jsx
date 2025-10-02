@@ -3,6 +3,8 @@ import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import * as XLSX from 'xlsx'
 import { th, td, ctrl, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
 import BrandHeader from '../lib/BrandHeader.jsx'
+import LoadingButton from '../components/LoadingButton.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 export default function WorkflowLogs() {
   const [startDate, setStartDate] = useState('')
@@ -28,8 +30,11 @@ export default function WorkflowLogs() {
       const j = await resp.json()
       if (!resp.ok) throw new Error(j?.error?.message || 'Failed to load report')
       setData(j)
+      notifySuccess('Report loaded')
     } catch (e) {
-      setError(e.message || String(e))
+      const msg = e.message || String(e)
+      setError(msg)
+      notifyError(e, 'Failed to load report')
     } finally {
       setLoading(false)
     }
@@ -138,6 +143,7 @@ export default function WorkflowLogs() {
     a.download = `workflow_logs_${ts}.xlsx`
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     URL.revokeObjectURL(url)
+    notifySuccess('XLSX exported')
   }
 
   function exportCSV() {
@@ -171,6 +177,7 @@ export default function WorkflowLogs() {
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       URL.revokeObjectURL(url)
     })
+    notifySuccess('CSV exported')
   }
 
   return (
@@ -190,9 +197,9 @@ export default function WorkflowLogs() {
           <input type="number" placeholder="Consultant User ID" value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl} />
           <input type="number" placeholder="Sales Manager User ID" value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl} />
           <div>
-            <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Apply'}</button>
-            <button onClick={exportXLSX} disabled={!data} style={btn}>Export XLSX</button>
-            <button onClick={exportCSV} disabled={!data} style={btn}>Export CSV</button>
+            <LoadingButton onClick={load} loading={loading}>Apply</LoadingButton>
+            <LoadingButton onClick={exportXLSX} disabled={!data}>Export XLSX</LoadingButton>
+            <LoadingButton onClick={exportCSV} disabled={!data}>Export CSV</LoadingButton>
           </div>
         </div>
 
