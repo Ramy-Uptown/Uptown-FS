@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react'
 import BrandHeader from '../lib/BrandHeader.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { th, td, btn, btnPrimary, tableWrap, table, pageContainer, pageTitle, metaText, errorText } from '../lib/ui.js'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 export default function InventoryDrafts() {
   const [units, setUnits] = useState([])
@@ -41,7 +44,9 @@ export default function InventoryDrafts() {
       // Model linking requests are disabled; units are created already linked to a model.
       // No additional fetch required here.
     } catch (e) {
-      setError(e.message || String(e))
+      const msg = e.message || String(e)
+      setError(msg)
+      notifyError(e, 'Failed to load drafts')
     } finally {
       setLoading(false)
     }
@@ -57,8 +62,9 @@ export default function InventoryDrafts() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Approve failed')
       setUnits(list => list.filter(u => u.id !== id))
+      notifySuccess('Unit approved')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Approve failed')
     } finally {
       setBusyId(0)
     }
@@ -77,8 +83,9 @@ export default function InventoryDrafts() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Reject failed')
       setUnits(list => list.filter(u => u.id !== id))
+      notifySuccess('Unit rejected')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Reject failed')
     } finally {
       setBusyId(0)
     }
@@ -92,7 +99,6 @@ export default function InventoryDrafts() {
       <div style={pageContainer}>
         <h2 style={pageTitle}>Inventory Drafts Approval (Financial Manager)</h2>
         {error ? <p style={errorText}>{error}</p> : null}
-        {loading ? <p style={metaText}>Loading…</p> : null}
         <div style={tableWrap}>
           <table style={table}>
             <thead>
@@ -107,7 +113,14 @@ export default function InventoryDrafts() {
               </tr>
             </thead>
             <tbody>
-              {units.map(u => (
+              {loading && (
+                <>
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <SkeletonRow key={i} widths={['sm','lg','lg','lg','sm','lg','lg']} tdStyle={td} />
+                  ))}
+                </>
+              )}
+              {!loading && units.map(u => (
                 <tr key={u.id}>
                   <td style={td}>{u.id}</td>
                   <td style={td}>{u.code}</td>
@@ -116,8 +129,8 @@ export default function InventoryDrafts() {
                   <td style={td}>{u.unit_status}</td>
                   <td style={td}>{(u.created_at || '').replace('T', ' ').replace('Z', '')}</td>
                   <td style={td}>
-                    <button disabled={busyId === u.id} onClick={() => approve(u.id)} style={btnPrimary}>Approve</button>
-                    <button disabled={busyId === u.id} onClick={() => reject(u.id)} style={btn}>Reject</button>
+                    <LoadingButton disabled={busyId === u.id} onClick={() => approve(u.id)} loading={busyId === u.id} variant="primary">Approve</LoadingButton>
+                    <LoadingButton disabled={busyId === u.id} onClick={() => reject(u.id)} loading={busyId === u.id} style={btn}>Reject</LoadingButton>
                   </td>
                 </tr>
               ))}
