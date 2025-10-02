@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { th, td, ctrl, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
 import BrandHeader from '../lib/BrandHeader.jsx'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 export default function HoldsFM() {
   const [status, setStatus] = useState('approved')
@@ -9,6 +12,7 @@ export default function HoldsFM() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [role, setRole] = useState('')
+  const [rowLoading, setRowLoading] = useState({})
 
   useEffect(() => {
     try {
@@ -30,24 +34,27 @@ export default function HoldsFM() {
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load holds')
       setRows(data.holds || [])
     } catch (e) {
-      setError(e.message || String(e))
+      const msg = e.message || String(e)
+      setError(msg)
+      notifyError(e, 'Failed to load holds')
     } finally {
       setLoading(false)
     }
   }
   useEffect(() => { load() }, [status])
 
-  async function act(path, method = 'PATCH') {
+  async function act(path, method = 'PATCH', id) {
     try {
-      setLoading(true)
+      setRowLoading(s => ({ ...s, [id]: true }))
       const resp = await fetchWithAuth(`${API_URL}${path}`, { method })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Action failed')
+      notifySuccess('Action completed')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Action failed')
     } finally {
-      setLoading(false)
+      setRowLoading(s => ({ ...s, [id]: false }))
     }
   }
 
@@ -77,7 +84,7 @@ export default function HoldsFM() {
       <div style={pageContainer}>
         <h2 style={pageTitle}>Holds — {canFM ? 'Financial Manager' : 'Read Only'}</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-          <select value={status} onChange={e => setStatus(e.target.value)} style={ctrl}>
+          <select value={status} onChange={e => setStatus(e.target.value)} style={ctrl} disabled={loading}>
             <option value="">All</option>
             <option value="pending_approval">Pending Approval</option>
             <option value="approved">Approved (Active Block)</option>
@@ -87,7 +94,7 @@ export default function HoldsFM() {
             <option value="expired">Expired</option>
             <option value="reserved">Reserved</option>
           </select>
-          <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Refresh'}</button>
+          <LoadingButton onClick={load} loading={loading} style={btn}>Refresh</LoadingButton>
         </div>
         {error ? <p style={errorText}>{error}</p> : null}
         <div style={tableWrap}>
@@ -103,7 +110,14 @@ export default function HoldsFM() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
+              {loading && (
+                <>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <SkeletonRow key={i} widths={['sm','sm','sm','sm','sm','lg']} tdStyle={td} />
+                  ))}
+                </>
+              )}
+              {!loading && rows.map(r => (
                 <tr key={r.id}>
                   <td style={td}>{r.id}</td>
                   <td style={td}>{r.unit_id}</td>
@@ -112,17 +126,17 @@ export default function HoldsFM() {
                   <td style={td}>{r.expires_at ? new Date(r.expires_at).toLocaleString() : ''}</td>
                   <td style={td}>
                     {canFM && r.status === 'pending_approval' && (
-                      <button onClick={() => act(`/api/inventory/holds/${r.id}/approve`)} style={btn}>Approve</button>
+                      <LoadingButton onClick={() => act(`/api/inventory/holds/${r.id}/approve`, 'PATCH', r.id)} loading={rowLoading[r.id]}>Approve</LoadingButton>
                     )}
                     {canFM && r.status === 'approved' && (
                       <>
-                        <button onClick={() => act(`/api/inventory/holds/${r.id}/unblock`)} style={btn}>Unblock</button>
-                        <button onClick={() => act(`/api/inventory/holds/${r.id}/extend`)} style={btn}>Extend +7d</button>
-                        <button onClick={() => act(`/api/inventory/holds/${r.id}/override-request`, 'POST')} style={btn}>Request Override</button>
+                        <LoadingButton onClick={() => act(`/api/inventory/holds/${r.id}/unblock`, 'PATCH', r.id)} loading={rowLoading[r.id]}>Unblock</LoadingButton>
+                        <LoadingButton onClick={() => act(`/api/inventory/holds/${r.id}/extend`, 'PATCH', r.id)} loading={rowLoading[r.id]}>Extend +7d</LoadingButton>
+                        <LoadingButton onClick={() => act(`/api/inventory/holds/${r.id}/override-request`, 'POST', r.id)} loading={rowLoading[r.id]}>Request Override</LoadingButton>
                       </>
                     )}
                     {canFM && r.status === 'override_ceo_approved' && (
-                      <button onClick={() => act(`/api/inventory/holds/${r.id}/override-unblock`)} style={btn}>Override Unblock</button>
+                      <LoadingButton onClick={() => act(`/api/inventory/holds/${r.id}/override-unblock`, 'PATCH', r.id)} loading={rowLoading[r.id]}>Override Unblock</LoadingButton>
                     )}
                   </td>
                 </tr>

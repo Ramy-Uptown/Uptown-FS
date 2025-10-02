@@ -2,6 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import BrandHeader from '../lib/BrandHeader.jsx';
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js';
 import { th, td, ctrl, btn, btnPrimary, btnDanger, btnSuccess, tableWrap, table, pageContainer, pageTitle, metaText, errorText } from '../lib/ui.js';
+import LoadingButton from '../components/LoadingButton.jsx';
+import SkeletonRow from '../components/SkeletonRow.jsx';
+import { notifyError, notifySuccess } from '../lib/notifications.js';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 export default function RejectedPricings() {
   const role = JSON.parse(localStorage.getItem('auth_user') || '{}')?.role;
@@ -9,6 +13,7 @@ export default function RejectedPricings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null);
+  const [rowLoading, setRowLoading] = useState({});
 
   // editable form state (for resubmission)
   const [price, setPrice] = useState('');
@@ -32,7 +37,9 @@ export default function RejectedPricings() {
         if (!res.ok) throw new Error(data?.error?.message || 'Failed to load pricings');
         setPricings((data.pricings || []).filter(p => p.status === 'rejected'));
       } catch (e) {
-        setError(e.message || String(e));
+        const msg = e.message || String(e);
+        setError(msg);
+        notifyError(e, 'Failed to load rejected pricings');
       } finally {
         setLoading(false);
       }
@@ -69,16 +76,21 @@ export default function RejectedPricings() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  async function deletePricing(p) {
-    if (!confirm('Delete this rejected pricing request?')) return;
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  async function performDelete(p) {
+    const key = `delete:${p.id}`;
     try {
+      setRowLoading(s => ({ ...s, [key]: true }));
       const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model/${p.id}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error?.message || 'Delete failed');
       setPricings(pricings => pricings.filter(x => x.id !== p.id));
       if (editing?.id === p.id) setEditing(null);
+      notifySuccess('Rejected pricing request deleted successfully.');
     } catch (e) {
-      alert(e.message || String(e));
+      notifyError(e, 'Delete failed');
+    } finally {
+      setRowLoading(s => ({ ...s, [key]: false }));
     }
   }
 
@@ -122,9 +134,9 @@ export default function RejectedPricings() {
       // Remove old rejected from local list and optionally add newly created request
       setPricings(prev => prev.filter(x => x.id !== editing.id));
       setEditing(null);
-      alert('Resubmitted for approval.');
+      notifySuccess('Resubmitted for approval');
     } catch (e) {
-      alert(e.message || String(e));
+      notifyError(e, 'Resubmission failed');
     }
   }
 
@@ -214,8 +226,8 @@ export default function RejectedPricings() {
             </div>
 
             <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-              <button type="submit" style={btnPrimary}>Resubmit for Approval</button>
-              <button type="button" onClick={() => setEditing(null)} style={btn}>Cancel</button>
+              <LoadingButton type="submit">Resubmit for Approval</LoadingButton>
+              <LoadingButton type="button" onClick={() => setEditing(null)}>Cancel</LoadingButton>
             </div>
           </form>
         )}
@@ -242,7 +254,10 @@ export default function RejectedPricings() {
               </tr>
             </thead>
             <tbody>
-              {pricings.map(p => (
+              {loading && Array.from({ length: 10 }).map((_, i) => (
+                <SkeletonRow key={i} widths={['sm','lg','sm','sm','sm','sm','sm','sm','sm','sm','lg','lg','lg']} tdStyle={td} />
+              ))}
+              {!loading && pricings.map(p => (
                 <tr key={p.id}>
                   <td style={td}>{p.id}</td>
                   <td style={td}>{p.model_name}</td>
@@ -272,8 +287,8 @@ export default function RejectedPricings() {
                   <td style={td}>{p.reject_reason || p.reason || ''}</td>
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button onClick={() => startEdit(p)} style={btnPrimary}>Edit & Resubmit</button>
-                      <button onClick={() => deletePricing(p)} style={btnDanger}>Delete</button>
+                      <LoadingButton onClick={() => startEdit(p)}>Edit & Resubmit</LoadingButton>
+                      <LoadingButton onClick={() => setConfirmDelete(p)} loading={rowding[`delete:${p.id}`]} style={btnDanger}>Delete</LoadingButton>
                     </div>
                   </td>
                 </tr>
@@ -287,6 +302,11 @@ export default function RejectedPricings() {
           </table>
         </div>
       </div>
-    </div>
-  );
+     <dConfirmModal
+        open={!!confirmDelete}
+        title="Delete Rejected Pricing"
+        message="Are you sure you want to delete this rejected pricing request?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={() => { const p = confirmDelete; setConfirmDelete(null); perform;
 }

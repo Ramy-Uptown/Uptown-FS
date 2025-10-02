@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
 import * as XLSX from 'xlsx'
+import { useLoader } from '../lib/loaderContext.jsx'
 
 export default function Dashboard() {
   const [deals, setDeals] = useState([])
@@ -23,6 +27,7 @@ export default function Dashboard() {
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [deletingIds, setDeletingIds] = useState(new Set())
 
   async function load(p = page) {
     try {
@@ -50,6 +55,7 @@ export default function Dashboard() {
       setTotal(data.pagination?.total || 0)
     } catch (e) {
       setError(e.message || String(e))
+      notifyError(e, 'Failed to load deals')
     } finally {
       setLoading(false)
     }
@@ -97,6 +103,42 @@ export default function Dashboard() {
     return () => { mounted = false }
   }, [])
 
+  async function handleDelete(deal) {
+    const id = deal.id
+    // optimistic remove
+    const prevDeals = deals
+    setDeals(d => d.filter(x => x.id !== id))
+    setTotal(t => Math.max(0, t - 1))
+    setDeletingIds(s => new Set([...s, id]))
+    try {
+      const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, { method: 'DELETE' })
+      let msg = ''
+      try {
+        const j = await resp.json()
+        msg = j?.error?.message || ''
+      } catch {}
+      if (!resp.ok) {
+        // rollback
+        setDeals(prevDeals)
+        setTotal(t => t + 1)
+        notifyError({ message: msg || 'Failed to delete deal' })
+      } else {
+        notifySuccess('Deal deleted')
+      }
+    } catch (e) {
+      // rollback
+      setDeals(prevDeals)
+      setTotal(t => t + 1)
+      notifyError(e, 'Failed to delete deal')
+    } finally {
+      setDeletingIds(s => {
+        const next = new Set(s)
+        next.delete(id)
+        return next
+      })
+    }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -108,7 +150,7 @@ export default function Dashboard() {
       </div>
 
       {approverBanner.show && (
-        <div style={{ margin: '8px 0 12px', padding: '10px 12px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ margin: '8px 0 12px', padding: '10px 12px', borderRadius: 8, background: '#fff7ed', border: '1px solid '#fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <span style={{ color: '#9a3412', marginRight: 8 }}>You have pending approvals in your queue.</span>
             <a href={approverBanner.url} style={{ color: '#1f6feb', textDecoration: 'none', fontWeight: 600 }}>Review Now</a>
@@ -128,23 +170,23 @@ export default function Dashboard() {
       )}
 
       <div style={{ display: 'grid', gap: 8, marginBottom: 12, gridTemplateColumns: 'repeat(6, 1fr)' }}>
-        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }} style={ctrl}>
+        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }} style={ctrl} disabled={loading}>
           <option value="">All statuses</option>
           <option value="draft">draft</option>
           <option value="pending_approval">pending_approval</option>
           <option value="approved">approved</option>
           <option value="rejected">rejected</option>
         </select>
-        <input placeholder="Search title…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={ctrl} />
-        <input placeholder="Creator email…" value={creatorEmail} onChange={e => { setCreatorEmail(e.target.value); setPage(1) }} style={ctrl} />
-        <input placeholder="Reviewer email…" value={reviewerEmail} onChange={e => { setReviewerEmail(e.target.value); setPage(1) }} style={ctrl} />
-        <input placeholder="Approver email…" value={approverEmail} onChange={e => { setApproverEmail(e.target.value); setPage(1) }} style={ctrl} />
-        <input placeholder="Unit type…" value={unitType} onChange={e => { setUnitType(e.target.value); setPage(1) }} style={ctrl} />
-        <input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); setPage(1) }} style={ctrl} />
-        <input type="date" value={endDate} onChange={e => { setEndDate(e.target.value); setPage(1) }} style={ctrl} />
-        <input type="number" placeholder="Min amount" value={minAmount} onChange={e => { setMinAmount(e.target.value); setPage(1) }} style={ctrl} />
-        <input type="number" placeholder="Max amount" value={maxAmount} onChange={e => { setMaxAmount(e.target.value); setPage(1) }} style={ctrl} />
-        <select value={sortBy} onChange={e => { setSortBy(e.target.value); setPage(1) }} style={ctrl}>
+        <input placeholder="Search title…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
+        <input placeholder="Creator email…" value={creatorEmail} onChange={e => { setCreatorEmail(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
+        <input placeholder="Reviewer email…" value={reviewerEmail} onChange={e => { setReviewerEmail(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
+        <input placeholder="Approver email…" value={approverEmail} onChange={e => { setApproverEmail(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
+        <input placeholder="Unit type…" value={unitType} onChange={e => { setUnitType(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
+        <input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
+        <input type="date" value={endDate} onChange={e => { setEndDate(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
+        <input type="number" placeholder="Min amount" value={minAmount} onChange={e => { setMinAmount(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
+        <input type="number" placeholder="Max amount" value={maxAmount} onChange={e => { setMaxAmount(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
+        <select value={sortBy} onChange={e => { setSortBy(e.target.value); setPage(1) }} style={ctrl} disabled={loading}>
           <option value="id">Sort by id</option>
           <option value="title">Sort by title</option>
           <option value="amount">Sort by amount</option>
@@ -152,16 +194,16 @@ export default function Dashboard() {
           <option value="created_at">Sort by created</option>
           <option value="updated_at">Sort by updated</option>
         </select>
-        <select value={sortDir} onChange={e => { setSortDir(e.target.value); setPage(1) }} style={ctrl}>
+        <select value={sortDir} onChange={e => { setSortDir(e.target.value); setPage(1) }} style={ctrl} disabled={loading}>
           <option value="desc">desc</option>
           <option value="asc">asc</option>
         </select>
-        <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }} style={ctrl}>
+        <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }} style={ctrl} disabled={loading}>
           <option value={10}>10</option>
           <option value={20}>20</option>
           <option value={50}>50</option>
         </select>
-        <button onClick={() => load(1)} disabled={loading} style={btn}>Refresh</button>
+        <LoadingButton onClick={() => load(1)} loading={loading} style={btn}>Refresh</LoadingButton>
       </div>
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
       <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
@@ -179,7 +221,14 @@ export default function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {deals.map(d => (
+            {loading && (
+              <>
+                {Array.from({ length: pageSize }).map((_, i) => (
+                  <SkeletonRow key={i} widths={['sm','lg','sm','sm','lg','lg','sm','sm']} tdStyle={td} />
+                ))}
+              </>
+            )}
+            {!loading && deals.map(d => (
               <tr key={d.id}>
                 <td style={td}>{d.id}</td>
                 <td style={td}>{d.title}</td>
@@ -188,8 +237,15 @@ export default function Dashboard() {
                 <td style={td}>{d.unit_type || '-'}</td>
                 <td style={td}>{d.created_by_email || '-'}</td>
                 <td style={td}>{d.created_at ? new Date(d.created_at).toLocaleString() : ''}</td>
-                <td style={td}>
+                <td style={{ ...td, display: 'flex', gap: 8 }}>
                   <Link to={`/deals/${d.id}`} style={{ textDecoration: 'none', color: '#1f6feb' }}>View</Link>
+                  <LoadingButton
+                    onClick={() => handleDelete(d)}
+                    loading={deletingIds.has(d.id)}
+                    style={{ ...btn, border: '1px solid #dc2626', color: '#dc2626' }}
+                  >
+                    Delete
+                  </LoadingButton>
                 </td>
               </tr>
             ))}
@@ -206,12 +262,12 @@ export default function Dashboard() {
           Page {page} of {totalPages} — {total} total
         </span>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button onClick={() => setPage(1)} disabled={page === 1} style={btn}>First</button>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btn}>Prev</button>
-          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={btn}>Next</button>
-          <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={btn}>Last</button>
-          <button onClick={exportCSV} disabled={loading || total === 0} style={btn}>Export CSV</button>
-          <button onClick={exportXLSX} disabled={loading || total === 0} style={btn}>Export Excel</button>
+          <LoadingButton onClick={() => setPage(1)} disabled={page === 1 || loading}>First</LoadingButton>
+          <LoadingButton onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}>Prev</LoadingButton>
+          <LoadingButton onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading}>Next</LoadingButton>
+          <LoadingButton onClick={() => setPage(totalPages)} disabled={page === totalPages || loading}>Last</LoadingButton>
+          <LoadingButton onClick={exportCSV} loading={loading} disabled={total === 0}>Export CSV</LoadingButton>
+          <LoadingButton onClick={exportXLSX} loading={loading} disabled={total === 0}>Export Excel</LoadingButton>
         </div>
       </div>
     </div>
@@ -253,9 +309,12 @@ export default function Dashboard() {
     return all
   }
 
+  const { setShow, setMessage } = useLoader()
+
   async function exportCSV() {
     try {
-      setLoading(true)
+      setMessage('Generating report, please wait...')
+      setShow(true)
       const rows = await exportAllMatching()
       const header = ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Created', 'Updated']
       const body = rows.map(d => ([
@@ -271,7 +330,7 @@ export default function Dashboard() {
       const out = [header, ...body]
       const csv = out.map(r => r.map(cell => {
         const s = String(cell ?? '')
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+        return /[\",\n]/.test(s) ? `\"${s.replace(/\"/g, '\"\"')}\"` : s
       }).join(',')).join('\n')
 
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -282,16 +341,18 @@ export default function Dashboard() {
       a.download = `deals_export_${ts}.csv`
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       URL.revokeObjectURL(url)
+      notifySuccess('Export completed successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to export CSV.')
     } finally {
-      setLoading(false)
+      setShow(false)
     }
   }
 
   async function exportXLSX() {
     try {
-      setLoading(true)
+      setMessage('Generating report, please wait...')
+      setShow(true)
       const rows = await exportAllMatching()
       const aoa = [
         ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Created', 'Updated'],
@@ -328,10 +389,11 @@ export default function Dashboard() {
       a.download = `deals_export_${ts}.xlsx`
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       URL.revokeObjectURL(url)
+      notifySuccess('Export completed successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to export Excel.')
     } finally {
-      setLoading(false)
+      setShow(false)
     }
   }
 }

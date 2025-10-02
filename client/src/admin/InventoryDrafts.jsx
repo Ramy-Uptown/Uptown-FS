@@ -2,6 +2,11 @@ import React, { useEffect, useState } from 'react'
 import BrandHeader from '../lib/BrandHeader.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { th, td, btn, btnPrimary, tableWrap, table, pageContainer, pageTitle, metaText, errorText } from '../lib/ui.js'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
+import ConfirmModal from '../components/ConfirmModal.jsx'
+import PromptModal from '../components/PromptModal.jsx'
 
 export default function InventoryDrafts() {
   const [units, setUnits] = useState([])
@@ -41,7 +46,9 @@ export default function InventoryDrafts() {
       // Model linking requests are disabled; units are created already linked to a model.
       // No additional fetch required here.
     } catch (e) {
-      setError(e.message || String(e))
+      const msg = e.message || String(e)
+      setError(msg)
+      notifyError(e, 'Failed to load drafts')
     } finally {
       setLoading(false)
     }
@@ -49,24 +56,33 @@ export default function InventoryDrafts() {
 
   useEffect(() => { load() }, [])
 
+  const [confirmApproveId, setConfirmApproveId] = useState(0)
+  const [promptRejectId, setPromptRejectId] = useState(0)
+
   async function approve(id) {
-    if (!confirm('Approve this draft unit and make it AVAILABLE?')) return
+    setConfirmApproveId(id)
+  }
+
+  async function performApprove(id) {
     setBusyId(id)
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/units/${id}/approve`, { method: 'PATCH' })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Approve failed')
       setUnits(list => list.filter(u => u.id !== id))
+      notifySuccess('Unit approved')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Approve failed')
     } finally {
       setBusyId(0)
     }
   }
 
-  async function reject(id) {
-    const reason = prompt('Reason for rejection (optional):') || ''
-    if (!confirm('Reject this draft unit?')) return
+  function reject(id) {
+    setPromptRejectId(id)
+  }
+
+  async function performReject(id, reason) {
     setBusyId(id)
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/units/${id}/reject`, {
@@ -77,8 +93,9 @@ export default function InventoryDrafts() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Reject failed')
       setUnits(list => list.filter(u => u.id !== id))
+      notifySuccess('Unit rejected')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Reject failed')
     } finally {
       setBusyId(0)
     }
@@ -92,7 +109,6 @@ export default function InventoryDrafts() {
       <div style={pageContainer}>
         <h2 style={pageTitle}>Inventory Drafts Approval (Financial Manager)</h2>
         {error ? <p style={errorText}>{error}</p> : null}
-        {loading ? <p style={metaText}>Loading…</p> : null}
         <div style={tableWrap}>
           <table style={table}>
             <thead>
@@ -107,7 +123,14 @@ export default function InventoryDrafts() {
               </tr>
             </thead>
             <tbody>
-              {units.map(u => (
+              {loading && (
+                <>
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <SkeletonRow key={i} widths={['sm','lg','lg','lg','sm','lg','lg']} tdStyle={td} />
+                  ))}
+                </>
+              )}
+              {!loading && units.map(u => (
                 <tr key={u.id}>
                   <td style={td}>{u.id}</td>
                   <td style={td}>{u.code}</td>
@@ -116,8 +139,8 @@ export default function InventoryDrafts() {
                   <td style={td}>{u.unit_status}</td>
                   <td style={td}>{(u.created_at || '').replace('T', ' ').replace('Z', '')}</td>
                   <td style={td}>
-                    <button disabled={busyId === u.id} onClick={() => approve(u.id)} style={btnPrimary}>Approve</button>
-                    <button disabled={busyId === u.id} onClick={() => reject(u.id)} style={btn}>Reject</button>
+                    <LoadingButton disabled={busyId === u.id} onClick={() => approve(u.id)} loading={busyId === u.id} variant="primary">Approve</LoadingButton>
+                    <LoadingButton disabled={busyId === u.id} onClick={() => reject(u.id)} loading={busyId === u.id} style={btn}>Reject</LoadingButton>
                   </td>
                 </tr>
               ))}
@@ -133,6 +156,25 @@ export default function InventoryDrafts() {
           Notes: Draft units are created by Financial Admin already linked to a Unit Model with approved standard pricing. Once approved, they become AVAILABLE.
         </p>
       </div>
+      <ConfirmModal
+        open={!!confirmApproveId}
+        title="Approve Draft Unit"
+        message="Approve this draft unit and mark it AVAILABLE?"
+        confirmText="Approve"
+        cancelText="Cancel"
+        onConfirm={() => { const id = confirmApproveId; setConfirmApproveId(0); performApprove(id) }}
+        onCancel={() => setConfirmApproveId(0)}
+      />
+      <PromptModal
+        open={!!promptRejectId}
+        title="Reject Draft Unit"
+        message="Optionally provide a reason for rejection:"
+        placeholder="Reason (optional)"
+        confirmText="Reject"
+        cancelText="Cancel"
+        onSubmit={(val) => { const id = promptRejectId; setPromptRejectId(0); performReject(id, val || '') }}
+        onCancel={() => setPromptRejectId(0)}
+      />
     </div>
   )
 }

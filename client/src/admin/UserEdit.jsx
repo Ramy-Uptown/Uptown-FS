@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import BrandHeader from '../lib/BrandHeader.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { pageContainer, pageTitle, errorText, metaText, ctrl, btn, btnPrimary, btnDanger, table, th, td, tableWrap } from '../lib/ui.js'
+import LoadingButton from '../components/LoadingButton.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 export default function UserEdit() {
   const { id } = useParams()
@@ -114,7 +116,7 @@ export default function UserEdit() {
       try {
         metaObj = metaTextState ? JSON.parse(metaTextState) : {}
       } catch (e) {
-        alert('Metadata must be valid JSON')
+        notifyError('Metadata must be valid JSON')
         return
       }
       // Enforce name edit permissions: only superadmin can change full_name
@@ -140,9 +142,9 @@ export default function UserEdit() {
       // refresh local fields from server
       setFullName((data.user.meta && data.user.meta.full_name) || '')
       setMetaTextState(JSON.stringify(data.user.meta || {}, null, 2))
-      alert('Saved.')
+      notifySuccess('Saved')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Failed to save')
     } finally {
       setBusy(false)
     }
@@ -159,9 +161,9 @@ export default function UserEdit() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to update role')
       setUser(data.user)
-      alert('Role updated.')
+      notifySuccess('Role updated')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Failed to update role')
     } finally {
       setBusy(false)
     }
@@ -178,9 +180,9 @@ export default function UserEdit() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to update status')
       setUser(data.user)
-      alert('Status updated.')
+      notifySuccess('Status updated')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Failed to update status')
     } finally {
       setBusy(false)
     }
@@ -188,8 +190,8 @@ export default function UserEdit() {
 
   async function savePassword(e) {
     e && e.preventDefault()
-    if (!pw1 || pw1.length < 6) return alert('Password must be at least 6 characters')
-    if (pw1 !== pw2) return alert('Passwords do not match')
+    if (!pw1 || pw1.length < 6) { notifyError('Password must be at least 6 characters'); return }
+    if (pw1 !== pw2) { notifyError('Passwords do not match'); return }
     setBusy(true)
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/auth/users/${uid}/password`, {
@@ -200,16 +202,16 @@ export default function UserEdit() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to set password')
       setPw1(''); setPw2('')
-      alert('Password updated.')
+      notifySuccess('Password updated')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Failed to set password')
     } finally {
       setBusy(false)
     }
   }
 
   async function assignManager() {
-    if (!assignManagerId) return alert('Select a manager')
+    if (!assignManagerId) { notifyError('Please select a manager.'); return }
     setBusy(true)
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
@@ -221,18 +223,18 @@ export default function UserEdit() {
         })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to assign manager')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to assign manager')
       setCurrentManagerId(assignManagerId)
-      alert('Manager assigned.')
+      notifySuccess('Manager assigned successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to assign manager')
     } finally {
       setBusy(false)
     }
   }
 
   async function clearManager() {
-    if (!currentManagerId) return alert('No current manager to clear.')
+    if (!currentManagerId) { notifyError('No current manager to clear.'); return }
     setBusy(true)
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
@@ -245,12 +247,12 @@ export default function UserEdit() {
         })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to clear manager')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to clear manager')
       setCurrentManagerId('')
       setAssignManagerId('')
-      alert('Manager cleared.')
+      notifySuccess('Manager assignment cleared successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to clear manager')
     } finally {
       setBusy(false)
     }
@@ -351,8 +353,8 @@ export default function UserEdit() {
                 <option value="">Select manager…</option>
                 {managers.map(m => <option key={m.id} value={m.id}>{m.email} (id {m.id})</option>)}
               </select>
-              <button type="button" onClick={assignManager} disabled={busy || !assignManagerId} style={btn}>Assign</button>
-              {currentManagerId ? <button type="button" onClick={clearManager} disabled={busy} style={btnDanger}>Clear</button> : null}
+              <LoadingButton type="button" onClick={assignManager} disabled={busy || !assignManagerId}>Assign</LoadingButton>
+              {currentManagerId ? <LoadingButton type="button" onClick={clearManager} disabled={busy} style={btnDanger}>Clear</LoadingButton> : null}
               <span style={metaText}>{currentManagerId ? `Current: ${currentManagerEmail}` : 'No manager assigned'}</span>
             </div>
           </div>

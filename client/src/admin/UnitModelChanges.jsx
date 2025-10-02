@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import BrandHeader from '../lib/BrandHeader.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 function fmt(n) {
   const v = Number(n || 0)
@@ -18,6 +21,7 @@ export default function UnitModelChanges() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [rejectReason, setRejectReason] = useState({})
+  const [rowLoading, setRowLoading] = useState({})
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const role = me?.role
   const isTop = role === 'ceo' || role === 'chairman' || role === 'vice_chairman'
@@ -31,7 +35,9 @@ export default function UnitModelChanges() {
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load changes')
       setChanges(data.changes || [])
     } catch (e) {
-      setError(e.message || String(e))
+      const msg = e.message || String(e)
+      setError(msg)
+      notifyError(e, 'Failed to load changes')
     } finally {
       setLoading(false)
     }
@@ -40,22 +46,27 @@ export default function UnitModelChanges() {
   useEffect(() => { load() }, [status])
 
   async function approveChange(id) {
-    if (!isTop) return alert('Only Top Management can approve.')
+    if (!isTop) { notifyError('Only Top Management can approve.'); return }
     try {
+      setRowLoading(s => ({ ...s, [id]: true }))
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/changes/${id}/approve`, { method: 'PATCH' })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Approve failed')
+      notifySuccess('Change approved')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Approve failed')
+    } finally {
+      setRowLoading(s => ({ ...s, [id]: false }))
     }
   }
 
   async function rejectChange(id) {
-    if (!isTop) return alert('Only Top Management can reject.')
+    if (!isTop) { notifyError('Only Top Management can reject.'); return }
     const reason = (rejectReason[id] || '').trim()
-    if (!reason) return alert('Please provide a reason for rejection')
+    if (!reason) { notifyError('Please provide a reason for rejection'); return }
     try {
+      setRowLoading(s => ({ ...s, [id]: true }))
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/changes/${id}/reject`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -64,23 +75,30 @@ export default function UnitModelChanges() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Reject failed')
       setRejectReason(s => ({ ...s, [id]: '' }))
+      notifySuccess('Change rejected')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Reject failed')
+    } finally {
+      setRowLoading(s => ({ ...s, [id]: false }))
     }
   }
 
   async function cancelChange(id, requestedBy) {
     if (!isFM) return
-    if (requestedBy !== me?.id) return alert('You can only cancel your own requests.')
+    if (requestedBy !== me?.id) { notifyError('You can only cancel your own requests.'); return }
     if (!window.confirm('Cancel this pending request? This cannot be undone.')) return
     try {
+      setRowLoading(s => ({ ...s, [id]: true }))
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/changes/${id}`, { method: 'DELETE' })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Cancel failed')
+      notifySuccess('Request cancelled')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Cancel failed')
+    } finally {
+      setRowLoading(s => ({ ...s, [id]: false }))
     }
   }
 
@@ -122,7 +140,6 @@ export default function UnitModelChanges() {
         </div>
 
         {error ? <p className="text-red-500 mt-2">{error}</p> : null}
-        {loading ? <p className="text-gray-500 mt-2">Loading…</p> : null}
 
         <div className="overflow-x-auto mt-3">
           <table className="min-w-full bg-white border border-gray-200 shadow-sm rounded-lg">
@@ -152,7 +169,14 @@ export default function UnitModelChanges() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {changes.map(ch => {
+              {loading && Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: status === 'pending_approval' && (isTop || isFM) ? 18 : 17 }).map((__, j) => (
+                    <td key={j} className="px-4 py-3"><div className="h-3 bg-gray-200 rounded w-2/3"/></td>
+                  ))}
+                </tr>
+              ))}
+              {!loading && changes.map(ch => {
                 const p = ch.payload || {}
                 const canCancel = status === 'pending_approval' && isFM && (ch.requested_by === me?.id)
                 return (
@@ -181,33 +205,35 @@ export default function UnitModelChanges() {
                       <div className="flex items-center gap-2">
                         {isTop ? (
                           <>
-                            <button
+                            <LoadingButton
                               onClick={() => approveChange(ch.id)}
-                              className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-3 rounded text-sm"
+                              loading={rowLoading[ch.id]}
+                              style={{ border: '1px solid #16a34a', color: '#16a34a' }}
                             >
                               Approve
-                            </button>
+                            </LoadingButton>
                             <input
                               placeholder="Reason (required)"
                               value={rejectReason[ch.id] || ''}
                               onChange={e => setRejectReason(s => ({ ...s, [ch.id]: e.target.value }))}
                               className="px-3 py-2 border rounded-md"
                             />
-                            <button
+                            <LoadingButton
                               onClick={() => rejectChange(ch.id)}
-                              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-3 rounded text-sm"
+                              loading={rowLoading[ch.id]}
+                              style={{ border: '1px solid #dc2626', color: '#dc2626' }}
                             >
                               Reject
-                            </button>
+                            </LoadingButton>
                           </>
                         ) : null}
                         {canCancel ? (
-                          <button
+                          <LoadingButton
                             onClick={() => cancelChange(ch.id, ch.requested_by)}
-                            className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-3 rounded text-sm"
+                            loading={rowLoading[ch.id]}
                           >
                             Cancel Request
-                          </button>
+                          </LoadingButton>
                         ) : null}
                       </div>
                     </td>

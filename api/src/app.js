@@ -37,11 +37,45 @@ import customerRoutes from './customerRoutes.js'
 import notificationService from './notificationService.js'
 import dashboardRoutes from './dashboardRoutes.js'
 import { errorHandler } from './errorHandler.js'
+import logger from './utils/logger.js'
+import crypto from 'crypto'
+import { validate, calculateSchema, generatePlanSchema, generateDocumentSchema } from './validation.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
 
 const app = express()
+
+// Correlation ID + request logging
+app.use((req, res, next) => {
+  // Assign a correlation ID if not present
+  req.id = req.headers['x-request-id'] || crypto.randomUUID()
+  const start = Date.now()
+
+  // Log incoming request
+  logger.info({
+    msg: 'Incoming request',
+    reqId: req.id,
+    method: req.method,
+    url: req.originalUrl || req.url,
+    ip: req.ip
+  })
+
+  res.on('finish', () => {
+    const ms = Date.now() - start
+    logger.info({
+      msg: 'Request completed',
+      reqId: req.id,
+      method: req.method,
+      url: req.originalUrl || req.url,
+      statusCode: res.statusCode,
+      durationMs: ms,
+      userId: req.user?.id || null
+    })
+  })
+
+  next()
+})
 
 // Helper: fetch active approval policy limit (global fallback = 5%)
 async function getActivePolicyLimitPercent() {
@@ -415,7 +449,7 @@ function validateInputs(inputs) {
  *   splitFirstYearPayments, firstYearPayments[], subsequentYears[]
  * }
  */
-app.post('/api/calculate', async (req, res) => {
+app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
   try {
     const { mode, stdPlan, inputs, standardPricingId, unitId } = req.body || {}
 
@@ -509,7 +543,7 @@ app.post('/api/calculate', async (req, res) => {
  * - currency: optional. For English, can be code (EGP, USD, SAR, EUR, AED, KWD) or full name (e.g., "Egyptian Pounds")
  * Returns: { ok: true, schedule: [{label, month, amount, writtenAmount}], totals, meta }
  */
-app.post('/api/generate-plan', async (req, res) => {
+app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) => {
   try {
     const { mode, stdPlan, inputs, language, currency, languageForWrittenAmounts, standardPricingId, unitId } = req.body || {}
     if (!mode || !allowedModes.has(mode)) {
@@ -673,7 +707,7 @@ app.post('/api/generate-plan', async (req, res) => {
  * - Placeholders in the .docx should use Autocrat-style delimiters: <<placeholder_name>>
  * - Service will also add *_words fields for numeric values in data using the requested language
  */
-app.post('/api/generate-document', async (req, res) => {
+app.post('/api/generate-document', validate(generateDocumentSchema), async (req, res) => {
   try {
     let { templateName, documentType, deal_id, data, language, currency } = req.body || {}
     const role = req.user?.role

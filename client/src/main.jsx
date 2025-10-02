@@ -3,8 +3,12 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import './App.css'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { ToastContainer } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
+import { LoaderProvider } from './lib/loaderContext.jsx'
 import App from './App.jsx'
 import Login from './Login.jsx'
+import Register from './Register.jsx'
 import DealsApp from './deals/App.jsx'
 import Users from './admin/Users.jsx'
 import UserEdit from './admin/UserEdit.jsx'
@@ -75,207 +79,211 @@ function HomeRedirect() {
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/calculator"
-          element={
-            <PrivateRoute>
-              <App />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/deals/*"
-          element={
-            <PrivateRoute>
-              <DealsApp />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/admin/users"
-          element={
-            <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
-              <Users />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/users/:id"
-          element={
-            <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
-              <UserEdit />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/standard-pricing"
-          element={
-            <RoleBasedRoute allowedRoles={['financial_manager', 'ceo']}>
-              <StandardPricing />
-            </RoleBasedRoute>
-          }
-        />
-         {/* --- THIS IS THE NEW ROUTE --- */}
-        <Route
-          path="/admin/standard-pricing-approvals"
-          element={
-            <RoleBasedRoute allowedRoles={['ceo', 'chairman', 'vice_chairman']}>
-              <StandardPricingApprovals />
-            </RoleBasedRoute>
-          }
-        />
-        {/* --- END OF NEW ROUTE --- */}
-         <Route
-           path="/admin/standard-pricing-rejected"
-           element={
-             <RoleBasedRoute allowedRoles={['financial_manager']}>
-               <RejectedPricings />
-             </RoleBasedRoute>
-           }
-         />
-         <Route
-           path="/admin/payment-thresholds"
-           element={
-             <RoleBasedRoute allowedRoles={['financial_manager', 'ceo', 'chairman', 'vice_chairman', 'top_management']}>
-               <PaymentThresholds />
-             </RoleBasedRoute>
-           }
-         />
-        {/* Alias paths to avoid mismatched links */}
-        <Route
-          path="/admin/standard-pricing/rejected"
-          element={
-            <RoleBasedRoute allowedRoles={['financial_manager']}>
-              <RejectedPricings />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/rejected-pricings"
-          element={
-            <RoleBasedRoute allowedRoles={['financial_manager']}>
-              <RejectedPricings />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/inventory"
-          element={
-            <RoleBasedRoute allowedRoles={['financial_admin', 'superadmin']}>
-              <Units />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/inventory-drafts"
-          element={
-            <RoleBasedRoute allowedRoles={['financial_manager']}>
-              <InventoryDrafts />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/units"
-          element={
-            <RoleBasedRoute allowedRoles={['superadmin']}>
-              <Units />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/sales"
-          element={
-            <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
-              <SalesTeam />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/sales-team"
-          element={
-            <RoleBasedRoute allowedRoles={['sales_manager', 'admin', 'superadmin']}>
-              <SalesManagerTeam />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/contracts-team"
-          element={
-            <RoleBasedRoute allowedRoles={['contract_manager', 'admin', 'superadmin']}>
-              <ContractsTeam />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/finance-team"
-          element={
-            <RoleBasedRoute allowedRoles={['financial_manager', 'admin', 'superadmin']}>
-              <FinanceTeam />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/unit-models"
-          element={
-            <RoleBasedRoute allowedRoles={['financial_manager']}>
-              <UnitModels />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/unit-model-changes"
-          element={
-            <RoleBasedRoute allowedRoles={['financial_manager', 'ceo', 'chairman', 'vice_chairman']}>
-              <UnitModelChanges />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/commission-policies"
-          element={
-            <RoleBasedRoute allowedRoles={['superadmin']}>
-              <CommissionPolicies />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/commissions"
-          element={
-            <RoleBasedRoute allowedRoles={['superadmin']}>
-              <CommissionsReport />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/holds"
-          element={
-            <RoleBasedRoute allowedRoles={['financial_manager', 'sales_manager', 'contract_manager']}>
-              <HoldsFM />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/hold-approvals"
-          element={
-            <RoleBasedRoute allowedRoles={['ceo', 'contract_manager', 'sales_manager']}>
-              <HoldsCEO />
-            </RoleBasedRoute>
-          }
-        />
-        <Route
-          path="/admin/workflow-logs"
-          element={
-            <RoleBasedRoute allowedRoles={['ceo', 'chairman', 'vice_chairman', 'superadmin', 'sales_manager', 'contract_manager']}>
-              <WorkflowLogs />
-            </RoleBasedRoute>
-          }
-        />
-        <Route path="/" element={<HomeRedirect />} />
-        <Route path="*" element={<Navigate to="/deals" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <LoaderProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+          <Route
+            path="/calculator"
+            element={
+              <PrivateRoute>
+                <App />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/deals/*"
+            element={
+              <PrivateRoute>
+                <DealsApp />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                <Users />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/users/:id"
+            element={
+              <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                <UserEdit />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/standard-pricing"
+            element={
+              <RoleBasedRoute allowedRoles={['financial_manager', 'ceo']}>
+                <StandardPricing />
+              </RoleBasedRoute>
+            }
+          />
+           {/* --- THIS IS THE NEW ROUTE --- */}
+          <Route
+            path="/admin/standard-pricing-approvals"
+            element={
+              <RoleBasedRoute allowedRoles={['ceo', 'chairman', 'vice_chairman']}>
+                <StandardPricingApprovals />
+              </RoleBasedRoute>
+            }
+          />
+          {/* --- END OF NEW ROUTE --- */}
+           <Route
+             path="/admin/standard-pricing-rejected"
+             element={
+               <RoleBasedRoute allowedRoles={['financial_manager']}>
+                 <RejectedPricings />
+               </RoleBasedRoute>
+             }
+           />
+           <Route
+             path="/admin/payment-thresholds"
+             element={
+               <RoleBasedRoute allowedRoles={['financial_manager', 'ceo', 'chairman', 'vice_chairman', 'top_management']}>
+                 <PaymentThresholds />
+               </RoleBasedRoute>
+             }
+           />
+          {/* Alias paths to avoid mismatched links */}
+          <Route
+            path="/admin/standard-pricing/rejected"
+            element={
+              <RoleBasedRoute allowedRoles={['financial_manager']}>
+                <RejectedPricings />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/rejected-pricings"
+            element={
+              <RoleBasedRoute allowedRoles={['financial_manager']}>
+                <RejectedPricings />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/inventory"
+            element={
+              <RoleBasedRoute allowedRoles={['financial_admin', 'superadmin']}>
+                <Units />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/inventory-drafts"
+            element={
+              <RoleBasedRoute allowedRoles={['financial_manager']}>
+                <InventoryDrafts />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/units"
+            element={
+              <RoleBasedRoute allowedRoles={['superadmin']}>
+                <Units />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/sales"
+            element={
+              <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                <SalesTeam />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/sales-team"
+            element={
+              <RoleBasedRoute allowedRoles={['sales_manager', 'admin', 'superadmin']}>
+                <SalesManagerTeam />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/contracts-team"
+            element={
+              <RoleBasedRoute allowedRoles={['contract_manager', 'admin', 'superadmin']}>
+                <ContractsTeam />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/finance-team"
+            element={
+              <RoleBasedRoute allowedRoles={['financial_manager', 'admin', 'superadmin']}>
+                <FinanceTeam />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/unit-models"
+            element={
+              <RoleBasedRoute allowedRoles={['financial_manager']}>
+                <UnitModels />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/unit-model-changes"
+            element={
+              <RoleBasedRoute allowedRoles={['financial_manager', 'ceo', 'chairman', 'vice_chairman']}>
+                <UnitModelChanges />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/commission-policies"
+            element={
+              <RoleBasedRoute allowedRoles={['superadmin']}>
+                <CommissionPolicies />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/commissions"
+            element={
+              <RoleBasedRoute allowedRoles={['superadmin']}>
+                <CommissionsReport />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/holds"
+            element={
+              <RoleBasedRoute allowedRoles={['financial_manager', 'sales_manager', 'contract_manager']}>
+                <HoldsFM />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/hold-approvals"
+            element={
+              <RoleBasedRoute allowedRoles={['ceo', 'contract_manager', 'sales_manager']}>
+                <HoldsCEO />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/workflow-logs"
+            element={
+              <RoleBasedRoute allowedRoles={['ceo', 'chairman', 'vice_chairman', 'superadmin', 'sales_manager', 'contract_manager']}>
+                <WorkflowLogs />
+              </RoleBasedRoute>
+            }
+          />
+          <Route path="/" element={<HomeRedirect />} />
+          <Route path="*" element={<Navigate to="/deals" replace />} />
+        </Routes>
+        <ToastContainer position="top-right" newestOnTop closeOnClick pauseOnHover />
+      </BrowserRouter>
+    </LoaderProvider>
   </React.StrictMode>
 )

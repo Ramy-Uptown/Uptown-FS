@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { ctrl, btn, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js'
 import BrandHeader from '../lib/BrandHeader.jsx'
+import LoadingButton from '../components/LoadingButton.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 export default function SalesAssignments() {
   const [managerId, setManagerId] = useState('')
@@ -21,8 +23,9 @@ export default function SalesAssignments() {
       // We do not have a list assignments endpoint, so this page focuses on assign/unassign actions
       setMemberships(cons.sales || [])
     } catch (e) {
-      setError(e.message || String(e))
-    } finally {
+      const msg = e.message || String(e)
+      setError(msg)
+      notifyError(e, 'Unable to load assignmen_code    } finally {
       setLoading(false)
     }
   }
@@ -42,9 +45,9 @@ export default function SalesAssignments() {
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Assign failed')
-      alert('Assignment updated.')
+      notifySuccess('Assignment updated successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to assign.')
     } finally {
       setLoading(false)
     }
@@ -65,9 +68,9 @@ export default function SalesAssignments() {
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Update failed')
-      alert('Assignment updated.')
+      notifySuccess('Assignment updated successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to update assignment.')
     } finally {
       setLoading(false)
     }
@@ -106,8 +109,8 @@ export default function SalesAssignments() {
             Active
           </label>
           <div>
-            <button onClick={assign} disabled={loading} style={btn}>Assign</button>
-            <button onClick={updateActive} disabled={loading} style={btn}>Update</button>
+            <LoadingButton onClick={assign} loading={loading}>Assign</LoadingButton>
+            <LoadingButton onClick={updateActive} loading={loading}>Update</LoadingButton>
           </div>
         </div>
 

@@ -3,6 +3,9 @@ import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import * as XLSX from 'xlsx'
 import { th, td, ctrl, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
 import BrandHeader from '../lib/BrandHeader.jsx'
+import LoadingButton from '../components/LoadingButton.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
+import { useLoader } from '../lib/loaderContext.jsx'
 
 export default function WorkflowLogs() {
   const [startDate, setStartDate] = useState('')
@@ -28,8 +31,11 @@ export default function WorkflowLogs() {
       const j = await resp.json()
       if (!resp.ok) throw new Error(j?.error?.message || 'Failed to load report')
       setData(j)
+      notifySuccess('Report loaded successfully.')
     } catch (e) {
-      setError(e.message || String(e))
+      const msg = e.message || String(e)
+      setError(msg)
+      notifyError(e, 'Failed to load report')
     } finally {
       setLoading(false)
     }
@@ -55,122 +61,143 @@ export default function WorkflowLogs() {
     }
   }
 
+  const { setShow, setMessage } = useLoader()
+
   function exportXLSX() {
     if (!data) return
-    const wb = XLSX.utils.book_new()
+    try {
+      setMessage('Generating report, please wait...')
+      setShow(true)
 
-    const makeSheet = (rows, headers) => {
-      const aoa = [headers.map(h => h.label), ...rows.map(r => headers.map(h => r[h.key]))]
-      const ws = XLSX.utils.aoa_to_sheet(aoa)
-      ws['!cols'] = headers.map(() => ({ wch: 16 }))
-      return ws
+      const wb = XLSX.utils.book_new()
+
+      const makeSheet = (rows, headers) => {
+        const aoa = [headers.map(h => h.label), ...rows.map(r => headers.map(h => r[h.key]))]
+        const ws = XLSX.utils.aoa_to_sheet(aoa)
+        ws['!cols'] = headers.map(() => ({ wch: 16 }))
+        return ws
+      }
+
+      const offerHeaders = [
+        { key: 'id', label: 'ID' },
+        { key: 'deal_id', label: 'Deal' },
+        { key: 'status', label: 'Status' },
+        { key: 'version', label: 'Version' },
+        { key: 'accepted', label: 'Accepted' },
+        { key: 'created_by', label: 'Consultant ID' },
+        { key: 'created_by_email', label: 'Consultant Email' },
+        { key: 'manager_user_id', label: 'Manager ID' },
+        { key: 'manager_email', label: 'Manager Email' },
+        { key: 'created_at', label: 'Created At' },
+        { key: 'total_nominal', label: 'Total Nominal' }
+      ]
+      const resHeaders = [
+        { key: 'id', label: 'ID' },
+        { key: 'payment_plan_id', label: 'Offer ID' },
+        { key: 'status', label: 'Status' },
+        { key: 'created_by', label: 'Consultant ID' },
+        { key: 'created_by_email', label: 'Consultant Email' },
+        { key: 'manager_user_id', label: 'Manager ID' },
+        { key: 'manager_email', label: 'Manager Email' },
+        { key: 'created_at', label: 'Created At' },
+        { key: 'total_nominal', label: 'Total Nominal' }
+      ]
+      const conHeaders = [
+        { key: 'id', label: 'ID' },
+        { key: 'reservation_form_id', label: 'Reservation ID' },
+        { key: 'status', label: 'Status' },
+        { key: 'created_by', label: 'Consultant ID' },
+        { key: 'created_by_email', label: 'Consultant Email' },
+        { key: 'manager_user_id', label: 'Manager ID' },
+        { key: 'manager_email', label: 'Manager Email' },
+        { key: 'created_at', label: 'Created At' },
+        { key: 'total_nominal', label: 'Total Nominal' }
+      ]
+
+      const offers = (data.offers?.rows || []).map(r => ({
+        ...r,
+        created_at: r.created_at ? new Date(r.created_at).toLocaleString() : ''
+      }))
+      const reservations = (data.reservations?.rows || []).map(r => ({
+        ...r,
+        created_at: r.created_at ? new Date(r.created_at).toLocaleString() : ''
+      }))
+      const contracts = (data.contracts?.rows || []).map(r => ({
+        ...r,
+        created_at: r.created_at ? new Date(r.created_at).toLocaleString() : ''
+      }))
+
+      XLSX.utils.book_append_sheet(wb, makeSheet(offers, offerHeaders), 'Offers')
+      XLSX.utils.book_append_sheet(wb, makeSheet(reservations, resHeaders), 'Reservations')
+      XLSX.utils.book_append_sheet(wb, makeSheet(contracts, conHeaders), 'Contracts')
+
+      const sumSheet = XLSX.utils.aoa_to_sheet([
+        ['Section', 'Total'],
+        ['Offers', Number(data.offers?.total || 0)],
+        ['Reservations', Number(data.reservations?.total || 0)],
+        ['Contracts', Number(data.contracts?.total || 0)],
+        ['Grand Total', Number(data.grandTotal || 0)]
+      ])
+      sumSheet['!cols'] = [{ wch: 24 }, { wch: 18 }]
+      XLSX.utils.book_append_sheet(wb, sumSheet, 'Totals')
+
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
+      a.download = `workflow_logs_${ts}.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      notifySuccess('Export completed successfully.')
+    } catch (e) {
+      notifyError(e, 'Export failed')
+    } finally {
+      setShow(false)
     }
-
-    const offerHeaders = [
-      { key: 'id', label: 'ID' },
-      { key: 'deal_id', label: 'Deal' },
-      { key: 'status', label: 'Status' },
-      { key: 'version', label: 'Version' },
-      { key: 'accepted', label: 'Accepted' },
-      { key: 'created_by', label: 'Consultant ID' },
-      { key: 'created_by_email', label: 'Consultant Email' },
-      { key: 'manager_user_id', label: 'Manager ID' },
-      { key: 'manager_email', label: 'Manager Email' },
-      { key: 'created_at', label: 'Created At' },
-      { key: 'total_nominal', label: 'Total Nominal' }
-    ]
-    const resHeaders = [
-      { key: 'id', label: 'ID' },
-      { key: 'payment_plan_id', label: 'Offer ID' },
-      { key: 'status', label: 'Status' },
-      { key: 'created_by', label: 'Consultant ID' },
-      { key: 'created_by_email', label: 'Consultant Email' },
-      { key: 'manager_user_id', label: 'Manager ID' },
-      { key: 'manager_email', label: 'Manager Email' },
-      { key: 'created_at', label: 'Created At' },
-      { key: 'total_nominal', label: 'Total Nominal' }
-    ]
-    const conHeaders = [
-      { key: 'id', label: 'ID' },
-      { key: 'reservation_form_id', label: 'Reservation ID' },
-      { key: 'status', label: 'Status' },
-      { key: 'created_by', label: 'Consultant ID' },
-      { key: 'created_by_email', label: 'Consultant Email' },
-      { key: 'manager_user_id', label: 'Manager ID' },
-      { key: 'manager_email', label: 'Manager Email' },
-      { key: 'created_at', label: 'Created At' },
-      { key: 'total_nominal', label: 'Total Nominal' }
-    ]
-
-    const offers = (data.offers?.rows || []).map(r => ({
-      ...r,
-      created_at: r.created_at ? new Date(r.created_at).toLocaleString() : ''
-    }))
-    const reservations = (data.reservations?.rows || []).map(r => ({
-      ...r,
-      created_at: r.created_at ? new Date(r.created_at).toLocaleString() : ''
-    }))
-    const contracts = (data.contracts?.rows || []).map(r => ({
-      ...r,
-      created_at: r.created_at ? new Date(r.created_at).toLocaleString() : ''
-    }))
-
-    XLSX.utils.book_append_sheet(wb, makeSheet(offers, offerHeaders), 'Offers')
-    XLSX.utils.book_append_sheet(wb, makeSheet(reservations, resHeaders), 'Reservations')
-    XLSX.utils.book_append_sheet(wb, makeSheet(contracts, conHeaders), 'Contracts')
-
-    const sumSheet = XLSX.utils.aoa_to_sheet([
-      ['Section', 'Total'],
-      ['Offers', Number(data.offers?.total || 0)],
-      ['Reservations', Number(data.reservations?.total || 0)],
-      ['Contracts', Number(data.contracts?.total || 0)],
-      ['Grand Total', Number(data.grandTotal || 0)]
-    ])
-    sumSheet['!cols'] = [{ wch: 24 }, { wch: 18 }]
-    XLSX.utils.book_append_sheet(wb, sumSheet, 'Totals')
-
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    const ts = new Date().toISOString().replace(/[:.]/g, '-')
-    a.download = `workflow_logs_${ts}.xlsx`
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    URL.revokeObjectURL(url)
   }
 
   function exportCSV() {
     if (!data) return
-    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+    try {
+      setMessage('Generating report, please wait...')
+      setShow(true)
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
 
-    const makeCSV = (rows) => {
-      if (!rows || rows.length === 0) return ''
-      const headers = Object.keys(rows[0])
-      const body = rows.map(r => headers.map(h => {
-        const v = r[h]
-        const s = v == null ? '' : String(v)
-        return /[\",\n]/.test(s) ? `\"${s.replace(/\"/g, '\"\"')}\"` : s
-      }).join(','))
-      return [headers.join(','), ...body].join('\n')
+      const makeCSV = (rows) => {
+        if (!rows || rows.length === 0) return ''
+        const headers = Object.keys(rows[0])
+        const body = rows.map(r => headers.map(h => {
+          const v = r[h]
+          const s = v == null ? '' : String(v)
+          return /[\",\n]/.test(s) ? `\"${s.replace(/\"/g, '\"\"')}\"` : s
+        }).join(','))
+        return [headers.join(','), ...body].join('\n')
+      }
+
+      const sections = [
+        { name: 'offers', rows: data.offers?.rows || [] },
+        { name: 'reservations', rows: data.reservations?.rows || [] },
+        { name: 'contracts', rows: data.contracts?.rows || [] }
+      ]
+      sections.forEach(sec => {
+        if (!sec.rows.length) return
+        const csv = makeCSV(sec.rows)
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `workflow_logs_${sec.name}_${ts}.csv`
+        document.body.appendChild(a); a.click(); document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      })
+      notifySuccess('Export completed successfully.')
+    } catch (e) {
+      notifyError(e, 'Export failed')
+    } finally {
+      setShow(false)
     }
-
-    const sections = [
-      { name: 'offers', rows: data.offers?.rows || [] },
-      { name: 'reservations', rows: data.reservations?.rows || [] },
-      { name: 'contracts', rows: data.contracts?.rows || [] }
-    ]
-    sections.forEach(sec => {
-      if (!sec.rows.length) return
-      const csv = makeCSV(sec.rows)
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `workflow_logs_${sec.name}_${ts}.csv`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    })
   }
 
   return (
@@ -190,9 +217,9 @@ export default function WorkflowLogs() {
           <input type="number" placeholder="Consultant User ID" value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl} />
           <input type="number" placeholder="Sales Manager User ID" value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl} />
           <div>
-            <button onClick={load} disabled={loading} style={btn}>{loading ? 'Loading…' : 'Apply'}</button>
-            <button onClick={exportXLSX} disabled={!data} style={btn}>Export XLSX</button>
-            <button onClick={exportCSV} disabled={!data} style={btn}>Export CSV</button>
+            <LoadingButton onClick={load} loading={loading}>Apply</LoadingButton>
+            <LoadingButton onClick={exportXLSX} disabled={!data}>Export XLSX</LoadingButton>
+            <LoadingButton onClick={exportCSV} disabled={!data}>Export CSV</LoadingButton>
           </div>
         </div>
 

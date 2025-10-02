@@ -2,11 +2,16 @@ import React, { useEffect, useState } from 'react'
 import BrandHeader from '../lib/BrandHeader.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { ctrl, btn, btnPrimary, pageContainer, pageTitle, tableWrap, table, th, td, metaText, errorText } from '../lib/ui.js'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 export default function ContractsTeam() {
   const [memberships, setMemberships] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [rowLoading, setRowLoading] = useState({})
+  const [assigning, setAssigning] = useState(false)
 
   // Quick-assign controls
   const [memberSearch, setMemberSearch] = useState('')
@@ -33,10 +38,12 @@ export default function ContractsTeam() {
       setError('')
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/contracts-teams/memberships?active=true`)
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load memberships')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to load memberships')
       setMemberships(data.memberships || [])
     } catch (e) {
-      setError(e.message || String(e))
+      const msg = e.message || String(e)
+      setError(msg)
+      notifyError(e, 'Unable to load contracts team')
     } finally {
       setLoading(false)
     }
@@ -53,35 +60,44 @@ export default function ContractsTeam() {
   }
 
   async function assign() {
-    if (!memberId) return alert('Select a member')
-    if (!managerId) return alert('Select a manager')
+    if (!memberId) { notifyError('Please select a member.'); return }
+    if (!managerId) { notifyError('Please select a manager.'); return }
     try {
+      setAssigning(true)
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/contracts-teams/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ member_user_id: Number(memberId), manager_user_id: Number(managerId) })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Assign failed')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to assign')
       setMemberId(''); setManagerId(''); setMemberSearch(''); setManagerSearch('')
+      notifySuccess('Assignment updated successfully.')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to assign')
+    } finally {
+      setAssigning(false)
     }
   }
 
   async function clearMembership(mgr, mem) {
+    const key = `${mgr}:${mem}`
     try {
+      setRowLoading(s => ({ ...s, [key]: true }))
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/contracts-teams/assign`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_user_id: Number(mgr), member_user_id: Number(mem), active: false })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to clear')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to clear')
+      notifySuccess('Assignment cleared successfully.')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to clear')
+    } finally {
+      setRowLoading(s => ({ ...s, [key]: false }))
     }
   }
 
@@ -150,7 +166,7 @@ export default function ContractsTeam() {
                 </select>
               </div>
               <div>
-                <button type="button" onClick={assign} style={btnPrimary} disabled={!memberId || !managerId}>Assign</button>
+                <LoadingButton type="button" onClick={assign} loading={assigning} variant="primary" disabled={!memberId || !managerId}>Assign</LoadingButton>
               </div>
             </div>
             <div style={{ marginTop: 6 }}>
@@ -176,20 +192,55 @@ export default function ContractsTeam() {
               </tr>
             </thead>
             <tbody>
-              {(memberships || []).map((m, idx) => (
+              {loading && (
+                <>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <SkeletonRow key={i} widths={['lg','lg','sm','lg']} tdStyle={td} />
+                  ))}
+                </>
+              )}
+              {!loading && (memberships || []).map((m, idx) => {
+                const key = `${m.manager_user_id}:${m.member_user_id}`
+                return (
                 <tr key={idx}>
                   <td style={td}>{m.manager_user_id} {m.manager_email ? <span style={metaText}>({m.manager_email})</span> : null}</td>
                   <td style={td}>{m.member_user_id} {m.member_email ? <span style={metaText}>({m.member_email})</span> : null}</td>
                   <td style={td}>{m.active ? 'Yes' : 'No'}</td>
                   <td style={td}>
                     {m.active && canAssign ? (
-                      <button onClick={() => clearMembership(m.manager_user_id, m.member_user_id)} style={btn}>Clear</button>
+                      <LoadingButton onClick={() => clearMembership(m.manager_user_id, m.member_user_id)} loading={rowLoading[key]}>Clear</LoadingButton>
                     ) : (
                       !canAssign ? <span style={metaText}>No actions</span> : null
                     )}
                   </td>
                 </tr>
-              ))}
+              )})}
+              {memberships.length === 0 && !loading && (
+                <tr>
+                  <td style={td} colSpan={4}>No memberships.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}:${m.member_user_id}`
+                return (
+                <tr key={idx}>
+                  <td style={td}>{m.manager_user_id} {m.manager_email ? <span style={metaText}>({m.manager_email})</span> : null}</td>
+                  <td style={td}>{m.member_user_id} {m.member_email ? <span style={metaText}>({m.member_email})</span> : null}</td>
+                  <td style={td}>{m.active ? 'Yes' : 'No'}</td>
+                  <td style={td}>
+                    {m.active && canAssign ? (
+                      <LoadingButton onClick={() => clearMembership(m.manager_user_id, m.member_user_id)} loading={rowLoading[key]}>Clear</LoadingButton>
+                    ) : (
+                      !canAssign ? <span style={metaText}>No actions</span> : null
+                    )}
+                  </td>
+                </tr>
+              )})}
               {memberships.length === 0 && !loading && (
                 <tr>
                   <td style={td} colSpan={4}>No memberships.</td>

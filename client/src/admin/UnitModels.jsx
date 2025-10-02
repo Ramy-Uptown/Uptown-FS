@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react'
 import BrandHeader from '../lib/BrandHeader.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { th, td, ctrl, btn, btnPrimary, btnDanger, tableWrap, table, pageContainer, pageTitle, metaText, errorText } from '../lib/ui.js'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 /*
   Unit Models management for Financial Manager:
@@ -130,10 +133,11 @@ export default function UnitModels() {
       }
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
+      notifySuccess(editingId ? 'Update request submitted' : 'Create request submitted')
       resetForm()
       await load()
     } catch (e) {
-      alert(friendlyError(e, 'Save failed'))
+      notifyError(e, friendlyError(e, 'Save failed'))
     } finally {
       setSaving(false)
     }
@@ -161,9 +165,10 @@ export default function UnitModels() {
       const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/${id}`, { method: 'DELETE' })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Delete failed')
+      notifySuccess('Delete request submitted')
       await load()
     } catch (e) {
-      alert(friendlyError(e, 'Delete failed'))
+      notifyError(e, friendlyError(e, 'Delete failed'))
     }
   }
 
@@ -208,7 +213,7 @@ export default function UnitModels() {
       })
       setHistoryItems(merged)
     } catch (e) {
-      alert(friendlyError(e, 'Failed to load history'))
+      notifyError(e, friendlyError(e, 'Failed to load history'))
     } finally {
       setHistoryLoading(false)
     }
@@ -275,8 +280,8 @@ export default function UnitModels() {
           </label>
           <input type="number" placeholder="Garden Area (m²)" value={form.garden_area} onChange={e => setForm(s => ({ ...s, garden_area: e.target.value }))} style={ctrl} disabled={!form.has_garden} />
           <div>
-            <button type="submit" disabled={saving} style={btnPrimary}>{saving ? 'Submit Change…' : (editingId ? 'Submit Update' : 'Submit Create')}</button>
-            {editingId ? <button type="button" onClick={resetForm} style={btn}>Cancel</button> : null}
+            <LoadingButton type="submit" loading={saving} variant="primary">{saving ? 'Submitting…' : (editingId ? 'Submit Update' : 'Submit Create')}</LoadingButton>
+            {editingId ? <LoadingButton type="button" onClick={resetForm} style={btn}>Cancel</LoadingButton> : null}
           </div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -322,7 +327,14 @@ export default function UnitModels() {
               </tr>
             </thead>
             <tbody>
-              {items.map(it => (
+              {loading && (
+                <>
+                  {Array.from({ length: pageSize }).map((_, i) => (
+                    <SkeletonRow key={i} widths={['sm','lg','lg','sm','sm','sm','sm','sm','lg','lg','lg']} tdStyle={td} />
+                  ))}
+                </>
+              )}
+              {!loading && items.map(it => (
                 <tr key={it.id}>
                   <td style={td}>{it.id}</td>
                   <td style={td}>{it.model_name}</td>
@@ -334,10 +346,10 @@ export default function UnitModels() {
                   <td style={td}>{it.garage_area || 0}</td>
                   <td style={td}>{it.created_at ? new Date(it.created_at).toLocaleString() : '—'}</td>
                   <td style={td}>{it.updated_at ? new Date(it.updated_at).toLocaleString() : '—'}</td>
-                  <td style={td}>
-                    <button onClick={() => startEdit(it)} style={btn}>Edit</button>
-                    <button onClick={() => openHistory(it.id)} style={btn}>History</button>
-                    <button onClick={() => remove(it.id)} style={btnDanger}>Delete</button>
+                  <td style={{ ...td, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <LoadingButton onClick={() => startEdit(it)}>Edit</LoadingButton>
+                    <LoadingButton onClick={() => openHistory(it.id)}>History</LoadingButton>
+                    <LoadingButton onClick={() => remove(it.id)} style={btnDanger}>Delete</LoadingButton>
                   </td>
                 </tr>
               ))}
@@ -355,10 +367,10 @@ export default function UnitModels() {
             Page {page} of {totalPages} — {total} total
           </span>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={() => setPage(1)} disabled={page === 1} style={btn}>First</button>
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btn}>Prev</button>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} style={btn}>Next</button>
-            <button onClick={() => setPage(totalPages)} disabled={page >= totalPages} style={btn}>Last</button>
+            <LoadingButton onClick={() => setPage(1)} disabled={page === 1 || loading}>First</LoadingButton>
+            <LoadingButton onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}>Prev</LoadingButton>
+            <LoadingButton onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || loading}>Next</LoadingButton>
+            <LoadingButton onClick={() => setPage(totalPages)} disabled={page >= totalPages || loading}>Last</LoadingButton>
           </div>
         </div>
 
@@ -367,7 +379,7 @@ export default function UnitModels() {
             <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 800 }}>
               <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Change History — Model #{historyForId}</h3>
-                <button onClick={closeHistory} style={btn}>Close</button>
+                <LoadingButton onClick={closeHistory}>Close</LoadingButton>
               </div>
               <div style={{ padding: 12, maxHeight: '65vh', overflowY: 'auto' }}>
                 {historyLoading ? (
@@ -401,7 +413,7 @@ export default function UnitModels() {
                 )}
               </div>
               <div style={{ padding: '10px 14px', borderTop: '1px solid #e5e7eb', textAlign: 'right' }}>
-                <button onClick={closeHistory} style={btn}>Close</button>
+                <LoadingButton onClick={closeHistory} variant="primary">Close</LoadingButton>
               </div>
             </div>
           </div>

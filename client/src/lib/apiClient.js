@@ -1,3 +1,5 @@
+import { notifyError } from './notifications.js'
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 async function refreshTokens() {
@@ -8,7 +10,14 @@ async function refreshTokens() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken })
   })
-  if (!resp.ok) throw new Error('Refresh failed')
+  if (!resp.ok) {
+    let msg = 'Refresh failed'
+    try {
+      const j = await resp.json()
+      msg = j?.error?.message || msg
+    } catch {}
+    throw new Error(msg)
+  }
   const data = await resp.json()
   const access = data.accessToken
   const newRefresh = data.refreshToken
@@ -34,10 +43,32 @@ export async function fetchWithAuth(input, init = {}, retry = true) {
       if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
         window.location.href = '/login'
       }
+      notifyError(e, 'Session expired, please login again.')
       throw e
     }
   }
   return resp
+}
+
+export async function apiJson(path, options = {}) {
+  const url = `${API_URL}${path.startsWith('/') ? path : `/${path}`}`
+  const resp = await fetchWithAuth(url, {
+    method: options.method || 'GET',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    body: options.body ? JSON.stringify(options.body) : undefined
+  })
+  let data = null
+  try {
+    data = await resp.json()
+  } catch {
+    data = null
+  }
+  if (!resp.ok) {
+    notifyError(data || { message: 'Request failed' })
+    const msg = data?.error?.message || 'Request failed'
+    throw new Error(msg)
+  }
+  return data
 }
 
 export { API_URL }
