@@ -37,12 +37,45 @@ import customerRoutes from './customerRoutes.js'
 import notificationService from './notificationService.js'
 import dashboardRoutes from './dashboardRoutes.js'
 import { errorHandler } from './errorHandler.js'
+import logger from './utils/logger.js'
+import crypto from 'crypto'
 import { validate, calculateSchema, generatePlanSchema, generateDocumentSchema } from './validation.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
 
 const app = express()
+
+// Correlation ID + request logging
+app.use((req, res, next) => {
+  // Assign a correlation ID if not present
+  req.id = req.headers['x-request-id'] || crypto.randomUUID()
+  const start = Date.now()
+
+  // Log incoming request
+  logger.info({
+    msg: 'Incoming request',
+    reqId: req.id,
+    method: req.method,
+    url: req.originalUrl || req.url,
+    ip: req.ip
+  })
+
+  res.on('finish', () => {
+    const ms = Date.now() - start
+    logger.info({
+      msg: 'Request completed',
+      reqId: req.id,
+      method: req.method,
+      url: req.originalUrl || req.url,
+      statusCode: res.statusCode,
+      durationMs: ms,
+      userId: req.user?.id || null
+    })
+  })
+
+  next()
+})
 
 // Helper: fetch active approval policy limit (global fallback = 5%)
 async function getActivePolicyLimitPercent() {
