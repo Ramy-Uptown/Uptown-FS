@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import LoadingButton from '../components/LoadingButton.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 export default function Approvals() {
   const [deals, setDeals] = useState([])
@@ -14,10 +16,12 @@ export default function Approvals() {
         setError('')
         const resp = await fetchWithAuth(`${API_URL}/api/deals`)
         const data = await resp.json()
-        if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load deals')
+        if (!resp.ok) throw new Error(data?.error?.message || 'Unable to load deals')
         setDeals((data.deals || []).filter(d => d.status === 'pending_approval'))
       } catch (e) {
-        setError(e.message || String(e))
+        const msg = e.message || String(e)
+        setError(msg)
+        notifyError(e, 'Unable to load deals')
       }
     }
     load()
@@ -28,10 +32,11 @@ export default function Approvals() {
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/approve`, { method: 'POST' })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Approve failed')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to approve deal')
       setDeals(ds => ds.filter(d => d.id !== id))
+      notifySuccess('Deal approved successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to approve deal')
     } finally {
       setBusyId(0)
     }
@@ -47,10 +52,11 @@ export default function Approvals() {
         body: JSON.stringify({ reason })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Reject failed')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to reject deal')
       setDeals(ds => ds.filter(d => d.id !== id))
+      notifySuccess('Deal rejected successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to reject deal')
     } finally {
       setBusyId(0)
     }
@@ -83,8 +89,8 @@ export default function Approvals() {
                 <td style={{ ...td, textAlign: 'right' }}>{Number(d.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                 <td style={td}>{d.created_by_email || '-'}</td>
                 <td style={td}>
-                  <button disabled={busyId === d.id} onClick={() => approve(d.id)} style={btn}>Approve</button>
-                  <button disabled={busyId === d.id} onClick={() => reject(d.id)} style={btn}>Reject</button>
+                  <LoadingButton disabled={busyId === d.id} onClick={() => approve(d.id)}>Approve</LoadingButton>
+                  <LoadingButton disabled={busyId === d.id} onClick={() => reject(d.id)}>Reject</LoadingButton>
                 </td>
               </tr>
             ))}
