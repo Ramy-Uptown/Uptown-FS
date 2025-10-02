@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth, API_URL } from '../lib/apiClient';
 import BrandHeader from '../lib/BrandHeader';
+import LoadingButton from '../components/LoadingButton.jsx';
+import SkeletonRow from '../components/SkeletonRow.jsx';
+import { notifyError, notifySuccess } from '../lib/notifications.js';
 
 // Full list of supported roles (keep in sync with backend)
 const ROLE_OPTIONS = [
@@ -89,6 +92,7 @@ export default function Users() {
 
         } catch (e) {
             setError(e.message || 'An unknown error occurred.');
+            notifyError(e, 'Failed to load users');
         } finally {
             setIsLoading(false);
         }
@@ -101,14 +105,17 @@ export default function Users() {
     // --- Event Handlers & Actions ---
 
     // A generic handler to simplify managing multiple API actions on user rows
-    const handleUserAction = async (userId, action) => {
+    const handleUserAction = async (userId, action, successMsg) => {
         setBusyId(userId);
         setError('');
         try {
             await action();
+            if (successMsg) notifySuccess(successMsg);
             await loadData(); // Reload data on success
         } catch (err) {
-            setError(err.message || 'Action failed.');
+            const msg = err.message || 'Action failed.';
+            setError(msg);
+            notifyError(err, msg);
         } finally {
             setBusyId(null);
         }
@@ -133,9 +140,8 @@ export default function Users() {
                 const errorData = await resp.json().catch(() => ({ error: { message: 'An unknown error occurred' } }));
                 throw new Error(errorData.error?.message || 'Failed to create user');
             }
-            await loadData(); // Refresh user list
             setCreateForm({ email: '', password: '', role: 'user', fullName: '' }); // Reset form
-        }).finally(() => setCreating(false));
+        }, 'User created').finally(() => setCreating(false));
     };
 
     const saveEmail = (userId) => {
@@ -151,7 +157,7 @@ export default function Users() {
             }
             setEditingId(null);
             setEditEmail('');
-        });
+        }, 'Email saved');
     };
 
     // Position history modal actions
@@ -182,7 +188,9 @@ export default function Users() {
             // Show newest first
             setHistoryItems(parsedAsc.reverse());
         } catch (e) {
-            setError(e.message || 'Failed to load history');
+            const msg = e.message || 'Failed to load history';
+            setError(msg);
+            notifyError(e, msg);
         } finally {
             setHistoryLoading(false);
         }
@@ -204,7 +212,7 @@ export default function Users() {
                 const errorData = await resp.json().catch(() => ({ error: { message: 'An unknown error occurred' } }));
                 throw new Error(errorData.error?.message || 'Failed to change role');
             }
-        });
+        }, 'Role changed');
     };
 
     const toggleActive = (user) => {
@@ -218,7 +226,7 @@ export default function Users() {
                 const errorData = await resp.json().catch(() => ({ error: { message: 'An unknown error occurred' } }));
                 throw new Error(errorData.error?.message || 'Failed to toggle active status');
             }
-        });
+        }, user.active ? 'User deactivated' : 'User activated');
     };
 
     const handleLogout = () => {
@@ -297,9 +305,9 @@ export default function Users() {
                               <input type="text" value="user" readOnly className="w-full p-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600" />
                           </div>
                         )}
-                        <button type="submit" disabled={creating} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:bg-blue-300">
-                            {creating ? 'Creating...' : 'Create User'}
-                        </button>
+                        <LoadingButton type="submit" loading={creating} variant="primary">
+                            {creating ? 'Creating…' : 'Create User'}
+                        </LoadingButton>
                     </form>
                 </div>
 
@@ -339,7 +347,11 @@ export default function Users() {
                         </thead>
                         <tbody>
                             {isLoading || !me ? (
-                                <tr><td colSpan="7" className="text-center p-8 text-gray-500">Loading...</td></tr>
+                                <>
+                                  {Array.from({ length: 8 }).map((_, i) => (
+                                    <SkeletonRow key={i} widths={['lg','sm','sm','sm','lg','sm','lg']} />
+                                  ))}
+                                </>
                             ) : filteredUsers.length === 0 ? (
                                 <tr><td colSpan="7" className="text-center p-8 text-gray-500">No users match the current filters.</td></tr>
                             ) : (
@@ -355,8 +367,8 @@ export default function Users() {
                                                 {isEditing ? (
                                                     <div className="flex gap-2">
                                                         <input value={editEmail} onChange={e => setEditEmail(e.target.value)} className="p-1 border border-gray-300 rounded-md" />
-                                                        <button onClick={() => saveEmail(u.id)} className="text-blue-600 hover:text-blue-800">Save</button>
-                                                        <button onClick={() => setEditingId(null)} className="text-gray-500 hover:text-gray-700">Cancel</button>
+                                                        <LoadingButton onClick={() => saveEmail(u.id)}>Save</LoadingButton>
+                                                        <LoadingButton onClick={() => setEditingId(null)}>Cancel</LoadingButton>
                                                     </div>
                                                 ) : (
                                                     <div className="font-medium text-gray-900">
@@ -398,11 +410,11 @@ export default function Users() {
                                             <td className="px-6 py-4 text-xs text-gray-500">{new Date(u.updated_at).toLocaleDateString()}</td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex justify-end gap-4">
-                                                    <button onClick={() => openHistory(u.id)} disabled={isBusy} className="font-medium text-gray-700 hover:text-gray-900 disabled:text-gray-300">Position History</button>
-                                                    <button onClick={() => navigate(`/admin/users/${u.id}`)} disabled={isBusy} className="font-medium text-blue-600 hover:text-blue-800 disabled:text-gray-300">Edit</button>
-                                                    <button onClick={() => toggleActive(u)} disabled={isBusy || isSelf} className="font-medium text-yellow-600 hover:text-yellow-800 disabled:text-gray-300">
+                                                    <LoadingButton onClick={() => openHistory(u.id)} disabled={isBusy}>Position History</LoadingButton>
+                                                    <LoadingButton onClick={() => navigate(`/admin/users/${u.id}`)} disabled={isBusy}>Edit</LoadingButton>
+                                                    <LoadingButton onClick={() => toggleActive(u)} disabled={isBusy || isSelf} style={{ color: '#a16207', borderColor: '#a16207' }}>
                                                         {u.active ? 'Deactivate' : 'Activate'}
-                                                    </button>
+                                                    </LoadingButton>
                                                 </div>
                                             </td>
                                         </tr>
@@ -419,7 +431,7 @@ export default function Users() {
                     <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl">
                       <div className="px-5 py-3 border-b flex items-center justify-between">
                         <h3 className="text-lg font-semibold">Position History — User #{historyForId}</h3>
-                        <button onClick={closeHistory} className="text-gray-600 hover:text-gray-900">Close</button>
+                        <LoadingButton onClick={closeHistory}>Close</LoadingButton>
                       </div>
                       <div className="p-4 max-h-[65vh] overflow-y-auto">
                         {historyLoading ? (
@@ -445,7 +457,7 @@ export default function Users() {
                         )}
                       </div>
                       <div className="px-5 py-3 border-t text-right">
-                        <button onClick={closeHistory} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded">Close</button>
+                        <LoadingButton onClick={closeHistory} variant="primary">Close</LoadingButton>
                       </div>
                     </div>
                   </div>
