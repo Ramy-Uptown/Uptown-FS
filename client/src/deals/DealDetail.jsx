@@ -7,6 +7,9 @@ import { useLoader } from '../lib/loaderContext.jsx'
 import CalculatorApp from '../App.jsx'
 import * as XLSX from 'xlsx'
 
+const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
+const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
+
 export default function DealDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -53,6 +56,7 @@ export default function DealDetail() {
   const [expandedNotes, setExpandedNotes] = useState({})
   const [assigning, setAssigning] = useState(false)
   const [settingPolicy, setSettingPolicy] = useState(false)
+
   useEffect(() => {
     async function loadAux() {
       try {
@@ -376,12 +380,11 @@ export default function DealDetail() {
                   })
                   const data = await resp.json()
                   if (!resp.ok) {
-                    notifyError(data || { message: 'Failed to assign sales rep' })
+                    notifyError(data?.error?.message || 'Failed to assign sales rep')
                     // revert optimistic update
                     setDeal(d => ({ ...d, sales_rep_id: deal.sales_rep_id || null }))
                   } else {
-                    notifySuccess('Sales rep assigned successfull_codey.new'</)
-')
+                    notifySuccess('Sales rep assigned successfully.')
                   }
                 } catch (err) {
                   notifyError(err, 'Failed to assign sales rep')
@@ -418,11 +421,10 @@ export default function DealDetail() {
                   })
                   const data = await resp.json()
                   if (!resp.ok) {
-                    notifyError(data || { message: 'Failed to set policy' })
+                    notifyError(data?.error?.message || 'Failed to set policy')
                     setDeal(d => ({ ...d, policy_id: deal.policy_id || null }))
                   } else {
-                    notifySuccess('Commission policy updated successfull_codey.new'</)
-')
+                    notifySuccess('Commission policy updated successfully.')
                   }
                 } catch (err) {
                   notifyError(err, 'Failed to set policy')
@@ -516,10 +518,9 @@ export default function DealDetail() {
                 const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/submit`, { method: 'POST' })
                 const data = await resp.json()
                 if (!resp.ok) {
-                  notifyError(data || { message: 'Submit failed' })
+                  notifyError(data?.error?.message || 'Submit failed')
                 } else {
-                  notifySuccess('Deal submitted successfull_codey.new'</)
-')
+                  notifySuccess('Deal submitted successfully.')
                   await load()
                 }
               } catch (err) {
@@ -560,7 +561,7 @@ export default function DealDetail() {
               })
               const data = await resp.json()
               if (!resp.ok) {
-                notifyError(data || { message: 'Failed to calculate commission' })
+                notifyError(data?.error?.message || 'Failed to calculate commission')
               } else {
                 notifySuccess(`Commission calculated: ${Number(data.commission.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`)
                 await load()
@@ -645,6 +646,3 @@ export default function DealDetail() {
     </div>
   )
 }
-
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }

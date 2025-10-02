@@ -7,6 +7,11 @@ import SkeletonRow from '../components/SkeletonRow.jsx'
 import * as XLSX from 'xlsx'
 import { useLoader } from '../lib/loaderContext.jsx'
 
+const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
+const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
+const ctrl = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6' }
+const btn = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
+
 export default function Dashboard() {
   const [deals, setDeals] = useState([])
   const [error, setError] = useState('')
@@ -139,6 +144,130 @@ export default function Dashboard() {
     }
   }
 
+  const { setShow, setMessage } = useLoader()
+
+  async function exportAllMatching() {
+    // Build base query params from current filters and sorting
+    const base = new URLSearchParams()
+    if (status) base.set('status', status)
+    if (search) base.set('search', search)
+    if (creatorEmail) base.set('creatorEmail', creatorEmail)
+    if (reviewerEmail) base.set('reviewerEmail', reviewerEmail)
+    if (approverEmail) base.set('approverEmail', approverEmail)
+    if (unitType) base.set('unitType', unitType)
+    if (startDate) base.set('startDate', startDate)
+    if (endDate) base.set('endDate', endDate)
+    if (minAmount) base.set('minAmount', minAmount)
+    if (maxAmount) base.set('maxAmount', maxAmount)
+    if (sortBy) base.set('sortBy', sortBy)
+    if (sortDir) base.set('sortDir', sortDir)
+
+    const all = []
+    const pageSizeForExport = 100 // API caps at 100
+    let p = 1
+    while (true) {
+      const q = new URLSearchParams(base.toString())
+      q.set('page', String(p))
+      q.set('pageSize', String(pageSizeForExport))
+      const resp = await fetchWithAuth(`${API_URL}/api/deals?${q.toString()}`)
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Export fetch failed')
+      const batch = data.deals || []
+      all.push(...batch)
+      const totalCount = data.pagination?.total || 0
+      const totalPagesExport = Math.max(1, Math.ceil(totalCount / pageSizeForExport))
+      if (p >= totalPagesExport) break
+      p += 1
+    }
+    return all
+  }
+
+  async function exportCSV() {
+    try {
+      setMessage('Generating report, please wait...')
+      setShow(true)
+      const rows = await exportAllMatching()
+      const header = ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Created', 'Updated']
+      const body = rows.map(d => ([
+        d.id,
+        d.title,
+        Number(d.amount || 0).toFixed(2),
+        d.status,
+        d.unit_type || '',
+        d.created_by_email || '',
+        d.created_at ? new Date(d.created_at).toISOString() : '',
+        d.updated_at ? new Date(d.updated_at).toISOString() : ''
+      ]))
+      const out = [header, ...body]
+      const csv = out.map(r => r.map(cell => {
+        const s = String(cell ?? '')
+        return /[\",\n]/.test(s) ? `\"${s.replace(/\"/g, '\"\"')}\"` : s
+      }).join(',')).join('\n')
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
+      a.download = `deals_export_${ts}.csv`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      notifySuccess('Export completed successfully.')
+    } catch (e) {
+      notifyError(e, 'Unable to export CSV.')
+    } finally {
+      setShow(false)
+    }
+  }
+
+  async function exportXLSX() {
+    try {
+      setMessage('Generating report, please wait...')
+      setShow(true)
+      const rows = await exportAllMatching()
+      const aoa = [
+        ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Created', 'Updated'],
+        ...rows.map(d => ([
+          d.id,
+          d.title,
+          Number(d.amount || 0),
+          d.status,
+          d.unit_type || '',
+          d.created_by_email || '',
+          d.created_at ? new Date(d.created_at).toLocaleString() : '',
+          d.updated_at ? new Date(d.updated_at).toLocaleString() : ''
+        ]))
+      ]
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+      ws['!cols'] = [
+        { wch: 6 },   // ID
+        { wch: 28 },  // Title
+        { wch: 14 },  // Amount
+        { wch: 16 },  // Status
+        { wch: 18 },  // Unit Type
+        { wch: 28 },  // Creator
+        { wch: 22 },  // Created
+        { wch: 22 },  // Updated
+      ]
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Deals')
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
+      a.download = `deals_export_${ts}.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      notifySuccess('Export completed successfully.')
+    } catch (e) {
+      notifyError(e, 'Unable to export Excel.')
+    } finally {
+      setShow(false)
+    }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -150,7 +279,7 @@ export default function Dashboard() {
       </div>
 
       {approverBanner.show && (
-        <div style={{ margin: '8px 0 12px', padding: '10px 12px', borderRadius: 8, background: '#fff7ed', border: '1px solid '#fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ margin: '8px 0 12px', padding: '10px 12px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <span style={{ color: '#9a3412', marginRight: 8 }}>You have pending approvals in your queue.</span>
             <a href={approverBanner.url} style={{ color: '#1f6feb', textDecoration: 'none', fontWeight: 600 }}>Review Now</a>
@@ -272,133 +401,4 @@ export default function Dashboard() {
       </div>
     </div>
   )
-
-  async function exportAllMatching() {
-    // Build base query params from current filters and sorting
-    const base = new URLSearchParams()
-    if (status) base.set('status', status)
-    if (search) base.set('search', search)
-    if (creatorEmail) base.set('creatorEmail', creatorEmail)
-    if (reviewerEmail) base.set('reviewerEmail', reviewerEmail)
-    if (approverEmail) base.set('approverEmail', approverEmail)
-    if (unitType) base.set('unitType', unitType)
-    if (startDate) base.set('startDate', startDate)
-    if (endDate) base.set('endDate', endDate)
-    if (minAmount) base.set('minAmount', minAmount)
-    if (maxAmount) base.set('maxAmount', maxAmount)
-    if (sortBy) base.set('sortBy', sortBy)
-    if (sortDir) base.set('sortDir', sortDir)
-
-    const all = []
-    const pageSizeForExport = 100 // API caps at 100
-    let p = 1
-    while (true) {
-      const q = new URLSearchParams(base.toString())
-      q.set('page', String(p))
-      q.set('pageSize', String(pageSizeForExport))
-      const resp = await fetchWithAuth(`${API_URL}/api/deals?${q.toString()}`)
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Export fetch failed')
-      const batch = data.deals || []
-      all.push(...batch)
-      const totalCount = data.pagination?.total || 0
-      const totalPagesExport = Math.max(1, Math.ceil(totalCount / pageSizeForExport))
-      if (p >= totalPagesExport) break
-      p += 1
-    }
-    return all
-  }
-
-  const { setShow, setMessage } = useLoader()
-
-  async function exportCSV() {
-    try {
-      setMessage('Generating report, please wait...')
-      setShow(true)
-      const rows = await exportAllMatching()
-      const header = ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Created', 'Updated']
-      const body = rows.map(d => ([
-        d.id,
-        d.title,
-        Number(d.amount || 0).toFixed(2),
-        d.status,
-        d.unit_type || '',
-        d.created_by_email || '',
-        d.created_at ? new Date(d.created_at).toISOString() : '',
-        d.updated_at ? new Date(d.updated_at).toISOString() : ''
-      ]))
-      const out = [header, ...body]
-      const csv = out.map(r => r.map(cell => {
-        const s = String(cell ?? '')
-        return /[\",\n]/.test(s) ? `\"${s.replace(/\"/g, '\"\"')}\"` : s
-      }).join(',')).join('\n')
-
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      const ts = new Date().toISOString().replace(/[:.]/g, '-')
-      a.download = `deals_export_${ts}.csv`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      notifySuccess('Export completed successfully.')
-    } catch (e) {
-      notifyError(e, 'Unable to export CSV.')
-    } finally {
-      setShow(false)
-    }
-  }
-
-  async function exportXLSX() {
-    try {
-      setMessage('Generating report, please wait...')
-      setShow(true)
-      const rows = await exportAllMatching()
-      const aoa = [
-        ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Created', 'Updated'],
-        ...rows.map(d => ([
-          d.id,
-          d.title,
-          Number(d.amount || 0),
-          d.status,
-          d.unit_type || '',
-          d.created_by_email || '',
-          d.created_at ? new Date(d.created_at).toLocaleString() : '',
-          d.updated_at ? new Date(d.updated_at).toLocaleString() : ''
-        ]))
-      ]
-      const ws = XLSX.utils.aoa_to_sheet(aoa)
-      ws['!cols'] = [
-        { wch: 6 },   // ID
-        { wch: 28 },  // Title
-        { wch: 14 },  // Amount
-        { wch: 16 },  // Status
-        { wch: 18 },  // Unit Type
-        { wch: 28 },  // Creator
-        { wch: 22 },  // Created
-        { wch: 22 },  // Updated
-      ]
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Deals')
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      const ts = new Date().toISOString().replace(/[:.]/g, '-')
-      a.download = `deals_export_${ts}.xlsx`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      notifySuccess('Export completed successfully.')
-    } catch (e) {
-      notifyError(e, 'Unable to export Excel.')
-    } finally {
-      setShow(false)
-    }
-  }
 }
-
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
-const ctrl = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6' }
-const btn = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }

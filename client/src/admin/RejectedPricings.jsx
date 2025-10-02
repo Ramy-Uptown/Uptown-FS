@@ -77,6 +77,7 @@ export default function RejectedPricings() {
   }
 
   const [confirmDelete, setConfirmDelete] = useState(null);
+
   async function performDelete(p) {
     const key = `delete:${p.id}`;
     try {
@@ -288,7 +289,13 @@ export default function RejectedPricings() {
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <LoadingButton onClick={() => startEdit(p)}>Edit & Resubmit</LoadingButton>
-                      <LoadingButton onClick={() => setConfirmDelete(p)} loading={rowding[`delete:${p.id}`]} style={btnDanger}>Delete</LoadingButton>
+                      <LoadingButton
+                        onClick={() => setConfirmDelete(p)}
+                        loading={rowLoading[`delete:${p.id}`]}
+                        style={btnDanger}
+                      >
+                        Delete
+                      </LoadingButton>
                     </div>
                   </td>
                 </tr>
@@ -302,11 +309,20 @@ export default function RejectedPricings() {
           </table>
         </div>
       </div>
-     <dConfirmModal
+
+      <ConfirmModal
         open={!!confirmDelete}
         title="Delete Rejected Pricing"
         message="Are you sure you want to delete this rejected pricing request?"
         confirmText="Delete"
         cancelText="Cancel"
-        onConfirm={() => { const p = confirmDelete; setConfirmDelete(null); perform;
+        onConfirm={() => {
+          const p = confirmDelete;
+          setConfirmDelete(null);
+          performDelete(p);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+    </div>
+  );
 }

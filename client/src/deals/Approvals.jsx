@@ -4,10 +4,27 @@ import LoadingButton from '../components/LoadingButton.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
 import PromptModal from '../components/PromptModal.jsx'
 
+const th = {
+  textAlign: 'left',
+  padding: 10,
+  borderBottom: '1px solid #eef2f7',
+  fontSize: 13,
+  color: '#475569',
+  background: '#f9fbfd'
+}
+
+const td = {
+  padding: 10,
+  borderBottom: '1px solid #f2f5fa',
+  fontSize: 14
+}
+
 export default function Approvals() {
   const [deals, setDeals] = useState([])
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(0)
+  const [promptRejectId, setPromptRejectId] = useState(0)
+
   const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const role = user?.role || 'user'
 
@@ -42,8 +59,6 @@ export default function Approvals() {
       setBusyId(0)
     }
   }
-
-  const [promptRejectId, setPromptRejectId] = useState(0)
 
   function reject(id) {
     setPromptRejectId(id)
@@ -92,32 +107,49 @@ export default function Approvals() {
               <tr key={d.id}>
                 <td style={td}>{d.id}</td>
                 <td style={td}>{d.title}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{Number(d.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                <td style={{ ...td, textAlign: 'right' }}>
+                  {Number(d.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </td>
                 <td style={td}>{d.created_by_email || '-'}</td>
                 <td style={td}>
-                  <LoadingButton disabled={busyId === d.id} onClick={() => approve(d.id)}>Approve</LoadingButton>
-                  <LoadingButton disabled={busyId === d.id} onClick={() => reject(d.id)}>Reject</LoadingButton>
+                  <LoadingButton disabled={busyId === d.id} onClick={() => approve(d.id)}>
+                    Approve
+                  </LoadingButton>
+                  <LoadingButton
+                    disabled={busyId === d.id}
+                    onClick={() => reject(d.id)}
+                    style={{ marginLeft: 8 }}
+                  >
+                    Reject
+                  </LoadingButton>
                 </td>
               </tr>
             ))}
             {deals.length === 0 && (
               <tr>
-                <td style={td} colSpan={5}>No pending deals.</td>
+                <td style={td} colSpan={5}>
+                  No pending deals.
+                </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-     <dPromptModal
+
+      <PromptModal
         open={!!promptRejectId}
         title="Reject Deal"
         message="Optionally provide a reason for rejection:"
         placeholder="Reason (optional)"
         confirmText="Reject"
         cancelText="Cancel"
-        onSubmit={(val) => { const id = promptRejectId; setPromptRejectId(0); performReject(id, val ||)
+        onSubmit={(val) => {
+          const id = promptRejectId
+          setPromptRejectId(0)
+          performReject(id, val || '') // Fixed: provide fallback empty string
+        }}
+        onCancel={() => setPromptRejectId(0)}
+      />
+    </div>
+  )
 }
-
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
-const btn = { marginRight: 8, padding: '6px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }

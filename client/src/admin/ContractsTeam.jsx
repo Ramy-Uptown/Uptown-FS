@@ -144,7 +144,12 @@ export default function ContractsTeam() {
           <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: 6 }}>
-                <input placeholder="Search member by name/email/id…" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} style={ctrl} />
+                <input
+                  placeholder="Search member by name/email/id…"
+                  value={memberSearch}
+                  onChange={e => setMemberSearch(e.target.value)}
+                  style={ctrl}
+                />
                 <select value={memberId} onChange={e => setMemberId(e.target.value)} style={ctrl}>
                   <option value="">Select contract person…</option>
                   {filteredMembers.map(u => (
@@ -155,7 +160,12 @@ export default function ContractsTeam() {
                 </select>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                <input placeholder="Search manager by name/email/id…" value={managerSearch} onChange={e => setManagerSearch(e.target.value)} style={ctrl} />
+                <input
+                  placeholder="Search manager by name/email/id…"
+                  value={managerSearch}
+                  onChange={e => setManagerSearch(e.target.value)}
+                  style={ctrl}
+                />
                 <select value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl}>
                   <option value="">Select contract manager…</option>
                   {filteredManagers.map(u => (
@@ -166,7 +176,15 @@ export default function ContractsTeam() {
                 </select>
               </div>
               <div>
-                <LoadingButton type="button" onClick={assign} loading={assigning} variant="primary" disabled={!memberId || !managerId}>Assign</LoadingButton>
+                <LoadingButton
+                  type="button"
+                  onClick={assign}
+                  loading={assigning}
+                  variant="primary"
+                  disabled={!memberId || !managerId}
+                >
+                  Assign
+                </LoadingButton>
               </div>
             </div>
             <div style={{ marginTop: 6 }}>
@@ -199,49 +217,37 @@ export default function ContractsTeam() {
                   ))}
                 </>
               )}
+
               {!loading && (memberships || []).map((m, idx) => {
                 const key = `${m.manager_user_id}:${m.member_user_id}`
                 return (
-                <tr key={idx}>
-                  <td style={td}>{m.manager_user_id} {m.manager_email ? <span style={metaText}>({m.manager_email})</span> : null}</td>
-                  <td style={td}>{m.member_user_id} {m.member_email ? <span style={metaText}>({m.member_email})</span> : null}</td>
-                  <td style={td}>{m.active ? 'Yes' : 'No'}</td>
-                  <td style={td}>
-                    {m.active && canAssign ? (
-                      <LoadingButton onClick={() => clearMembership(m.manager_user_id, m.member_user_id)} loading={rowLoading[key]}>Clear</LoadingButton>
-                    ) : (
-                      !canAssign ? <span style={metaText}>No actions</span> : null
-                    )}
-                  </td>
-                </tr>
-              )})}
-              {memberships.length === 0 && !loading && (
-                <tr>
-                  <td style={td} colSpan={4}>No memberships.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  )
-}:${m.member_user_id}`
-                return (
-                <tr key={idx}>
-                  <td style={td}>{m.manager_user_id} {m.manager_email ? <span style={metaText}>({m.manager_email})</span> : null}</td>
-                  <td style={td}>{m.member_user_id} {m.member_email ? <span style={metaText}>({m.member_email})</span> : null}</td>
-                  <td style={td}>{m.active ? 'Yes' : 'No'}</td>
-                  <td style={td}>
-                    {m.active && canAssign ? (
-                      <LoadingButton onClick={() => clearMembership(m.manager_user_id, m.member_user_id)} loading={rowLoading[key]}>Clear</LoadingButton>
-                    ) : (
-                      !canAssign ? <span style={metaText}>No actions</span> : null
-                    )}
-                  </td>
-                </tr>
-              )})}
-              {memberships.length === 0 && !loading && (
+                  <tr key={idx}>
+                    <td style={td}>
+                      {m.manager_user_id}{' '}
+                      {m.manager_email ? <span style={metaText}>({m.manager_email})</span> : null}
+                    </td>
+                    <td style={td}>
+                      {m.member_user_id}{' '}
+                      {m.member_email ? <span style={metaText}>({m.member_email})</span> : null}
+                    </td>
+                    <td style={td}>{m.active ? 'Yes' : 'No'}</td>
+                    <td style={td}>
+                      {m.active && canAssign ? (
+                        <LoadingButton
+                          onClick={() => clearMembership(m.manager_user_id, m.member_user_id)}
+                          loading={rowLoading[key]}
+                        >
+                          Clear
+                        </LoadingButton>
+                      ) : !canAssign ? (
+                        <span style={metaText}>No actions</span>
+                      ) : null}
+                    </td>
+                  </tr>
+                )
+              })}
+
+              {!loading && memberships.length === 0 && (
                 <tr>
                   <td style={td} colSpan={4}>No memberships.</td>
                 </tr>
