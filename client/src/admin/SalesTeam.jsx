@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { th, td, ctrl, btn, btnPrimary, tableWrap, table, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js'
 import BrandHeader from '../lib/BrandHeader.jsx'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
 
 /**
  * SalesTeam — Manager assignment page
@@ -61,7 +64,9 @@ export default function SalesTeam() {
       })
       setMemberships(map)
     } catch (e) {
-      setError(e.message || String(e))
+      const msg = e.message || String(e)
+      setError(msg)
+      notifyError(e, 'Failed to load team data')
     } finally {
       setLoading(false)
     }
@@ -119,9 +124,12 @@ export default function SalesTeam() {
     setManagerSearch('')
   }
 
+  const [rowLoading, setRowLoading] = useState({})
   async function saveAssign(consultantUserId) {
-    if (!assignManagerId) return alert('Select a manager')
+    if (!assignManagerId) { notifyError('Select a manager'); return }
+    const key = `assign:${consultantUserId}`
     try {
+      setRowLoading(s => ({ ...s, [key]: true }))
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,16 +141,21 @@ export default function SalesTeam() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to assign')
       setAssignFor(0)
+      notifySuccess('Manager assigned')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Failed to assign')
+    } finally {
+      setRowLoading(s => ({ ...s, [key]: false }))
     }
   }
 
   async function clearAssign(consultantUserId) {
     const currentMgr = memberships[consultantUserId]
     if (!currentMgr) { setAssignFor(0); return }
+    const key = `clear:${consultantUserId}`
     try {
+      setRowLoading(s => ({ ...s, [key]: true }))
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -155,16 +168,21 @@ export default function SalesTeam() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to clear')
       setAssignFor(0)
+      notifySuccess('Assignment cleared')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Failed to clear')
+    } finally {
+      setRowLoading(s => ({ ...s, [key]: false }))
     }
   }
 
+  const [quickAssigning, setQuickAssigning] = useState(false)
   async function saveQuickAssign() {
-    if (!qaConsultantId) return alert('Select a consultant')
-    if (!qaManagerId) return alert('Select a manager')
+    if (!qaConsultantId) { notifyError('Select a consultant'); return }
+    if (!qaManagerId) { notifyError('Select a manager'); return }
     try {
+      setQuickAssigning(true)
       const resp = await fetchWithAuth(`${API_URL}/api/workflow/sales-teams/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -177,9 +195,12 @@ export default function SalesTeam() {
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to assign')
       setQaConsultantId(''); setQaManagerId('')
       setQaConsultantSearch(''); setQaManagerSearch('')
+      notifySuccess('Manager assigned')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Failed to assign')
+    } finally {
+      setQuickAssigning(false)
     }
   }
 
@@ -234,9 +255,10 @@ export default function SalesTeam() {
               </select>
             </div>
             <div>
-              <button type="button" onClick={saveQuickAssign} style={btnPrimary} disabled={!qaConsultantId || !qaManagerId || !canAssign}>Assign</button>
+              <LoadingButton type="button" onClick={saveQuickAssign} loading={quickAssigning} variant="primary" disabled={!qaConsultantId || !qaManagerId || !canAssign}>
+                Assign
+              </LoadingButton>
             </div>
-          </div>
           <div style={{ marginTop: 6 }}>
             <span style={metaText}>This page assigns managers only. Employees are managed in Admin → Users.</span>
           </div>
@@ -268,10 +290,19 @@ export default function SalesTeam() {
               </tr>
             </thead>
             <tbody>
-              {pageRows.map(c => {
+              {loading && (
+                <>
+                  {Array.from({ length: pageSize }).map((_, i) => (
+                    <SkeletonRow key={i} widths={['sm','lg','lg','lg','lg']} tdStyle={td} />
+                  ))}
+                </>
+              )}
+              {!loading && pageRows.map(c => {
                 const mgrId = memberships[c.id] || ''
                 const mgr = managers.find(m => m.id === Number(mgrId))
                 const isAssigning = assignFor === c.id
+                const keyAssign = `assign:${c.id}`
+                const keyClear = `clear:${c.id}`
                 return (
                   <tr key={c.id}>
                     <td style={td}>{c.id}</td>
@@ -296,19 +327,19 @@ export default function SalesTeam() {
                               ))}
                             </select>
                           </div>
-                          <button onClick={() => saveAssign(c.id)} style={btn}>Save</button>
-                          <button onClick={() => clearAssign(c.id)} style={btn} disabled={!mgrId}>Clear</button>
-                          <button onClick={() => setAssignFor(0)} style={btn}>Cancel</button>
+                          <LoadingButton onClick={() => saveAssign(c.id)} loading={rowLoading[keyAssign]}>Save</LoadingButton>
+                          <LoadingButton onClick={() => clearAssign(c.id)} loading={rowLoading[keyClear]} disabled={!mgrId}>Clear</LoadingButton>
+                          <LoadingButton onClick={() => setAssignFor(0)}>Cancel</LoadingButton>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           <span style={metaText}>{mgr ? `${mgr.email}${mgr.meta?.full_name ? ` — ${mgr.meta.full_name}` : ''}` : 'No manager'}</span>
-                          {canAssign ? <button onClick={() => openAssign(c.id)} style={btn}>Change</button> : null}
+                          {canAssign ? <LoadingButton onClick={() => openAssign(c.id)}>Change</LoadingButton> : null}
                         </div>
                       )}
                     </td>
                     <td style={td}>
-                      {canAssign ? <button onClick={() => openAssign(c.id)} style={btn}>Assign</button> : <span style={metaText}>No actions</span>}
+                      {canAssign ? <LoadingButton onClick={() => openAssign(c.id)}>Assign</LoadingButton> : <span style={metaText}>No actions</span>}
                     </td>
                   </tr>
                 )
@@ -327,10 +358,10 @@ export default function SalesTeam() {
             Page {page} of {totalPages} — {total} consultants
           </span>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={() => setPage(1)} disabled={page === 1} style={btn}>First</button>
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btn}>Prev</button>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={btn}>Next</button>
-            <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={btn}>Last</button>
+            <LoadingButton onClick={() => setPage(1)} disabled={page === 1 || loading}>First</LoadingButton>
+            <LoadingButton onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}>Prev</LoadingButton>
+            <LoadingButton onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading}>Next</LoadingButton>
+            <LoadingButton onClick={() => setPage(totalPages)} disabled={page === totalPages || loading}>Last</LoadingButton>
           </div>
         </div>
       </div>
