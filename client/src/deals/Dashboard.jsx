@@ -5,6 +5,7 @@ import { notifyError, notifySuccess } from '../lib/notifications.js'
 import LoadingButton from '../components/LoadingButton.jsx'
 import SkeletonRow from '../components/SkeletonRow.jsx'
 import * as XLSX from 'xlsx'
+import { useLoader } from '../lib/loaderContext.jsx'
 
 export default function Dashboard() {
   const [deals, setDeals] = useState([])
@@ -308,9 +309,12 @@ export default function Dashboard() {
     return all
   }
 
+  const { setShow, setMessage } = useLoader()
+
   async function exportCSV() {
     try {
-      setLoading(true)
+      setMessage('Generating report, please wait...')
+      setShow(true)
       const rows = await exportAllMatching()
       const header = ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Created', 'Updated']
       const body = rows.map(d => ([
@@ -326,7 +330,7 @@ export default function Dashboard() {
       const out = [header, ...body]
       const csv = out.map(r => r.map(cell => {
         const s = String(cell ?? '')
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+        return /[\",\n]/.test(s) ? `\"${s.replace(/\"/g, '\"\"')}\"` : s
       }).join(',')).join('\n')
 
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -337,17 +341,18 @@ export default function Dashboard() {
       a.download = `deals_export_${ts}.csv`
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      notifySuccess('CSV exported')
+      notifySuccess('Export completed successfully.')
     } catch (e) {
-      notifyError(e, 'Failed to export CSV')
+      notifyError(e, 'Unable to export CSV.')
     } finally {
-      setLoading(false)
+      setShow(false)
     }
   }
 
   async function exportXLSX() {
     try {
-      setLoading(true)
+      setMessage('Generating report, please wait...')
+      setShow(true)
       const rows = await exportAllMatching()
       const aoa = [
         ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Created', 'Updated'],
@@ -384,11 +389,11 @@ export default function Dashboard() {
       a.download = `deals_export_${ts}.xlsx`
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      notifySuccess('Excel exported')
+      notifySuccess('Export completed successfully.')
     } catch (e) {
-      notifyError(e, 'Failed to export Excel')
+      notifyError(e, 'Unable to export Excel.')
     } finally {
-      setLoading(false)
+      setShow(false)
     }
   }
 }
