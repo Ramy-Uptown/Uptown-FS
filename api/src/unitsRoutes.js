@@ -61,11 +61,45 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 })
 
-// Get a unit
+// Get a unit with full details including pricing breakdown and standard pricing
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
-    const r = await pool.query('SELECT * FROM units WHERE id=$1', [id])
+    const r = await pool.query(`
+      SELECT
+        u.id, u.code, u.description, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+        u.base_price, u.currency, u.model_id, u.area, u.orientation,
+        u.has_garden, u.garden_area, u.has_roof, u.roof_area, u.garage_area,
+        u.maintenance_price, u.garage_price, u.garden_price, u.roof_price, u.storage_price,
+        u.available, u.unit_status, u.created_by, u.approved_by, u.created_at, u.updated_at,
+        u.unit_number, u.floor, u.building_number, u.block_sector, u.zone, u.garden_details,
+        m.model_name AS model_name, m.model_code AS model_code,
+        p.price AS standard_base_price,
+        p.maintenance_price AS standard_maintenance_price,
+        p.garage_price AS standard_garage_price,
+        p.garden_price AS standard_garden_price,
+        p.roof_price AS standard_roof_price,
+        p.storage_price AS standard_storage_price,
+        (COALESCE(u.has_garden, FALSE) AND COALESCE(u.garden_area, 0) > 0) AS garden_available,
+        (COALESCE(u.has_roof, FALSE) AND COALESCE(u.roof_area, 0) > 0) AS roof_available,
+        (COALESCE(u.garage_area, 0) > 0) AS garage_available,
+        (COALESCE(u.base_price,0)
+          + COALESCE(u.garage_price,0)
+          + COALESCE(u.garden_price,0)
+          + COALESCE(u.roof_price,0)
+          + COALESCE(u.storage_price,0)) AS total_price
+      FROM units u
+      LEFT JOIN unit_types ut ON ut.id = u.unit_type_id
+      LEFT JOIN unit_models m ON m.id = u.model_id
+      LEFT JOIN LATERAL (
+        SELECT price, maintenance_price, garage_price, garden_price, roof_price, storage_price
+        FROM unit_model_pricing
+        WHERE model_id = u.model_id AND status = 'approved'
+        ORDER BY id DESC
+        LIMIT 1
+      ) p ON TRUE
+      WHERE u.id=$1
+    `, [id])
     if (r.rows.length === 0) return res.status(404).json({ error: { message: 'Unit not found' } })
     return res.json({ ok: true, unit: r.rows[0] })
   } catch (e) {
