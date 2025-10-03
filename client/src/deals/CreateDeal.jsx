@@ -46,7 +46,7 @@ export default function CreateDeal() {
         }
         const u = data.unit || {}
 
-        // Compute breakdown with all pricing components
+        // Compute breakdown with all pricing components (current unit pricing)
         const base = Number(u.base_price || 0)
         const garden = Number(u.garden_price || 0)
         const roof = Number(u.roof_price || 0)
@@ -54,6 +54,15 @@ export default function CreateDeal() {
         const garage = Number(u.garage_price || 0)
         const maintenance = Number(u.maintenance_price || 0)
         const total = base + garden + roof + storage + garage
+
+        // Get standard pricing from the model (for proposal baseline)
+        const stdBase = Number(u.standard_base_price || base)
+        const stdGarden = Number(u.standard_garden_price || garden)
+        const stdRoof = Number(u.standard_roof_price || roof)
+        const stdStorage = Number(u.standard_storage_price || storage)
+        const stdGarage = Number(u.standard_garage_price || garage)
+        const stdMaintenance = Number(u.standard_maintenance_price || maintenance)
+        const stdTotal = stdBase + stdGarden + stdRoof + stdStorage + stdGarage
 
         // Prefill embedded calculator via exposed bridge and sync local UI
         try {
@@ -79,13 +88,18 @@ export default function CreateDeal() {
                 garage_area: u.garage_area || ''
               },
               stdPlan: {
-                totalPrice: total,
-                base_price: base,
-                maintenance_price: maintenance
+                totalPrice: stdTotal,
+                base_price: stdBase,
+                maintenance_price: stdMaintenance
               },
               unitPricingBreakdown: {
-                base, garden, roof, storage, garage, maintenance,
-                totalExclMaintenance: total
+                base: stdBase,
+                garden: stdGarden,
+                roof: stdRoof,
+                storage: stdStorage,
+                garage: stdGarage,
+                maintenance: stdMaintenance,
+                totalExclMaintenance: stdTotal
               },
               currency: u.currency || 'EGP'
             })
