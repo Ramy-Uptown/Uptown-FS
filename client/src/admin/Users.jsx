@@ -226,8 +226,7 @@ export default function Users() {
                 const errorData = await resp.json().catch(() => ({ error: { message: 'An unknown error occurred' } }));
                 throw new Error(errorData.error?.message || 'Failed to toggle active status');
             }
-        }, user.active ? 'User deactivated successfully.' : 'User activated successfully_code.'new)</;
-    };
+}, user.active ? 'User deactivated successfully.' : 'User activated successfully.');    };
 
     const handleLogout = () => {
         // In a real app, this would clear tokens and redirect

@@ -259,6 +259,7 @@ export default function SalesTeam() {
                 Assign
               </LoadingButton>
             </div>
+          </div>
           <div style={{ marginTop: 6 }}>
             <span style={metaText}>This page assigns managers only. Employees are managed in Admin → Users.</span>
           </div>
@@ -368,57 +369,3 @@ export default function SalesTeam() {
     </div>
   )
 }
-
-/*
- The code below was causing a syntax error. It seems to be from another component.
- I'm commenting it out to fix the build, while preserving it for future inspection.
-
-}>
-                    <button onClick={() => edit(r)} style={btn}>Edit</button>
-                    <button onClick={() => remove(r.id)} style={btn}>Delete</button>
-                  </td>
-                </tr>
-              )})}
-              {list.length === 0 && !loading && (
-                <tr>
-                  <td style={td} colSpan={8}>
-                    <div style={{ display: 'grid', gap: 8 }}>
-                      <div>No sales people.</div>
-                      {(isSuperAdmin || me?.role === 'admin') ? (
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <span style={metaText}>
-                            You can populate the Sales Team from existing app users with roles
-                            "property_consultant" and "sales_manager".
-                          </span>
-                          <button type="button" onClick={syncFromUsers} style={btnPrimary}>
-                            Populate from Users
-                          </button>
-                        </div>
-                      ) : (
-                        <span style={metaText}>Ask an admin to add sales people.</span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-          <span style={metaText}>
-            Page {page} of {totalPages} — {total} total
-          </span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={() => setPage(1)} disabled={page === 1} style={btn}>First</button>
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btn}>Prev</button>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={btn}>Next</button>
-            <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={btn}>Last</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-*/
-

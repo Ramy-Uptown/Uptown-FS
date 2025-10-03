@@ -100,7 +100,7 @@ router.patch('/offers/:id/status', authMiddleware, validate(offerStatusSchema), 
 // Get offer history
 router.get('/offers/:id/history', authMiddleware, async (req, res) => {
   const offerId = parseInt(req.params.id, 10)
-  if (!Number.isFinite(offerId)) return res.status(400).json({ error: { message: 'Invalid offer id' })
+  if (!Number.isFinite(offerId)) return res.status(400).json({ error: { message: 'Invalid offer id' } })
 
   try {
     const history = await pool.query(`

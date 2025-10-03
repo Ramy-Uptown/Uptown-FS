@@ -47,11 +47,11 @@ export default function Register() {
           <h2 style={{ marginTop: 0 }}>Register</h2>
           <div style={{ marginBottom: 12 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid '#dfe5ee' }} />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee' }} />
           </div>
           <div style={{ marginBottom: 12 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid '#dfe5ee' }} />
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee' }} />
           </div>
           <button type="submit" disabled={loading} style={{ padding: '10px 14px', borderRadius: 10, border: `1px solid ${BRAND.primary}`, background: BRAND.primary, color: '#fff', fontWeight: 600, width: '100%' }}>
             {loading ? 'Registering...' : 'Register'}

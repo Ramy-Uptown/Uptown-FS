@@ -66,7 +66,7 @@ router.post('/blocks/request', authMiddleware, requireRole(['property_consultant
 router.patch('/blocks/:id/approve', authMiddleware, requireRole(['financial_manager']), validate(blockApproveSchema), async (req, res) => {
   const { action, reason } = req.body || {} // action: 'approve' or 'reject'
   const blockId = Number(req.params.id)
-  if (!Number.isFinite(blockId)) return res.status(400).json({ error: { message: 'Invalid block id' })
+  if (!Number.isFinite(blockId)) return res.status(400).json({ error: { message: 'Invalid block id' } })
 
   try {
     const block = await pool.query('SELECT * FROM blocks WHERE id = $1', [blockId])
@@ -162,7 +162,7 @@ router.get('/blocks/current', authMiddleware, async (req, res) => {
 router.patch('/blocks/:id/extend', authMiddleware, requireRole(['financial_manager']), validate(blockExtendSchema), async (req, res) => {
   const { additionalDays, reason } = req.body || {}
   const blockId = Number(req.params.id)
-  if (!Number.isFinite(blockId)) return res.status(400).json({ error: { message: 'Invalid block id' })
+  if (!Number.isFinite(blockId)) return res.status(400).json({ error: { message: 'Invalid block id' } })
   const add = Number(additionalDays)
 
   try {

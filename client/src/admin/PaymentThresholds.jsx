@@ -181,6 +181,9 @@ export default function PaymentThresholds() {
     }
   }
 
+  // ------------------------------------------------------------------
+  //  RENDER
+  // ------------------------------------------------------------------
   return (
     <>
       <div style={{ marginBottom: 16 }}>
@@ -299,7 +302,7 @@ export default function PaymentThresholds() {
                   </div>
                   <LoadingButton onClick={submitProposal} loading={saving} style={btnPrimaryStyle}>
                     {saving ? 'Submitting...' : 'Submit for Approval'}
-                 ton>
+                  </LoadingButton>
                 </div>
               </div>
             )}
@@ -382,8 +385,8 @@ export default function PaymentThresholds() {
             )}
           </div>
         )}
-      </div> {/* ✅ This was missing! */}
-    </> // ✅ And this fragment closes properly
+      </div>
+    </>
   )
 }
 
