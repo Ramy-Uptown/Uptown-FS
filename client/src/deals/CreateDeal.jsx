@@ -37,11 +37,16 @@ export default function CreateDeal() {
     if (!Number.isFinite(unitId) || unitId <= 0) return
     ;(async () => {
       try {
+        setLoading(true)
         const resp = await fetchWithAuth(`${API_URL}/api/units/${unitId}`)
         const data = await resp.json()
-        if (!resp.ok) return
+        if (!resp.ok) {
+          setError(data?.error?.message || 'Failed to load unit')
+          return
+        }
         const u = data.unit || {}
-        // Compute breakdown similar to TypeAndUnitPicker
+
+        // Compute breakdown with all pricing components
         const base = Number(u.base_price || 0)
         const garden = Number(u.garden_price || 0)
         const roof = Number(u.roof_price || 0)
@@ -56,12 +61,28 @@ export default function CreateDeal() {
           if (typeof applyPrefill === 'function') {
             applyPrefill({
               unitInfo: {
-                unit_type: u.unit_type || '',
+                unit_type: u.unit_type || u.unit_type_name || '',
                 unit_code: u.code || '',
                 description: u.description || '',
-                unit_number: '',
+                unit_number: u.unit_number || '',
+                floor: u.floor || '',
+                building_number: u.building_number || '',
+                block_sector: u.block_sector || '',
+                zone: u.zone || '',
+                garden_details: u.garden_details || '',
+                area: u.area || '',
+                orientation: u.orientation || '',
+                has_garden: u.has_garden || false,
+                garden_area: u.garden_area || '',
+                has_roof: u.has_roof || false,
+                roof_area: u.roof_area || '',
+                garage_area: u.garage_area || ''
               },
-              stdPlan: { totalPrice: total },
+              stdPlan: {
+                totalPrice: total,
+                base_price: base,
+                maintenance_price: maintenance
+              },
               unitPricingBreakdown: {
                 base, garden, roof, storage, garage, maintenance,
                 totalExclMaintenance: total
@@ -69,14 +90,25 @@ export default function CreateDeal() {
               currency: u.currency || 'EGP'
             })
           }
-          setUnitForm(s => ({
-            ...s,
-            unit_type: u.unit_type || s.unit_type,
-            unit_code: u.code || s.unit_code,
-            description: u.description || s.description,
-          }))
-        } catch {}
-      } catch {}
+          setUnitForm({
+            unit_type: u.unit_type || u.unit_type_name || '',
+            unit_code: u.code || '',
+            description: u.description || '',
+            unit_number: u.unit_number || '',
+            floor: u.floor || '',
+            building_number: u.building_number || '',
+            block_sector: u.block_sector || '',
+            zone: u.zone || '',
+            garden_details: u.garden_details || ''
+          })
+        } catch (err) {
+          console.error('Error applying unit prefill:', err)
+        }
+      } catch (err) {
+        setError(err.message || 'Failed to load unit')
+      } finally {
+        setLoading(false)
+      }
     })()
   }, [])
 
@@ -263,6 +295,7 @@ export default function CreateDeal() {
         </div>
       </div>
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+      {loading && !error ? <p style={{ color: '#64748b', fontSize: 14 }}>Loading unit data...</p> : null}
 
       {/* Egyptian ID OCR Module */}
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
