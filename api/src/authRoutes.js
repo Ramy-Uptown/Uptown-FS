@@ -441,19 +441,19 @@ router.patch('/users/:id', authMiddleware, adminOnly, validate(updateUserSchema)
       const existing = await pool.query('SELECT id FROM users WHERE email=$1 AND id<>$2', [normalizedEmail, id])
       if (existing.rows.length > 0) return res.status(409).json({ error: { message: 'Email already in use' } })
       params.push(normalizedEmail)
-      updates.push(`email=${params.length}`)
+      updates.push(`email=$${params.length}`)
       audit.email = { from: tgt.rows[0].email, to: normalizedEmail }
     }
 
     if (notes !== undefined) {
       params.push(String(notes))
-      updates.push(`notes=${params.length}`)
+      updates.push(`notes=$${params.length}`)
       audit.notes = { from: tgt.rows[0].old_notes || null, to: String(notes) }
     }
 
     if (meta !== undefined) {
       params.push(JSON.stringify(meta))
-      updates.push(`meta=${params.length}`)
+      updates.push(`meta=$${params.length}`)
       audit.meta = true
     }
 
@@ -463,7 +463,7 @@ router.patch('/users/:id', authMiddleware, adminOnly, validate(updateUserSchema)
 
     params.push(id)
     const result = await pool.query(
-      `UPDATE users SET ${updates.join(', ')}, updated_at=now() WHERE id=${params.length} RETURNING id, email, role, active, notes, meta`,
+      `UPDATE users SET ${updates.join(', ')}, updated_at=now() WHERE id=$${params.length} RETURNING id, email, role, active, notes, meta`,
       params
     )
     await pool.query(
