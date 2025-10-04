@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import CalculatorApp from '../App.jsx'
+import FullPageLoader from '../components/FullPageLoader.jsx'
 
 export default function CreateDeal() {
   const [error, setError] = useState('')
@@ -28,7 +29,27 @@ export default function CreateDeal() {
     garden_details: ''
   })
 
+  // Server-calculation integration
+  const [selectedUnit, setSelectedUnit] = useState(null)
+  const [standardPlan, setStandardPlan] = useState(null)
+  const [calcLoading, setCalcLoading] = useState(false)
+  const [calcError, setCalcError] = useState('')
+  const [calcResult, setCalcResult] = useState(null)
+
   const navigate = useNavigate()
+
+  // Fetch global standard plan on mount
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const resp = await fetchWithAuth(`${API_URL}/api/standard-plan/latest`)
+        const data = await resp.json()
+        if (resp.ok) {
+          setStandardPlan(data.standardPlan || null)
+        }
+      } catch {}
+    })()
+  }, [])
 
   // On mount: if unit_id is provided, fetch unit and prefill calculator
   useEffect(() => {
@@ -38,13 +59,14 @@ export default function CreateDeal() {
     ;(async () => {
       try {
         setLoading(true)
-        const resp = await fetchWithAuth(`${API_URL}/api/units/${unitId}`)
+        const resp = await fetchWithAuth(`${API_URL}/api/inventory/units/${unitId}`)
         const data = await resp.json()
         if (!resp.ok) {
           setError(data?.error?.message || 'Failed to load unit')
           return
         }
         const u = data.unit || {}
+        setSelectedUnit(u)
 
         // Compute breakdown with all pricing components (current unit pricing)
         const base = Number(u.base_price || 0)
@@ -55,13 +77,14 @@ export default function CreateDeal() {
         const maintenance = Number(u.maintenance_price || 0)
         const total = base + garden + roof + storage + garage
 
-        // Get standard pricing from the model (for proposal baseline)
-        const stdBase = Number(u.standard_base_price || base)
-        const stdGarden = Number(u.standard_garden_price || garden)
-        const stdRoof = Number(u.standard_roof_price || roof)
-        const stdStorage = Number(u.standard_storage_price || storage)
-        const stdGarage = Number(u.standard_garage_price || garage)
-        const stdMaintenance = Number(u.standard_maintenance_price || maintenance)
+        // Get standard pricing from the model (for proposal baseline) — now from approved_standard_pricing
+        const sp = u.approved_standard_pricing || {}
+        const stdBase = Number(sp.price || base)
+        const stdGarden = Number(sp.garden_price || garden)
+        const stdRoof = Number(sp.roof_price || roof)
+        const stdStorage = Number(sp.storage_price || storage)
+        const stdGarage = Number(sp.garage_price || garage)
+        const stdMaintenance = Number(sp.maintenance_price || maintenance)
         const stdTotal = stdBase + stdGarden + stdRoof + stdStorage + stdGarage
 
         // Prefill embedded calculator via exposed bridge and sync local UI
@@ -85,12 +108,15 @@ export default function CreateDeal() {
                 garden_area: u.garden_area || '',
                 has_roof: u.has_roof || false,
                 roof_area: u.roof_area || '',
-                garage_area: u.garage_area || ''
+                garage_area: u.garage_area || '',
+                unit_id: u.id
               },
               stdPlan: {
                 totalPrice: stdTotal,
                 base_price: stdBase,
-                maintenance_price: stdMaintenance
+                maintenance_price: stdMaintenance,
+                financialDiscountRate: Number(standardPlan?.std_financial_rate_percent) || 0,
+                calculatedPV: 0
               },
               unitPricingBreakdown: {
                 base: stdBase,
@@ -299,8 +325,63 @@ export default function CreateDeal() {
     applyFn(updates)
   }
 
+  // Trigger server calculation using new backend engine
+  async function calculateViaServer() {
+    try {
+      setCalcError('')
+      setCalcResult(null)
+      setCalcLoading(true)
+      if (!selectedUnit) {
+        throw new Error('Please select a unit from the inventory first.')
+      }
+      if (!standardPlan) {
+        throw new Error('Standard plan not loaded yet. Please try again in a moment.')
+      }
+      const snapFn = window.__uptown_calc_getSnapshot
+      if (typeof snapFn !== 'function') {
+        throw new Error('Calculator snapshot not ready. Please try again.')
+      }
+      const snap = snapFn()
+      const proposalInputs = snap?.inputs || {}
+      const proposal = {
+        salesDiscountPercent: Number(proposalInputs.salesDiscountPercent) || 0,
+        dpType: proposalInputs.dpType || 'amount',
+        downPaymentValue: Number(proposalInputs.downPaymentValue) || 0,
+        planDurationYears: Number(proposalInputs.planDurationYears) || Number(standardPlan.plan_duration_years) || 1,
+        installmentFrequency: proposalInputs.installmentFrequency || standardPlan.installment_frequency || 'monthly',
+        additionalHandoverPayment: Number(proposalInputs.additionalHandoverPayment) || 0,
+        handoverYear: Number(proposalInputs.handoverYear) || 0,
+        splitFirstYearPayments: !!proposalInputs.splitFirstYearPayments,
+        firstYearPayments: Array.isArray(snap?.firstYearPayments) ? snap.firstYearPayments : [],
+        subsequentYears: Array.isArray(snap?.subsequentYears) ? snap.subsequentYears : [],
+        // Base date for absolute due dates if available in embedded form
+        baseDate: snap?.contractInfo?.contract_date || snap?.contractInfo?.reservation_form_date || null,
+        maintenancePaymentAmount: Number(snap?.feeSchedule?.maintenancePaymentAmount) || 0,
+        maintenancePaymentMonth: Number(snap?.feeSchedule?.maintenancePaymentMonth) || 0,
+        garagePaymentAmount: Number(snap?.feeSchedule?.garagePaymentAmount) || 0,
+        garagePaymentMonth: Number(snap?.feeSchedule?.garagePaymentMonth) || 0
+      }
+      const body = { unit: selectedUnit, standardPlan, proposal }
+      const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      const data = await resp.json()
+      if (!resp.ok) {
+        throw new Error(data?.error?.message || 'Calculation failed')
+      }
+      setCalcResult(data.result || null)
+    } catch (e) {
+      setCalcError(e.message || String(e))
+    } finally {
+      setCalcLoading(false)
+    }
+  }
+
   return (
     <div>
+      {calcLoading && <FullPageLoader text="Calculating…" />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
         <h2 style={{ marginTop: 0 }}>Create Deal</h2>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -459,10 +540,81 @@ export default function CreateDeal() {
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
         <CalculatorApp embedded />
       </div>
+
+      {/* Results from server calculation */}
+      <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginTop: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Server Calculation</h3>
+          <button onClick={calculateViaServer} style={btnPrimary}>Calculate (Server)</button>
+        </div>
+        {calcError ? <p style={{ color: '#e11d48' }}>{calcError}</p> : null}
+        {!calcResult ? (
+          <small style={{ color: '#64748b' }}>Click \"Calculate (Server)\" to compute PV and conditions using the backend engine.</small>
+        ) : (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ border: '1px dashed #dfe5ee', borderRadius: 10, padding: 10 }}>
+                <strong>Proposed Plan PV:</strong>
+                <div>{Number(calcResult.proposedPlanPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div style={{ border: '1px dashed #dfe5ee', borderRadius: 10, padding: 10 }}>
+                <strong>Standard Plan PV:</strong>
+                <div>{Number(calcResult.standardPlanPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 8, padding: 8, border: '1px solid #eef2f7', borderRadius: 10 }}>
+              <strong>Decision:</strong> {calcResult.decision || ''}
+              <div>PV Difference: {Number(calcResult.difference || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <h4 style={{ marginTop: 0 }}>Acceptance Conditions</h4>
+              <ul style={{ margin: 0, paddingLeft: 16 }}>
+                {(calcResult.conditions || []).map((c, idx) => (
+                  <li key={idx}>
+                    <span style={{ fontWeight: 600 }}>{c.label}:</span> {c.pass ? 'Pass' : 'Fail'}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <h4 style={{ marginTop: 0 }}>Payment Schedule</h4>
+              <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={th}>#</th>
+                      <th style={th}>Month</th>
+                      <th style={th}>Date</th>
+                      <th style={th}>Label</th>
+                      <th style={{ ...th, textAlign: 'right' }}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(calcResult.proposalSchedule || []).map((row, i) => (
+                      <tr key={i}>
+                        <td style={td}>{i + 1}</td>
+                        <td style={td}>{row.month}</td>
+                        <td style={td}>{row.date || ''}</td>
+                        <td style={td}>{row.label}</td>
+                        <td style={{ ...td, textAlign: 'right' }}>{Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                    {(calcResult.proposalSchedule || []).length === 0 && (
+                      <tr><td style={td} colSpan={5}>No schedule.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
+const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
+const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
 const inputStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
 const textareaStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff', minHeight: 70, resize: 'vertical' }
 const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #A97E34', background: '#A97E34', color: '#fff', fontWeight: 600 }
