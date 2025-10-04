@@ -9,6 +9,11 @@ export default function CreateDeal() {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  // Draft auto-save keys
+  const DRAFT_UNIT_KEY = 'create_deal_unitForm_v1'
+  const DRAFT_OCR_KEY = 'create_deal_ocr_review_v1'
+  const [restoredDraftMsg, setRestoredDraftMsg] = useState('')
+
   // OCR state
   const [ocrFile, setOcrFile] = useState(null)
   const [ocrLoading, setOcrLoading] = useState(false)
@@ -152,8 +157,34 @@ export default function CreateDeal() {
     })()
   }, [])
 
-  // One-time initial sync from embedded calculator snapshot (if available)
+  // Restore drafts on mount and initial sync from embedded calculator snapshot (if available)
   useEffect(() => {
+    // Restore drafts from localStorage
+    try {
+      const unitRaw = localStorage.getItem(DRAFT_UNIT_KEY)
+      const ocrRaw = localStorage.getItem(DRAFT_OCR_KEY)
+      let restored = false
+      if (unitRaw) {
+        const u = JSON.parse(unitRaw)
+        if (u && typeof u === 'object') {
+          setUnitForm(s => ({ ...s, ...u }))
+          restored = true
+        }
+      }
+      if (ocrRaw) {
+        const o = JSON.parse(ocrRaw)
+        if (o && typeof o === 'object') {
+          setReviewFields(s => ({ ...s, ...o }))
+          restored = true
+        }
+      }
+      if (restored) {
+        setRestoredDraftMsg('Draft restored.')
+        setTimeout(() => setRestoredDraftMsg(''), 5000)
+      }
+    } catch {}
+
+    // Sync from calculator snapshot if available
     try {
       const getSnap = window.__uptown_calc_getSnapshot
       if (typeof getSnap === 'function') {
@@ -182,6 +213,19 @@ export default function CreateDeal() {
       apply(partial)
     }
   }
+
+  // Auto-save unitForm and reviewFields drafts
+  useEffect(() => {
+    try {
+      localStorage.setItem(DRAFT_UNIT_KEY, JSON.stringify(unitForm))
+    } catch {}
+  }, [unitForm])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DRAFT_OCR_KEY, JSON.stringify(reviewFields))
+    } catch {}
+  }, [reviewFields])
 
   async function buildPayloadFromSnapshot() {
     const snapFn = window.__uptown_calc_getSnapshot
@@ -234,6 +278,11 @@ export default function CreateDeal() {
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to create deal')
+      // Clear local drafts on successful creation
+      try {
+        localStorage.removeItem(DRAFT_UNIT_KEY)
+        localStorage.removeItem(DRAFT_OCR_KEY)
+      } catch {}
       navigate(`/deals/${data.deal.id}`)
     } catch (e) {
       setError(e.message || String(e))
@@ -265,11 +314,17 @@ export default function CreateDeal() {
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to create deal')
+      // Clear local drafts after creation
+      try {
+        localStorage.removeItem(DRAFT_UNIT_KEY)
+        localStorage.removeItem(DRAFT_OCR_KEY)
+      } catch {}
       // Submit
       const submitResp = await fetchWithAuth(`${API_URL}/api/deals/${data.deal.id}/submit`, { method: 'POST' })
       const submitData = await submitResp.json()
       if (!submitResp.ok) throw new Error(submitData?.error?.message || 'Failed to submit deal')
-      navigate(`/deals/${data.deal.id}`)
+      navigate(`/deals/${data.deal.i_coded}new`</)
+)
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -389,8 +444,10 @@ export default function CreateDeal() {
           <button onClick={saveAndSubmit} disabled={loading || submitting} style={btnPrimaryAlt}>{submitting ? 'Submitting…' : 'Save and Submit'}</button>
         </div>
       </div>
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
-      {loading && !error ? <p style={{ color: '#64748b', fontSize: 14 }}>Loading unit data...</p> : null}
+      {error  <<p style={{ color: '#e11d48' }}>{err}</</p> : null}
+      {restoredDraftMsg  < p style={{ color: '#64748b', fontSize: 12 }}>{restoredDraftM}</..p> : null}
+      {loading && !error  <?p style={{ color: '#64748b', fontSize: 14 }}>Loading unit da...</tap> : n_codeulnewl</}
+l}
 
       {/* Egyptian ID OCR Module */}
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12 }}>

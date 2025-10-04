@@ -2,6 +2,7 @@ import express from 'express'
 import { pool } from './db.js'
 import { authMiddleware, adminOnly } from './authRoutes.js'
 import { validate, dealCreateSchema, dealUpdateSchema, dealSubmitSchema, dealRejectSchema, overrideRequestSchema, overrideApproveSchema } from './validation.js'
+import { emitNotification } from './socket.js'
 
 const router = express.Router()
 
@@ -368,6 +369,7 @@ router.post('/:id/submit', authMiddleware, validate(dealSubmitSchema), async (re
     }
 
     const upd = await pool.query('UPDATE deals SET status=$1 WHERE id=$2 RETURNING *', ['pending_approval', id])
+    const submittedDeal = upd.rows[0]
     const note = {
       event: 'deal_submitted',
       by: { id: req.user.id, role: req.user.role },
@@ -376,7 +378,18 @@ router.post('/:id/submit', authMiddleware, validate(dealSubmitSchema), async (re
       at: new Date().toISOString()
     }
     await logHistory(id, req.user.id, 'submit', JSON.stringify(note))
-    return res.json({ ok: true, deal: upd.rows[0] })
+
+    // Real-time notification to active Sales Managers
+    try {
+      const mgrs = await pool.query(`SELECT id FROM users WHERE role='sales_manager' AND active=TRUE`)
+      for (const m of mgrs.rows) {
+        await emitNotification('deal_submitted', m.id, 'deals', submittedDeal.id, `Deal #${submittedDeal.id} submitted for approval`)
+      }
+    } catch (notifyErr) {
+      console.error('Emit notification error (deal submitted):', notifyErr)
+    }
+
+    return res.json({ ok: true, deal: submittedDeal })
   } catch (e) {
     console.error('POST /api/deals/:id/submit error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
@@ -489,7 +502,9 @@ router.post('/:id/reject', authMiddleware, validate(dealRejectSchema), async (re
     const deal = q.rows[0]
     if (deal.status !== 'pending_approval') return res.status(400).json({ error: { message: 'Deal must be pending approval' } })
 
-    const upd = await pool.query('UPDATE deals SET status=$1 WHERE id=$2 RETURNING *', ['rejected', id])
+    // Persist rejection reason to deal record and set status
+    const upd = await pool.query('UPDATE deals SET status=$1, rejection_reason=$2 WHERE id=$3 RETURNING *', ['rejected', (typeof reason === 'string' ? reason : null), id])
+
     const rejectNote = {
       event: 'deal_rejected',
       by: { id: req.user.id, role: req.user.role },

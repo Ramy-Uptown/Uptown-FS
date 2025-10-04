@@ -43,6 +43,29 @@ export default function Approvals() {
       }
     }
     load()
+
+    // Real-time updates: listen for 'deal_submitted' notifications
+    try {
+      const authUserRaw = localStorage.getItem('auth_user')
+      const authUser = authUserRaw ? JSON.parse(authUserRaw) : null
+      const userId = authUser?.id || null
+      // Initialize socket and listen for notifications
+      // Dynamically import to avoid bundling issues if not needed elsewhere
+      import('../socket.js').then(mod => {
+        const sock = mod.initSocket(userId)
+        const handler = (notif) => {
+          if (notif?.type === 'deal_submitted') {
+            // Refetch pending deals list
+            load()
+          }
+        }
+        sock.on('notification', handler)
+        // Cleanup
+        return () => {
+          sock.off('notification', handler)
+        }
+      }).catch(() => {})
+    } catch {}
   }, [])
 
   async function approve(id) {
