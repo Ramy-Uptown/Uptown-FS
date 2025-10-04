@@ -32,10 +32,10 @@ export default function Approvals() {
     async function load() {
       try {
         setError('')
-        const resp = await fetchWithAuth(`${API_URL}/api/deals`)
+        const resp = await fetchWithAuth(`${API_URL}/api/deals/pending-sm`)
         const data = await resp.json()
         if (!resp.ok) throw new Error(data?.error?.message || 'Unable to load deals')
-        setDeals((data.deals || []).filter(d => d.status === 'pending_approval'))
+        setDeals(data.deals || [])
       } catch (e) {
         const msg = e.message || String(e)
         setError(msg)
@@ -43,6 +43,29 @@ export default function Approvals() {
       }
     }
     load()
+
+    // Real-time updates: listen for 'deal_submitted' notifications
+    try {
+      const authUserRaw = localStorage.getItem('auth_user')
+      const authUser = authUserRaw ? JSON.parse(authUserRaw) : null
+      const userId = authUser?.id || null
+      // Initialize socket and listen for notifications
+      // Dynamically import to avoid bundling issues if not needed elsewhere
+      import('../socket.js').then(mod => {
+        const sock = mod.initSocket(userId)
+        const handler = (notif) => {
+          if (notif?.type === 'deal_submitted') {
+            // Refetch pending deals list
+            load()
+          }
+        }
+        sock.on('notification', handler)
+        // Cleanup
+        return () => {
+          sock.off('notification', handler)
+        }
+      }).catch(() => {})
+    } catch {}
   }, [])
 
   async function approve(id) {
@@ -146,7 +169,7 @@ export default function Approvals() {
         onSubmit={(val) => {
           const id = promptRejectId
           setPromptRejectId(0)
-          performReject(id, val || '') // Fixed: provide fallback empty string
+          performReject(id, val || '')
         }}
         onCancel={() => setPromptRejectId(0)}
       />

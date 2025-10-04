@@ -11,10 +11,10 @@ export default function MyProposals() {
     try {
       setLoading(true)
       setError('')
-      const resp = await fetchWithAuth(`${API_URL}/api/workflow/payment-plans/my`)
+      const resp = await fetchWithAuth(`${API_URL}/api/deals/my`)
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load proposals')
-      setRows(data.payment_plans || [])
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load deals')
+      setRows(data.deals || [])
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -25,17 +25,16 @@ export default function MyProposals() {
 
   return (
     <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <h2>My Proposals</h2>
+      <h2>My Deals</h2>
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
       <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
               <th style={th}>ID</th>
-              <th style={th}>Deal</th>
+              <th style={th}>Title</th>
               <th style={th}>Status</th>
-              <th style={th}>Version</th>
-              <th style={th}>Accepted</th>
+              <th style={{ ...th, textAlign: 'right' }}>Amount</th>
               <th style={th}>Created</th>
             </tr>
           </thead>
@@ -43,19 +42,20 @@ export default function MyProposals() {
             {rows.map(r => (
               <tr key={r.id}>
                 <td style={td}>{r.id}</td>
-                <td style={td}>{r.deal_id}</td>
+                <td style={td}>{r.title}</td>
                 <td style={td}>
-                  {['pending_sm','pending_fm','pending_tm','approved','rejected'].includes(r.status)
+                  {['draft','pending_approval','approved','rejected'].includes(r.status)
                     ? <StatusChip status={r.status} />
                     : r.status}
                 </td>
-                <td style={td}>{r.version || 1}</td>
-                <td style={td}>{r.accepted ? 'Yes' : 'No'}</td>
+                <td style={{ ...td, textAlign: 'right' }}>
+                  {Number(r.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </td>
                 <td style={td}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
               </tr>
             ))}
             {rows.length === 0 && !loading && (
-              <tr><td style={td} colSpan={6}>No proposals yet.</td></tr>
+              <tr><td style={td} colSpan={5}>No deals yet.</td></tr>
             )}
           </tbody>
         </table>
