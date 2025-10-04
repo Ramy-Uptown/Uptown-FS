@@ -28,6 +28,7 @@ import inventoryRoutes from './inventoryRoutes.js'
 import reportsRoutes from './reportsRoutes.js'
 import pricingRoutes from './pricingRoutes.js' // THIS LINE IS NEW
 import configRoutes from './configRoutes.js'
+import standardPlanRoutes from './standardPlanRoutes.js' // NEW
 
 // NEW IMPORTS - Add these
 import roleManagementRoutes from './roleManagement.js'
@@ -136,6 +137,7 @@ app.use('/api/inventory', inventoryRoutes)
 app.use('/api/reports', reportsRoutes)
 app.use('/api/pricing', pricingRoutes) // THIS LINE IS NEW
 app.use('/api/config', configRoutes)
+app.use('/api/standard-plan', standardPlanRoutes) // NEW
 
 // NEW ROUTE REGISTRATIONS - Add these
 app.use('/api/roles', roleManagementRoutes)

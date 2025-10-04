@@ -502,6 +502,78 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
   }
 })
 
+/**
+ * Fetch a single AVAILABLE unit by id with embedded model and approved standard pricing.
+ * Access: consultants and above.
+ */
+router.get('/units/:id', authMiddleware, requireRole(['admin','superadmin','sales_manager','property_consultant','financial_manager','financial_admin','ceo','chairman','vice_chairman']), async (req, res) => {
+  try {
+    const id = num(req.params.id)
+    if (!id) return bad(res, 400, 'Invalid id')
+
+    const params = [id]
+    const r = await pool.query(
+      `SELECT
+         u.id, u.code, u.description, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+         u.base_price, u.currency, u.model_id, u.area, u.orientation,
+         u.has_garden, u.garden_area, u.has_roof, u.roof_area,
+         u.maintenance_price, u.garage_price, u.garden_price, u.roof_price, u.storage_price,
+         u.available, u.unit_status,
+         -- Embed complete model object
+         row_to_json(m) AS model,
+         -- Convenience fields from model (kept for backward compatibility)
+         m.model_name AS model_name, m.model_code AS model_code,
+         -- Latest approved standard pricing for the linked model
+         row_to_json(sp) AS approved_standard_pricing,
+         sp.price AS approved_standard_price,
+         sp.maintenance_price AS approved_maintenance_price,
+         sp.garage_price AS approved_garage_price,
+         sp.garden_price AS approved_garden_price,
+         sp.roof_price AS approved_roof_price,
+         sp.storage_price AS approved_storage_price,
+         -- Availability helpers and computed totals
+         (COALESCE(u.has_garden, FALSE) AND COALESCE(u.garden_area, 0) > 0) AS garden_available,
+         (COALESCE(u.has_roof, FALSE) AND COALESCE(u.roof_area, 0) > 0) AS roof_available,
+         (COALESCE(u.garage_area, 0) > 0) AS garage_available,
+         (COALESCE(u.base_price,0)
+           + COALESCE(u.maintenance_price,0)
+           + COALESCE(u.garage_price,0)
+           + COALESCE(u.garden_price,0)
+           + COALESCE(u.roof_price,0)
+           + COALESCE(u.storage_price,0)) AS total_price
+       FROM units u
+       LEFT JOIN unit_types ut ON ut.id = u.unit_type_id
+       LEFT JOIN unit_models m ON m.id = u.model_id
+       LEFT JOIN LATERAL (
+         SELECT
+           p.id,
+           p.model_id,
+           p.price,
+           p.maintenance_price,
+           p.garage_price,
+           p.garden_price,
+           p.roof_price,
+           p.storage_price,
+           p.status,
+           p.updated_at
+         FROM unit_model_pricing p
+         WHERE p.model_id = u.model_id AND p.status = 'approved'
+         ORDER BY p.id DESC
+         LIMIT 1
+       ) sp ON true
+       WHERE u.id = $1 AND u.unit_status='AVAILABLE'`,
+      params
+    )
+
+    if (r.rows.length === 0) return bad(res, 404, 'Unit not found or not available')
+    return ok(res, { unit: r.rows[0] })
+  } catch (e) {
+    console.error('GET /api/inventory/units/:id error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+
 // Create inventory unit (Financial Admin) -> goes into FM approval queue as INVENTORY_DRAFT
 router.post('/units', authMiddleware, requireRole(['financial_admin']), async (req, res) => {
   try {
