@@ -190,6 +190,45 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 })
 
+// Focused: pending approval for Sales Manager review
+router.get('/pending-sm', authMiddleware, async (req, res) => {
+  try {
+    const role = req.user?.role
+    if (!(role === 'sales_manager' || role === 'admin' || role === 'superadmin')) {
+      return res.status(403).json({ error: { message: 'Sales Manager role required' } })
+    }
+    const rows = await pool.query(
+      `SELECT d.*, u.email as created_by_email
+       FROM deals d
+       LEFT JOIN users u ON u.id = d.created_by
+       WHERE d.status='pending_approval'
+       ORDER BY d.id DESC`
+    )
+    return res.json({ ok: true, deals: rows.rows })
+  } catch (e) {
+    console.error('GET /api/deals/pending-sm error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Convenience: my deals (created_by = current user)
+router.get('/my', authMiddleware, async (req, res) => {
+  try {
+    const rows = await pool.query(
+      `SELECT d.*, u.email as created_by_email
+       FROM deals d
+       LEFT JOIN users u ON u.id = d.created_by
+       WHERE d.created_by=$1
+       ORDER BY d.id DESC`,
+      [req.user.id]
+    )
+    return res.json({ ok: true, deals: rows.rows })
+  } catch (e) {
+    console.error('GET /api/deals/my error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
 // Get single deal by id
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
