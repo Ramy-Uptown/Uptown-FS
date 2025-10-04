@@ -444,7 +444,19 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
          u.has_garden, u.garden_area, u.has_roof, u.roof_area,
          u.maintenance_price, u.garage_price, u.garden_price, u.roof_price, u.storage_price,
          u.available, u.unit_status,
+         -- Embed complete model object
+         row_to_json(m) AS model,
+         -- Convenience fields from model (kept for backward compatibility)
          m.model_name AS model_name, m.model_code AS model_code,
+         -- Latest approved standard pricing for the linked model
+         row_to_json(sp) AS approved_standard_pricing,
+         sp.price AS approved_standard_price,
+         sp.maintenance_price AS approved_maintenance_price,
+         sp.garage_price AS approved_garage_price,
+         sp.garden_price AS approved_garden_price,
+         sp.roof_price AS approved_roof_price,
+         sp.storage_price AS approved_storage_price,
+         -- Availability helpers and computed totals
          (COALESCE(u.has_garden, FALSE) AND COALESCE(u.garden_area, 0) > 0) AS garden_available,
          (COALESCE(u.has_roof, FALSE) AND COALESCE(u.roof_area, 0) > 0) AS roof_available,
          (COALESCE(u.garage_area, 0) > 0) AS garage_available,
@@ -457,6 +469,23 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
        FROM units u
        LEFT JOIN unit_types ut ON ut.id = u.unit_type_id
        LEFT JOIN unit_models m ON m.id = u.model_id
+       LEFT JOIN LATERAL (
+         SELECT
+           p.id,
+           p.model_id,
+           p.price,
+           p.maintenance_price,
+           p.garage_price,
+           p.garden_price,
+           p.roof_price,
+           p.storage_price,
+           p.status,
+           p.updated_at
+         FROM unit_model_pricing p
+         WHERE p.model_id = u.model_id AND p.status = 'approved'
+         ORDER BY p.id DESC
+         LIMIT 1
+       ) sp ON true
        ${where}
        ORDER BY u.id DESC
        LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
