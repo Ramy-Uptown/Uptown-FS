@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { LoaderProvider } from './lib/loaderContext.jsx'
-import App from './App.jsx'
 import Login from './Login.jsx'
 import Register from './Register.jsx'
 import DealsApp from './deals/App.jsx'
@@ -84,14 +83,6 @@ createRoot(document.getElementById('root')).render(
         <Routes>
           <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-          <Route
-            path="/calculator"
-            element={
-              <PrivateRoute>
-                <App />
-              </PrivateRoute>
-            }
-          />
           <Route
             path="/deals/*"
             element={
