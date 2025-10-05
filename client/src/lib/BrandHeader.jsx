@@ -108,7 +108,7 @@ export default function BrandHeader({ title, onLogout }) {
   }, [])
 
   const navForRole = (role) => {
-    const base = [{ label: 'Calculator', href: '/calculator' }, { label: 'Deals', href: '/deals' }]
+    const base = [{ label: 'Calculator', href: '/deals/create' }, { label: 'Deals', href: '/deals' }]
     const baseWithoutCalc = [{ label: 'Deals', href: '/deals' }]
     const queuesLink = { label: `Queues${queueCount ? ` (${queueCount})` : ''}`, href: '/deals/queues' }
     switch (role) {

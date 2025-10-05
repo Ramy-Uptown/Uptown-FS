@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { LoaderProvider } from './lib/loaderContext.jsx'
-import App from './App.jsx'
 import Login from './Login.jsx'
 import Register from './Register.jsx'
 import DealsApp from './deals/App.jsx'
@@ -65,7 +64,7 @@ function HomeRedirect() {
   // Role-based landing
   if (role === 'superadmin') return <Navigate to="/admin/users" replace />
   if (role === 'admin') return <Navigate to="/admin/users" replace />
-  if (role === 'property_consultant') return <Navigate to="/calculator" replace />
+  if (role === 'property_consultant') return <Navigate to="/deals/create" replace />
   if (role === 'sales_manager') return <Navigate to="/deals/queues" replace />
   if (role === 'financial_manager') return <Navigate to="/admin/standard-pricing" replace />
   if (role === 'financial_admin') return <Navigate to="/admin/standard-pricing" replace />
@@ -84,14 +83,6 @@ createRoot(document.getElementById('root')).render(
         <Routes>
           <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-          <Route
-            path="/calculator"
-            element={
-              <PrivateRoute>
-                <App />
-              </PrivateRoute>
-            }
-          />
           <Route
             path="/deals/*"
             element={
