@@ -230,6 +230,24 @@ router.get('/my', authMiddleware, async (req, res) => {
   }
 })
 
+// Client alias: some legacy clients call /api/deals/my-proposals — map to /my for compatibility
+router.get('/my-proposals', authMiddleware, async (req, res) => {
+  try {
+    const rows = await pool.query(
+      `SELECT d.*, u.email as created_by_email
+       FROM deals d
+       LEFT JOIN users u ON u.id = d.created_by
+       WHERE d.created_by=$1
+       ORDER BY d.id DESC`,
+      [req.user.id]
+    )
+    return res.json({ ok: true, deals: rows.rows })
+  } catch (e) {
+    console.error('GET /api/deals/my-proposals error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
 // Get single deal by id
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
