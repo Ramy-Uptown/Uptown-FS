@@ -503,6 +503,27 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
 })
 
 /**
+ * Financial Manager: list inventory drafts awaiting approval
+ * NOTE: must be defined BEFORE '/units/:id' to avoid route capture ('drafts' being treated as :id).
+ */
+router.get('/units/drafts', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT u.*, ru.email AS created_by_email, m.model_name, m.model_code
+       FROM units u
+       LEFT JOIN users ru ON ru.id = u.created_by
+       LEFT JOIN unit_models m ON m.id = u.model_id
+       WHERE u.unit_status='INVENTORY_DRAFT'
+       ORDER BY u.updated_at DESC, u.id DESC`
+    )
+    return ok(res, { units: r.rows })
+  } catch (e) {
+    console.error('GET /api/inventory/units/drafts error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+/**
  * Fetch a single AVAILABLE unit by id with embedded model and approved standard pricing.
  * Access: consultants and above.
  */
