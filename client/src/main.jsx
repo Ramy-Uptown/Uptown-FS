@@ -65,7 +65,7 @@ function HomeRedirect() {
   // Role-based landing
   if (role === 'superadmin') return <Navigate to="/admin/users" replace />
   if (role === 'admin') return <Navigate to="/admin/users" replace />
-  if (role === 'property_consultant') return <Navigate to="/calculator" replace />
+  if (role === 'property_consultant') return <Navigate to="/deals/create" replace />
   if (role === 'sales_manager') return <Navigate to="/deals/queues" replace />
   if (role === 'financial_manager') return <Navigate to="/admin/standard-pricing" replace />
   if (role === 'financial_admin') return <Navigate to="/admin/standard-pricing" replace />
