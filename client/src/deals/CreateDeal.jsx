@@ -323,8 +323,7 @@ export default function CreateDeal() {
       const submitResp = await fetchWithAuth(`${API_URL}/api/deals/${data.deal.id}/submit`, { method: 'POST' })
       const submitData = await submitResp.json()
       if (!submitResp.ok) throw new Error(submitData?.error?.message || 'Failed to submit deal')
-      navigate(`/deals/${data.deal.i_coded}new`</)
-)
+      navigate(`/deals/${data.deal.id}`)
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -444,10 +443,10 @@ export default function CreateDeal() {
           <button onClick={saveAndSubmit} disabled={loading || submitting} style={btnPrimaryAlt}>{submitting ? 'Submitting…' : 'Save and Submit'}</button>
         </div>
       </div>
-      {error  <<p style={{ color: '#e11d48' }}>{err}</</p> : null}
-      {restoredDraftMsg  < p style={{ color: '#64748b', fontSize: 12 }}>{restoredDraftM}</..p> : null}
-      {loading && !error  <?p style={{ color: '#64748b', fontSize: 14 }}>Loading unit da...</tap> : n_codeulnewl</}
-l}
+      {error && <p style={{ color: '#e11d48' }}>{error}</p>}
+      {restoredDraftMsg && <p style={{ color: '#64748b', fontSize: 12 }}>{restoredDraftMsg}</p>}
+      {loading && !error && <p style={{ color: '#64748b', fontSize: 14 }}>Loading unit data...</p>}
+
 
       {/* Egyptian ID OCR Module */}
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
@@ -674,5 +673,5 @@ const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', 
 const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
 const inputStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
 const textareaStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff', minHeight: 70, resize: 'vertical' }
-const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #A97E34', background: '#A97E34', color: '#fff', fontWeight: 600 }
-const btnPrimaryAlt = { padding: '10px 14px', borderRadius: 10, border: '1px solid #8B672C', background: '#8B672C', color: '#fff', fontWeight: 600 }
+const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #A97E34', background: '#A97E34', color: '#fff', fontWeight: 600, cursor: 'pointer' }
+const btnPrimaryAlt = { padding: '10px 14px', borderRadius: 10, border: '1px solid #8B672C', background: '#8B672C', color: '#fff', fontWeight: 600, cursor: 'pointer' }
