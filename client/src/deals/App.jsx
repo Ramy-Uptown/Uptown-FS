@@ -7,6 +7,8 @@ import DealDetail from './DealDetail.jsx'
 import BrandHeader from '../lib/BrandHeader.jsx'
 import PaymentPlanQueues from './PaymentPlanQueues.jsx'
 import InventoryList from './InventoryList.jsx'
+import MyProposals from './MyProposals.jsx'
+import TeamProposals from './TeamProposals.jsx'
 
 export default function DealsApp() {
   const handleLogout = async () => {
@@ -38,6 +40,8 @@ export default function DealsApp() {
           <Route path="approvals" element={<Approvals />} />
           <Route path="queues" element={<PaymentPlanQueues />} />
           <Route path="inventory" element={<InventoryList />} />
+          <Route path="my-proposals" element={<MyProposals />} />
+          <Route path="team-proposals" element={<TeamProposals />} />
           <Route path=":id" element={<DealDetail />} />
           <Route path="*" element={<Navigate to="/deals" replace />} />
         </Routes>
