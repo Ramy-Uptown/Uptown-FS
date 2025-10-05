@@ -5,7 +5,7 @@ import { authMiddleware } from './authRoutes.js'
 const router = express.Router()
 
 function adminOnly(req, res, next) {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: { message: 'Admin only' } })
+  if (!['admin', 'superadmin'].includes(req.user?.role)) return res.status(403).json({ error: { message: 'Admin only' } })
   next()
 }
 

@@ -1,114 +1,293 @@
-import React, { useEffect, useState } from 'react'
-import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import React, { useEffect, useState } from 'react';
+import BrandHeader from '../lib/BrandHeader.jsx';
+import { fetchWithAuth, API_URL } from '../lib/apiClient.js';
+import LoadingButton from '../components/LoadingButton.jsx';
+import { notifyError, notifySuccess } from '../lib/notifications.js';
+import * as XLSX from 'xlsx';
+import { useLoader } from '../lib/loaderContext.jsx';
 
+/**
+ * CommissionsReport Component
+ * Displays a filterable report of sales commissions.
+ */
 export default function CommissionsReport() {
-  const [rows, setRows] = useState([])
-  const [total, setTotal] = useState(0)
-  const [error, setError] = useState('')
+    // State for the commission data, total, and loading/error status
+    const [rows, setRows] = useState([]);
+    const [total, setTotal] = useState(0);
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
 
-  const [sales, setSales] = useState([])
-  const [policies, setPolicies] = useState([])
+    // State for populating the filter dropdowns
+    const [salesPeople, setSalesPeople] = useState([]);
+    const [policies, setPolicies] = useState([]);
 
-  const [filters, setFilters] = useState({ sales_person_id: '', policy_id: '', startDate: '', endDate: '' })
+    // State for the currently selected filter values
+    const [filters, setFilters] = useState({
+        sales_person_id: '',
+        policy_id: '',
+        startDate: '',
+        endDate: '',
+    });
 
-  useEffect(() => {
-    async function loadFilters() {
-      try {
-        const [sres, pres] = await Promise.all([
-          fetchWithAuth(`${API_URL}/api/sales?page=1&pageSize=200`).then(r => r.json()),
-          fetchWithAuth(`${API_URL}/api/commission-policies?page=1&pageSize=100`).then(r => r.json())
-        ])
-        if (sres?.sales) setSales(sres.sales)
-        if (pres?.policies) setPolicies(pres.policies)
-      } catch {}
+    const { setShow, setMessage } = useLoader();
+
+    // Effect to load data for the filter dropdowns on initial component mount
+    useEffect(() => {
+        async function loadFilterOptions() {
+            try {
+                // Fetch sales people and policies in parallel for efficiency
+                const [salesRes, policiesRes] = await Promise.all([
+                    fetchWithAuth(`${API_URL}/api/sales?page=1&pageSize=200`).then(r => r.json()),
+                    fetchWithAuth(`${API_URL}/api/commission-policies?page=1&pageSize=100`).then(r => r.json())
+                ]);
+
+                if (salesRes?.sales) setSalesPeople(salesRes.sales);
+                if (policiesRes?.policies) setPolicies(policiesRes.policies);
+
+            } catch (err) {
+                setError("Unable to load filter options. Please try again later.");
+                notifyError(err, 'Unable to load filter options');
+            }
+        }
+        loadFilterOptions();
+    }, []); // Empty dependency array means this effect runs only once on mount
+
+    // Main function to fetch the commissions report from the API
+    async function loadReport() {
+        setIsLoading(true);
+        setError('');
+        try {
+            // Construct query parameters from the current filter state
+            const q = new URLSearchParams();
+            if (filters.sales_person_id) q.set('sales_person_id', filters.sales_person_id);
+            if (filters.policy_id) q.set('policy_id', filters.policy_id);
+            if (filters.startDate) q.set('startDate', filters.startDate);
+            if (filters.endDate) q.set('endDate', filters.endDate);
+
+            const resp = await fetchWithAuth(`${API_URL}/api/commissions/report?${q.toString()}`);
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                throw new Error(data?.error?.message || 'Unable to load report');
+            }
+
+            setRows(data.commissions || []);
+            setTotal(Number(data.total || 0));
+            notifySuccess('Report loaded successfully.');
+
+        } catch (e) {
+            const msg = e.message || String(e);
+            setError(msg);
+            notifyError(e, 'Unable to load report');
+        } finally {
+            setIsLoading(false);
+        }
     }
-    loadFilters()
-  }, [])
 
-  async function load() {
-    try {
-      setError('')
-      const q = new URLSearchParams()
-      if (filters.sales_person_id) q.set('sales_person_id', filters.sales_person_id)
-      if (filters.policy_id) q.set('policy_id', filters.policy_id)
-      if (filters.startDate) q.set('startDate', filters.startDate)
-      if (filters.endDate) q.set('endDate', filters.endDate)
-      const resp = await fetchWithAuth(`${API_URL}/api/commissions/report?${q.toString()}`)
-      const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load report')
-      setRows(data.commissions || [])
-      setTotal(Number(data.total || 0))
-    } catch (e) {
-      setError(e.message || String(e))
+    // Effect to load the report on initial component mount
+    useEffect(() => {
+        loadReport();
+    }, []); // This only runs once, subsequent loads are triggered by the "Apply Filters" button
+
+    // Generic handler to update the filters state
+    const handleFilterChange = (e) => {
+        const { name, value } = e.target;
+        setFilters(prevFilters => ({
+            ...prevFilters,
+            [name]: value,
+        }));
+    };
+
+    // Handler for user logout
+    const handleLogout = async () => {
+        try {
+            const refreshToken = localStorage.getItem('refresh_token');
+            if (refreshToken) {
+                await fetch(`${API_URL}/api/auth/logout`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken })
+                }).catch(() => {});
+            }
+        } finally {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('auth_user');
+            window.location.href = '/login';
+        }
+    };
+    
+    // Helper function to format currency consistently
+    const formatCurrency = (amount) => {
+        return Number(amount || 0).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    };
+    
+    // Helper function to format dates consistently
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+        return new Date(dateString).toLocaleString();
+    };
+
+    function exportXLSX() {
+        if (!rows || rows.length === 0) return;
+        try {
+            setMessage('Generating report, please wait...');
+            setShow(true);
+
+            const headers = [
+                { key: 'id', label: 'ID' },
+                { key: 'deal_title', label: 'Deal' },
+                { key: 'sales_name', label: 'Sales Person' },
+                { key: 'policy_name', label: 'Policy' },
+                { key: 'amount', label: 'Amount' },
+                { key: 'calculated_at', label: 'Calculated At' },
+            ];
+            const aoa = [headers.map(h => h.label), ...rows.map(r => headers.map(h => r[h.key] ?? ''))];
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!cols'] = [ { wch: 8 }, { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 20 } ];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Commissions');
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const ts = new Date().toISOString().replace(/[:.]/g, '-');
+            a.download = `commissions_report_${ts}.xlsx`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            notifySuccess('Export completed successfully.');
+        } catch (e) {
+            notifyError(e, 'Export failed');
+        } finally {
+            setShow(false);
+        }
     }
-  }
 
-  useEffect(() => { load() }, [])
+    function exportCSV() {
+        if (!rows || rows.length === 0) return;
+        try {
+            setMessage('Generating report, please wait...');
+            setShow(true);
+            const headers = ['ID', 'Deal', 'Sales Person', 'Policy', 'Amount', 'Calculated At'];
+            const getRow = (r) => [r.id, r.deal_title ?? r.deal_id, r.sales_name ?? r.sales_person_id, r.policy_name ?? r.policy_id, r.amount, r.calculated_at];
+            const csv = [headers.join(','), ...rows.map(r => getRow(r).map(v => {
+                const s = v == null ? '' : String(v);
+                return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+            }).join(','))].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const ts = new Date().toISOString().replace(/[:.]/g, '-');
+            a.download = `commissions_report_${ts}.csv`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            notifySuccess('Export completed successfully.');
+        } catch (e) {
+            notifyError(e, 'Export failed');
+        } finally {
+            setShow(false);
+        }
+    }
 
-  return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <h2 style={{ marginTop: 0 }}>Commissions Report</h2>
+    return (
+        <div className="bg-gray-50 min-h-screen font-sans">
+            <BrandHeader onLogout={handleLogout} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
-        <select value={filters.sales_person_id} onChange={e => setFilters(s => ({ ...s, sales_person_id: e.target.value }))} style={ctrl}>
-          <option value="">All sales</option>
-          {sales.map(s => <option key={s.id} value={s.id}>{s.name} {s.email ? `(${s.email})` : ''}</option>)}
-        </select>
-        <select value={filters.policy_id} onChange={e => setFilters(s => ({ ...s, policy_id: e.target.value }))} style={ctrl}>
-          <option value="">All policies</option>
-          {policies.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <input type="date" value={filters.startDate} onChange={e => setFilters(s => ({ ...s, startDate: e.target.value }))} style={ctrl} />
-        <input type="date" value={filters.endDate} onChange={e => setFilters(s => ({ ...s, endDate: e.target.value }))} style={ctrl} />
-        <button onClick={load} style={btn}>Apply</button>
-        <div />
-      </div>
+            <main className="p-4 sm:p-6 md:p-8">
+                <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6">Commissions Report</h2>
 
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+                {/* Filter Controls */}
+                <div className="bg-white p-4 rounded-lg shadow-sm mb-6 print:hidden">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
+                        <div className="flex flex-col">
+                            <label htmlFor="sales_person_id" className="text-sm font-medium text-gray-600 mb-1">Sales Person</label>
+                            <select id="sales_person_id" name="sales_person_id" value={filters.sales_person_id} onChange={handleFilterChange} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                                <option value="">All Sales People</option>
+                                {salesPeople.map(s => <option key={s.id} value={s.id}>{s.name} {s.email ? `(${s.email})` : ''}</option>)}
+                            </select>
+                        </div>
 
-      <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={th}>ID</th>
-              <th style={th}>Deal</th>
-              <th style={th}>Sales</th>
-              <th style={th}>Policy</th>
-              <th style={{ ...th, textAlign: 'right' }}>Amount</th>
-              <th style={th}>Calculated At</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id}>
-                <td style={td}>{r.id}</td>
-                <td style={td}>{r.deal_title || r.deal_id}</td>
-                <td style={td}>{r.sales_name || r.sales_person_id}</td>
-                <td style={td}>{r.policy_name || r.policy_id}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{Number(r.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                <td style={td}>{r.calculated_at ? new Date(r.calculated_at).toLocaleString() : ''}</td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td style={td} colSpan={6}>No results.</td>
-              </tr>
-            )}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={4} style={{ ...td, textAlign: 'right', fontWeight: 700 }}>Total</td>
-              <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-              <td style={td}></td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-  )
+                        <div className="flex flex-col">
+                            <label htmlFor="policy_id" className="text-sm font-medium text-gray-600 mb-1">Policy</label>
+                            <select id="policy_id" name="policy_id" value={filters.policy_id} onChange={handleFilterChange} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                                <option value="">All Policies</option>
+                                {policies.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                        </div>
+                        
+                        <div className="flex flex-col">
+                            <label htmlFor="startDate" className="text-sm font-medium text-gray-600 mb-1">Start Date</label>
+                            <input id="startDate" name="startDate" type="date" value={filters.startDate} onChange={handleFilterChange} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                        </div>
+
+                        <div className="flex flex-col">
+                             <label htmlFor="endDate" className="text-sm font-medium text-gray-600 mb-1">End Date</label>
+                            <input id="endDate" name="endDate" type="date" value={filters.endDate} onChange={handleFilterChange} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                        </div>
+                        
+                        <LoadingButton onClick={loadReport} loading={isLoading} variant="primary">
+                            {isLoading ? 'Loading...' : 'Apply Filters'}
+                        </LoadingButton>
+                        <LoadingButton onClick={exportXLSX} disabled={!rows || rows.length === 0}>Export XLSX</LoadingButton>
+                        <LoadingButton onClick={exportCSV} disabled={!rows || rows.length === 0}>Export CSV</LoadingButton>
+                    </div>
+                </div>
+
+                {/* Display Error Message */}
+                {error && <p className="bg-red-100 text-red-700 p-3 rounded-lg mb-6 text-center">{error}</p>}
+
+                {/* Data Table */}
+                <div className="overflow-x-auto bg-white rounded-lg shadow-sm">
+                    <table className="w-full min-w-max text-sm text-left text-gray-700">
+                        <thead className="bg-gray-100 text-xs text-gray-700 uppercase">
+                            <tr>
+                                <th scope="col" className="px-6 py-3">ID</th>
+                                <th scope="col" className="px-6 py-3">Deal</th>
+                                <th scope="col" className="px-6 py-3">Sales Person</th>
+                                <th scope="col" className="px-6 py-3">Policy</th>
+                                <th scope="col" className="px-6 py-3 text-right">Amount</th>
+                                <th scope="col" className="px-6 py-3">Calculated At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map(r => (
+                                <tr key={r.id} className="bg-white border-b hover:bg-gray-50">
+                                    <td className="px-6 py-4 font-medium text-gray-900">{r.id}</td>
+                                    <td className="px-6 py-4">{r.deal_title || r.deal_id}</td>
+                                    <td className="px-6 py-4">{r.sales_name || r.sales_person_id}</td>
+                                    <td className="px-6 py-4">{r.policy_name || r.policy_id}</td>
+                                    <td className="px-6 py-4 text-right font-mono">{formatCurrency(r.amount)}</td>
+                                    <td className="px-6 py-4">{formatDate(r.calculated_at)}</td>
+                                </tr>
+                            ))}
+                            {/* Show a message when loading or when there are no results */}
+                            {isLoading && (
+                                <tr>
+                                    <td colSpan="6" className="px-6 py-10 text-center text-gray-500">Loading data...</td>
+                                </tr>
+                            )}
+                            {rows.length === 0 && !isLoading && (
+                                <tr>
+                                    <td colSpan="6" className="px-6 py-10 text-center text-gray-500">No results found.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                        <tfoot className="bg-gray-100 font-semibold text-gray-800">
+                            <tr>
+                                <td colSpan="4" className="px-6 py-4 text-right">Total</td>
+                                <td className="px-6 py-4 text-right font-mono">{formatCurrency(total)}</td>
+                                <td className="px-6 py-4"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </main>
+        </div>
+    );
 }
-
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
-const ctrl = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6' }
-const btn = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }

@@ -45,9 +45,9 @@ export function getPaymentMonths(numberOfInstallments, frequency, startAfterYear
     case Frequencies.Quarterly:
       periodInMonths = 3; firstInstallmentOffset = 3; break;
     case Frequencies.BiAnnually:
-      periodInMonths = 6; firstInstallmentOffset = 4; break; // keep parity with FE
+      periodInMonths = 6; firstInstallmentOffset = 6; break; // keep parity with FE
     case Frequencies.Annually:
-      periodInMonths = 12; firstInstallmentOffset = 3; break; // keep parity with FE
+      periodInMonths = 12; firstInstallmentOffset = 12; break; // keep parity with FE
     default:
       throw new Error(`Invalid frequency: ${frequency}`);
   }
@@ -282,7 +282,7 @@ function commonDistributeForNominalTotal(totalNominalPrice, stdPlan, inputs) {
     monthlyRate,
     additionalHandoverPayment,
     handoverYear,
-    customYearlyDetails: normalizeSubsequentYears(subsequentYears, splitFirstYearPayments),
+    customYearlyDetails: normalizeSubsequentYears(subsequentYears, splitFirstYearPayments, installmentFrequency),
     firstYearPayments: splitFirstYearPayments ? firstYearPayments : []
   });
 
@@ -339,7 +339,7 @@ function commonTargetPVObject(stdPlan, inputs, targetPV) {
 
   let pvSubsequent = 0;
   let sumSubsequentNominal = 0;
-  const normalizedYears = normalizeSubsequentYears(subsequentYears, splitFirstYearPayments);
+  const normalizedYears = normalizeSubsequentYears(subsequentYears, splitFirstYearPayments, installmentFrequency);
   for (const y of normalizedYears) {
     const total = Number(y.totalNominal) || 0;
     sumSubsequentNominal += total;
@@ -442,8 +442,9 @@ function commonTargetPVObject(stdPlan, inputs, targetPV) {
  * first year is split or not.
  * Input shape: [{ totalNominal, frequency }]
  * When splitFirstYearPayments === true, subsequent block starts at yearNumber 2, else yearNumber 1.
+ * Defaults to the main plan frequency if a year's frequency is not specified.
  */
-function normalizeSubsequentYears(subsequentYears, splitFirstYearPayments) {
+function normalizeSubsequentYears(subsequentYears, splitFirstYearPayments, mainFrequency) {
   const startYear = splitFirstYearPayments ? 2 : 1; // UI: if split Y1, next blocks are Y2/Y3
   const res = [];
   let i = 0;
@@ -452,7 +453,7 @@ function normalizeSubsequentYears(subsequentYears, splitFirstYearPayments) {
     res.push({
       yearNumber: startYear + (i - 1),
       totalNominal: Number(y?.totalNominal) || 0,
-      frequency: y?.frequency || Frequencies.Annually
+      frequency: y?.frequency || mainFrequency
     });
   }
   return res;

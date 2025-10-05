@@ -1,8 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
+import LoadingButton from '../components/LoadingButton.jsx'
+import { useLoader } from '../lib/loaderContext.jsx'
 import CalculatorApp from '../App.jsx'
 import * as XLSX from 'xlsx'
+
+const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
+const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
 
 export default function DealDetail() {
   const { id } = useParams()
@@ -11,6 +17,10 @@ export default function DealDetail() {
   const [history, setHistory] = useState([])
   const [error, setError] = useState('')
   const [editCalc, setEditCalc] = useState(false)
+  const [savingCalc, setSavingCalc] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [calcCommissionLoading, setCalcCommissionLoading] = useState(false)
+  const { setShow, setMessage } = useLoader()
   const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const role = user?.role || 'user'
 
@@ -29,6 +39,7 @@ export default function DealDetail() {
       setHistory(histData.history || [])
     } catch (e) {
       setError(e.message || String(e))
+      notifyError(e, 'Failed to load deal')
     }
   }
 
@@ -43,6 +54,9 @@ export default function DealDetail() {
   const [policies, setPolicies] = useState([])
   const [policiesError, setPoliciesError] = useState('')
   const [expandedNotes, setExpandedNotes] = useState({})
+  const [assigning, setAssigning] = useState(false)
+  const [settingPolicy, setSettingPolicy] = useState(false)
+
   useEffect(() => {
     async function loadAux() {
       try {
@@ -63,6 +77,7 @@ export default function DealDetail() {
 
   async function saveCalculator() {
     try {
+      setSavingCalc(true)
       const snapFn = window.__uptown_calc_getSnapshot
       if (typeof snapFn !== 'function') {
         throw new Error('Calculator not ready yet.')
@@ -87,9 +102,12 @@ export default function DealDetail() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to save')
       setEditCalc(false)
+      notifySuccess('Deal updated successfully.')
       await load()
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Failed to save')
+    } finally {
+      setSavingCalc(false)
     }
   }
 
@@ -127,9 +145,13 @@ export default function DealDetail() {
   async function generateDocFromSaved(documentType) {
     try {
       const snap = deal?.details?.calculator
-      if (!snap) return alert('No saved calculator details found.')
+      if (!snap) {
+        notifyError('No saved calculator details found.')
+        return
+      }
       const body = {
         documentType,
+        deal_id: Number(deal.id),
         language: snap.language,
         currency: snap.currency,
         mode: snap.mode,
@@ -137,6 +159,17 @@ export default function DealDetail() {
         inputs: snap.inputs,
         generatedPlan: snap.generatedPlan
       }
+      // Show full-page loader for this heavy operation
+      const label = documentType === 'pricing_form'
+        ? 'Generating Pricing Form…'
+        : documentType === 'reservation_form'
+        ? 'Generating Reservation Form…'
+        : documentType === 'contract'
+        ? 'Generating Contract…'
+        : 'Generating document…'
+      setMessage(label)
+      setShow(true)
+
       const resp = await fetchWithAuth(`${API_URL}/api/generate-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,11 +181,12 @@ export default function DealDetail() {
           const j = await resp.json()
           errMsg = j?.error?.message || errMsg
         } catch {}
-        return alert(errMsg)
+        notifyError(errMsg)
+        return
       }
       const blob = await resp.blob()
       const cd = resp.headers.get('Content-Disposition') || ''
-      const match = /filename\*=UTF-8''([^;]+)|filename=\\"?([^\\";]+)\\"?/i.exec(cd)
+      const match = /filename\*=UTF-8''([^;]+)|filename=\"?([^\\";]+)\"?/i.exec(cd)
       let filename = ''
       if (match) filename = decodeURIComponent(match[1] || match[2] || '')
       if (!filename) {
@@ -165,8 +199,11 @@ export default function DealDetail() {
       a.download = filename
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       URL.revokeObjectURL(url)
+      notifySuccess('Document generated successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Failed to generate document')
+    } finally {
+      setShow(false)
     }
   }
 
@@ -230,7 +267,8 @@ export default function DealDetail() {
     const snap = deal?.details?.calculator
     const plan = snap?.generatedPlan
     if (!plan || !Array.isArray(plan.schedule) || plan.schedule.length === 0) {
-      return alert('No saved schedule found to generate checks sheet.')
+      notifyError('No saved schedule found to generate checks sheet.')
+      return
     }
     const buyer = snap?.clientInfo?.buyer_name || ''
     const unit = snap?.unitInfo?.unit_code || snap?.unitInfo?.unit_number || ''
@@ -308,13 +346,14 @@ export default function DealDetail() {
     a.download = `checks_sheet_${ts}.xlsx`
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     URL.revokeObjectURL(url)
+    notifySuccess('Checks sheet generated')
   }
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <h2 style={{ marginTop: 0 }}>Deal #{deal.id}</h2>
-        <button onClick={() => navigate('/deals')} style={btn}>Back to Dashboard</button>
+        <LoadingButton onClick={() => navigate('/deals')}>Back to Dashboard</LoadingButton>
       </div>
 
       {!editCalc ? (
@@ -323,21 +362,42 @@ export default function DealDetail() {
           <p><strong>Amount:</strong> {Number(deal.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
           <p><strong>Status:</strong> {deal.status}</p>
           <p><strong>Unit Type:</strong> {deal.unit_type || '-'}</p>
+          {deal.status === 'rejected' && deal.rejection_reason ? (
+            <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 10, border: '1px solid #ef4444', background: '#fef2f2', color: '#7f1d1d' }}>
+              <strong>Rejection Reason:</strong>
+              <div style={{ marginTop: 4 }}>{deal.rejection_reason}</div>
+            </div>
+          ) : null}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
             <strong>Sales Rep:</strong>
             <select
-              disabled={!canEdit}
+              disabled={!canEdit || assigning}
               value={deal.sales_rep_id || ''}
               onChange={async (e) => {
                 const salesRepId = e.target.value ? Number(e.target.value) : null
-                const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ salesRepId })
-                })
-                const data = await resp.json()
-                if (!resp.ok) return alert(data?.error?.message || 'Failed to assign sales rep')
-                await load()
+                setAssigning(true)
+                // optimistic UI
+                setDeal(d => ({ ...d, sales_rep_id: salesRepId }))
+                try {
+                  const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ salesRepId })
+                  })
+                  const data = await resp.json()
+                  if (!resp.ok) {
+                    notifyError(data?.error?.message || 'Failed to assign sales rep')
+                    // revert optimistic update
+                    setDeal(d => ({ ...d, sales_rep_id: deal.sales_rep_id || null }))
+                  } else {
+                    notifySuccess('Sales rep assigned successfully.')
+                  }
+                } catch (err) {
+                  notifyError(err, 'Failed to assign sales rep')
+                  setDeal(d => ({ ...d, sales_rep_id: deal.sales_rep_id || null }))
+                } finally {
+                  setAssigning(false)
+                }
               }}
               style={{ padding: 8, borderRadius: 8, border: '1px solid #d1d9e6' }}
             >
@@ -352,18 +412,32 @@ export default function DealDetail() {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
             <strong>Commission Policy:</strong>
             <select
-              disabled={!canEdit}
+              disabled={!canEdit || settingPolicy}
               value={deal.policy_id || ''}
               onChange={async (e) => {
                 const policyId = e.target.value ? Number(e.target.value) : null
-                const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ policyId })
-                })
-                const data = await resp.json()
-                if (!resp.ok) return alert(data?.error?.message || 'Failed to set policy')
-                await load()
+                setSettingPolicy(true)
+                // optimistic
+                setDeal(d => ({ ...d, policy_id: policyId }))
+                try {
+                  const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ policyId })
+                  })
+                  const data = await resp.json()
+                  if (!resp.ok) {
+                    notifyError(data?.error?.message || 'Failed to set policy')
+                    setDeal(d => ({ ...d, policy_id: deal.policy_id || null }))
+                  } else {
+                    notifySuccess('Commission policy updated successfully.')
+                  }
+                } catch (err) {
+                  notifyError(err, 'Failed to set policy')
+                  setDeal(d => ({ ...d, policy_id: deal.policy_id || null }))
+                } finally {
+                  setSettingPolicy(false)
+                }
               }}
               style={{ padding: 8, borderRadius: 8, border: '1px solid #d1d9e6' }}
             >
@@ -406,7 +480,7 @@ export default function DealDetail() {
                     <tr>
                       <td colSpan={3} style={{ ...td, textAlign: 'right', fontWeight: 700 }}>Total</td>
                       <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>
-                        {Number(totals.totalNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {Number(totals.totalNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
                       <td></td>
                     </tr>
@@ -424,8 +498,8 @@ export default function DealDetail() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
             <h3 style={{ margin: 0 }}>Edit in Calculator</h3>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={saveCalculator} style={btnPrimary}>Save</button>
-              <button onClick={() => setEditCalc(false)} style={btn}>Cancel</button>
+              <LoadingButton onClick={saveCalculator} loading={savingCalc} variant="primary">Save</LoadingButton>
+              <LoadingButton onClick={() => setEditCalc(false)} disabled={savingCalc}>Cancel</LoadingButton>
             </div>
           </div>
           <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
@@ -434,33 +508,80 @@ export default function DealDetail() {
         </div>
       )}
 
+      {/* Actions — restrict printing offer until approved */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {canEdit && !editCalc && <button onClick={() => setEditCalc(true)} style={btn}>Edit in Calculator</button>}
-        {canSubmit && <button onClick={async () => {
-          const savedPlan = deal?.details?.calculator?.generatedPlan
-          if (!savedPlan || !Array.isArray(savedPlan.schedule) || savedPlan.schedule.length === 0) {
-            return alert('Please generate and save a payment plan before submitting.')
-          }
-          const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/submit`, { method: 'POST' })
-          const data = await resp.json()
-          if (!resp.ok) return alert(data?.error?.message || 'Submit failed')
-          await load()
-        }} style={btnPrimary}>Submit for Approval</button>}
-        <button onClick={printSchedule} style={btn}>Print Schedule</button>
-        <button onClick={() => generateDocFromSaved('pricing_form')} style={btn}>Generate Pricing Form (PDF)</button>
-        <button onClick={() => generateDocFromSaved('contract')} style={btn}>Generate Contract (PDF)</button>
-        <button onClick={generateChecksSheetFromSaved} style={btn}>Generate Checks Sheet (.xlsx)</button>
-        <button onClick={async () => {
-          if (!deal.sales_rep_id) return alert('Assign a Sales Rep first.')
-          const resp = await fetchWithAuth(`${API_URL}/api/commissions/calc-and-save`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deal_id: deal.id, sales_person_id: deal.sales_rep_id })
-          })
-          const data = await resp.json()
-          if (!resp.ok) return alert(data?.error?.message || 'Failed to calculate commission')
-          alert(`Commission calculated: ${Number(data.commission.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`)
-        }} style={btn}>Calculate Commission</button>
+        {canEdit && !editCalc && <LoadingButton onClick={() => setEditCalc(true)}>Edit in Calculator</LoadingButton>}
+        {canSubmit && (
+          <LoadingButton
+            onClick={async () => {
+              const savedPlan = deal?.details?.calculator?.generatedPlan
+              if (!savedPlan || !Array.isArray(savedPlan.schedule) || savedPlan.schedule.length === 0) {
+                notifyError('Please generate and save a payment plan before submitting.')
+                return
+              }
+              setSubmitting(true)
+              try {
+                const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/submit`, { method: 'POST' })
+                const data = await resp.json()
+                if (!resp.ok) {
+                  notifyError(data?.error?.message || 'Submit failed')
+                } else {
+                  notifySuccess('Deal submitted successfully.')
+                  await load()
+                }
+              } catch (err) {
+                notifyError(err, 'Submit failed')
+              } finally {
+                setSubmitting(false)
+              }
+            }}
+            loading={submitting}
+            variant="primary"
+          >
+            Submit for Approval
+          </LoadingButton>
+        )}
+        <LoadingButton onClick={printSchedule}>Print Schedule</LoadingButton>
+        {(role === 'property_consultant' && deal.status === 'approved') && (
+          <LoadingButton onClick={() => generateDocFromSaved('pricing_form')}>Print Offer (Pricing Form PDF)</LoadingButton>
+        )}
+        {(role === 'financial_admin' && deal.status === 'approved') && (
+          <LoadingButton onClick={() => generateDocFromSaved('reservation_form')}>Generate Reservation Form (PDF)</LoadingButton>
+        )}
+        {(role === 'contract_person' && deal.status === 'approved') && (
+          <LoadingButton onClick={() => generateDocFromSaved('contract')}>Generate Contract (PDF)</LoadingButton>
+        )}
+        <LoadingButton onClick={generateChecksSheetFromSaved}>Generate Checks Sheet (.xlsx)</LoadingButton>
+        <LoadingButton
+          onClick={async () => {
+            if (!deal.sales_rep_id) {
+              notifyError('Assign a Sales Rep first.')
+              return
+            }
+            setCalcCommissionLoading(true)
+            try {
+              const resp = await fetchWithAuth(`${API_URL}/api/commissions/calc-and-save`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deal_id: deal.id, sales_person_id: deal.sales_rep_id })
+              })
+              const data = await resp.json()
+              if (!resp.ok) {
+                notifyError(data?.error?.message || 'Failed to calculate commission')
+              } else {
+                notifySuccess(`Commission calculated: ${Number(data.commission.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`)
+                await load()
+              }
+            } catch (err) {
+              notifyError(err, 'Failed to calculate commission')
+            } finally {
+              setCalcCommissionLoading(false)
+            }
+          }}
+          loading={calcCommissionLoading}
+        >
+          Calculate Commission
+        </LoadingButton>
       </div>
 
       <h3>Audit Trail</h3>
@@ -531,8 +652,3 @@ export default function DealDetail() {
     </div>
   )
 }
-
-const btn = { marginLeft: 8, padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
-const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #1f6feb', background: '#1f6feb', color: '#fff', fontWeight: 600 }
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }

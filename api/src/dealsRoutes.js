@@ -1,6 +1,8 @@
 import express from 'express'
 import { pool } from './db.js'
 import { authMiddleware, adminOnly } from './authRoutes.js'
+import { validate, dealCreateSchema, dealUpdateSchema, dealSubmitSchema, dealRejectSchema, overrideRequestSchema, overrideApproveSchema } from './validation.js'
+import { emitNotification } from './socket.js'
 
 const router = express.Router()
 
@@ -13,6 +15,42 @@ async function logHistory(dealId, userId, action, notes = null) {
     'INSERT INTO deal_history (deal_id, user_id, action, notes) VALUES ($1, $2, $3, $4)',
     [dealId, userId, action, notes]
   )
+}
+
+// Helper: update acceptability flags on a deal (optional, from client-calculated values)
+async function setAcceptabilityFlags(id, flags, user) {
+  if (!flags || typeof flags !== 'object') return null
+  const {
+    acceptable_pv,
+    acceptable_first_year,
+    acceptable_second_year,
+    acceptable_handover
+  } = flags
+  const upd = await pool.query(
+    `UPDATE deals
+     SET acceptable_pv=$1,
+         acceptable_first_year=$2,
+         acceptable_second_year=$3,
+         acceptable_handover=$4,
+         updated_at=now()
+     WHERE id=$5
+     RETURNING *`,
+    [
+      acceptable_pv == null ? null : !!acceptable_pv,
+      acceptable_first_year == null ? null : !!acceptable_first_year,
+      acceptable_second_year == null ? null : !!acceptable_second_year,
+      acceptable_handover == null ? null : !!acceptable_handover,
+      id
+    ]
+  )
+  const note = {
+    event: 'acceptability_flags_set',
+    by: { id: user.id, role: user.role },
+    flags: { acceptable_pv, acceptable_first_year, acceptable_second_year, acceptable_handover },
+    at: new Date().toISOString()
+  }
+  await logHistory(id, user.id, 'acceptability_flags_set', JSON.stringify(note))
+  return upd.rows[0]
 }
 
 function toNumber(v) {
@@ -109,6 +147,14 @@ router.get('/', authMiddleware, async (req, res) => {
       where.push(`d.unit_type = ${params.length}`)
     }
 
+    // Role-based visibility: non-elevated users can only see their own deals
+    const elevatedRoles = new Set(['admin', 'superadmin', 'sales_manager', 'financial_manager'])
+    const isElevated = elevatedRoles.has(req.user?.role)
+    if (!isElevated) {
+      params.push(req.user.id)
+      where.push(`d.created_by = ${params.length}`)
+    }
+
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
     const sortCols = {
@@ -145,6 +191,45 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 })
 
+// Focused: pending approval for Sales Manager review
+router.get('/pending-sm', authMiddleware, async (req, res) => {
+  try {
+    const role = req.user?.role
+    if (!(role === 'sales_manager' || role === 'admin' || role === 'superadmin')) {
+      return res.status(403).json({ error: { message: 'Sales Manager role required' } })
+    }
+    const rows = await pool.query(
+      `SELECT d.*, u.email as created_by_email
+       FROM deals d
+       LEFT JOIN users u ON u.id = d.created_by
+       WHERE d.status='pending_approval'
+       ORDER BY d.id DESC`
+    )
+    return res.json({ ok: true, deals: rows.rows })
+  } catch (e) {
+    console.error('GET /api/deals/pending-sm error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Convenience: my deals (created_by = current user)
+router.get('/my', authMiddleware, async (req, res) => {
+  try {
+    const rows = await pool.query(
+      `SELECT d.*, u.email as created_by_email
+       FROM deals d
+       LEFT JOIN users u ON u.id = d.created_by
+       WHERE d.created_by=$1
+       ORDER BY d.id DESC`,
+      [req.user.id]
+    )
+    return res.json({ ok: true, deals: rows.rows })
+  } catch (e) {
+    console.error('GET /api/deals/my error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
 // Get single deal by id
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
@@ -156,7 +241,13 @@ router.get('/:id', authMiddleware, async (req, res) => {
       [id]
     )
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
-    return res.json({ ok: true, deal: q.rows[0] })
+    const deal = q.rows[0]
+    const elevatedRoles = new Set(['admin', 'superadmin', 'sales_manager', 'financial_manager'])
+    const isElevated = elevatedRoles.has(req.user?.role)
+    if (!isElevated && deal.created_by !== req.user.id) {
+      return res.status(403).json({ error: { message: 'Forbidden' } })
+    }
+    return res.json({ ok: true, deal })
   } catch (e) {
     console.error('GET /api/deals/:id error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
@@ -183,12 +274,9 @@ router.get('/:id/history', authMiddleware, async (req, res) => {
 })
 
 // Create a new deal (any authenticated user)
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, validate(dealCreateSchema), async (req, res) => {
   try {
     const { title, amount, details, unitType, salesRepId, policyId } = req.body || {}
-    if (!title || typeof title !== 'string') {
-      return res.status(400).json({ error: { message: 'title is required' } })
-    }
     const amt = Number(amount || 0)
     const det = isObject(details) ? details : {}
     const result = await pool.query(
@@ -217,7 +305,7 @@ router.post('/', authMiddleware, async (req, res) => {
 })
 
 // Modify an existing deal (only if status is draft; owner or admin)
-router.patch('/:id', authMiddleware, async (req, res) => {
+router.patch('/:id', authMiddleware, validate(dealUpdateSchema), async (req, res) => {
   try {
     const id = Number(req.params.id)
     const { title, amount, details, unitType, salesRepId, policyId } = req.body || {}
@@ -264,7 +352,7 @@ router.patch('/:id', authMiddleware, async (req, res) => {
 })
 
 // Submit for approval (only from draft -> pending_approval; owner or admin)
-router.post('/:id/submit', authMiddleware, async (req, res) => {
+router.post('/:id/submit', authMiddleware, validate(dealSubmitSchema), async (req, res) => {
   try {
     const id = Number(req.params.id)
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
@@ -275,7 +363,13 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
     if (!isOwner && !isAdmin) return res.status(403).json({ error: { message: 'Forbidden' } })
     if (deal.status !== 'draft') return res.status(400).json({ error: { message: 'Deal must be draft to submit' } })
 
+    // Optional: acceptability flags passed by client to persist
+    if (req.body?.acceptability) {
+      await setAcceptabilityFlags(id, req.body.acceptability, req.user)
+    }
+
     const upd = await pool.query('UPDATE deals SET status=$1 WHERE id=$2 RETURNING *', ['pending_approval', id])
+    const submittedDeal = upd.rows[0]
     const note = {
       event: 'deal_submitted',
       by: { id: req.user.id, role: req.user.role },
@@ -284,19 +378,30 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
       at: new Date().toISOString()
     }
     await logHistory(id, req.user.id, 'submit', JSON.stringify(note))
-    return res.json({ ok: true, deal: upd.rows[0] })
+
+    // Real-time notification to active Sales Managers
+    try {
+      const mgrs = await pool.query(`SELECT id FROM users WHERE role='sales_manager' AND active=TRUE`)
+      for (const m of mgrs.rows) {
+        await emitNotification('deal_submitted', m.id, 'deals', submittedDeal.id, `Deal #${submittedDeal.id} submitted for approval`)
+      }
+    } catch (notifyErr) {
+      console.error('Emit notification error (deal submitted):', notifyErr)
+    }
+
+    return res.json({ ok: true, deal: submittedDeal })
   } catch (e) {
     console.error('POST /api/deals/:id/submit error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
   }
 })
 
-// Approve (manager or admin only; pending_approval -> approved)
+// Approve (sales_manager or admin only; pending_approval -> approved)
 router.post('/:id/approve', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
     const role = req.user.role
-    if (!(role === 'manager' || role === 'admin')) return res.status(403).json({ error: { message: 'Manager role required' } })
+    if (!(role === 'sales_manager' || role === 'admin' || role === 'superadmin')) return res.status(403).json({ error: { message: 'Sales Manager role required' } })
 
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
@@ -384,20 +489,22 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
   }
 })
 
-// Reject (manager or admin only; pending_approval -> rejected)
-router.post('/:id/reject', authMiddleware, async (req, res) => {
+// Reject (sales_manager or admin only; pending_approval -> rejected)
+router.post('/:id/reject', authMiddleware, validate(dealRejectSchema), async (req, res) => {
   try {
     const id = Number(req.params.id)
     const { reason } = req.body || {}
     const role = req.user.role
-    if (!(role === 'manager' || role === 'admin')) return res.status(403).json({ error: { message: 'Manager role required' } })
+    if (!(role === 'sales_manager' || role === 'admin' || role === 'superadmin')) return res.status(403).json({ error: { message: 'Sales Manager role required' } })
 
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
     const deal = q.rows[0]
     if (deal.status !== 'pending_approval') return res.status(400).json({ error: { message: 'Deal must be pending approval' } })
 
-    const upd = await pool.query('UPDATE deals SET status=$1 WHERE id=$2 RETURNING *', ['rejected', id])
+    // Persist rejection reason to deal record and set status
+    const upd = await pool.query('UPDATE deals SET status=$1, rejection_reason=$2 WHERE id=$3 RETURNING *', ['rejected', (typeof reason === 'string' ? reason : null), id])
+
     const rejectNote = {
       event: 'deal_rejected',
       by: { id: req.user.id, role: req.user.role },
@@ -410,6 +517,127 @@ router.post('/:id/reject', authMiddleware, async (req, res) => {
     return res.json({ ok: true, deal: upd.rows[0] })
   } catch (e) {
     console.error('POST /api/deals/:id/reject error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+/**
+ * Request Top-Management override for a deal (Sales Manager or Financial Manager)
+ * Does not change approval status; sets needs_override and timestamps; logs in deal_history.
+ */
+router.post('/:id/request-override', authMiddleware, validate(overrideRequestSchema), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['sales_manager', 'financial_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Sales Manager or Financial Manager role required' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+    const deal = q.rows[0]
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET needs_override=TRUE,
+           override_requested_by=$1,
+           override_requested_at=now(),
+           updated_at=now()
+       WHERE id=$2 RETURNING *`,
+      [req.user.id, id]
+    )
+
+    const note = {
+      event: 'override_requested',
+      by: { id: req.user.id, role },
+      reason: (req.body && req.body.reason) || null,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_requested', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/request-override error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+/**
+ * Approve Top-Management override (TM roles only)
+ * Records approver, timestamp and notes; logs in deal_history.
+ */
+router.post('/:id/override-approve', authMiddleware, validate(overrideApproveSchema), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['ceo', 'chairman', 'vice_chairman', 'top_management', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Top-Management role required to approve override' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+    const deal = q.rows[0]
+
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes : null
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET override_approved_by=$1,
+           override_approved_at=now(),
+           override_notes=$2,
+           updated_at=now()
+       WHERE id=$3 RETURNING *`,
+      [req.user.id, notes, id]
+    )
+
+    const note = {
+      event: 'override_approved',
+      by: { id: req.user.id, role },
+      notes,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_approved', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-approve error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+/**
+ * Reject Top-Management override (TM roles only)
+ */
+router.post('/:id/override-reject', authMiddleware, validate(overrideApproveSchema), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['ceo', 'chairman', 'vice_chairman', 'top_management', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Top-Management role required to reject override' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes : null
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET needs_override=FALSE,
+           override_notes=$1,
+           updated_at=now()
+       WHERE id=$2 RETURNING *`,
+      [notes, id]
+    )
+
+    const note = {
+      event: 'override_rejected',
+      by: { id: req.user.id, role },
+      notes,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_rejected', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-reject error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
   }
 })

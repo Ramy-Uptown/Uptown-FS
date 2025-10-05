@@ -1,0 +1,5 @@
+-- Add component prices to unit_model_pricing
+ALTER TABLE IF EXISTS unit_model_pricing
+  ADD COLUMN IF NOT EXISTS garden_price NUMERIC(18,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS roof_price NUMERIC(18,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS storage_price NUMERIC(18,2) NOT NULL DEFAULT 0;

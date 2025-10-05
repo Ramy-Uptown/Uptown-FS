@@ -15,6 +15,7 @@ import {
 import convertToWords from '../utils/converter.js'
 import { createRequire } from 'module'
 import authRoutes from './authRoutes.js'
+import { pool } from './db.js'
 import dealsRoutes from './dealsRoutes.js'
 import unitsRoutes from './unitsRoutes.js'
 import salesPeopleRoutes from './salesPeopleRoutes.js'
@@ -22,11 +23,81 @@ import commissionPoliciesRoutes from './commissionPoliciesRoutes.js'
 import commissionsRoutes from './commissionsRoutes.js'
 import ocrRoutes from './ocrRoutes.js'
 import { getCleanupMetrics } from './runtimeMetrics.js'
+import workflowRoutes from './workflowRoutes.js'
+import inventoryRoutes from './inventoryRoutes.js'
+import reportsRoutes from './reportsRoutes.js'
+import pricingRoutes from './pricingRoutes.js' // THIS LINE IS NEW
+import configRoutes from './configRoutes.js'
+import standardPlanRoutes from './standardPlanRoutes.js' // NEW
+import calculateRoutes from './calculateRoutes.js' // NEW
+
+// NEW IMPORTS - Add these
+import roleManagementRoutes from './roleManagement.js'
+import offerWorkflowRoutes from './offerWorkflow.js'
+import blockManagementRoutes from './blockManagement.js'
+import customerRoutes from './customerRoutes.js'
+import notificationService from './notificationService.js'
+import dashboardRoutes from './dashboardRoutes.js'
+import { errorHandler } from './errorHandler.js'
+import logger from './utils/logger.js'
+import crypto from 'crypto'
+import { validate, calculateSchema, generatePlanSchema, generateDocumentSchema } from './validation.js'
 
 const require = createRequire(import.meta.url)
 const libre = require('libreoffice-convert')
 
 const app = express()
+
+// Correlation ID + request logging
+app.use((req, res, next) => {
+  // Assign a correlation ID if not present
+  req.id = req.headers['x-request-id'] || crypto.randomUUID()
+  const start = Date.now()
+
+  // Log incoming request
+  logger.info({
+    msg: 'Incoming request',
+    reqId: req.id,
+    method: req.method,
+    url: req.originalUrl || req.url,
+    ip: req.ip
+  })
+
+  res.on('finish', () => {
+    const ms = Date.now() - start
+    logger.info({
+      msg: 'Request completed',
+      reqId: req.id,
+      method: req.method,
+      url: req.originalUrl || req.url,
+      statusCode: res.statusCode,
+      durationMs: ms,
+      userId: req.user?.id || null
+    })
+  })
+
+  next()
+})
+
+// Helper: fetch active approval policy limit (global fallback = 5%)
+async function getActivePolicyLimitPercent() {
+  try {
+    const r = await pool.query(
+      `SELECT policy_limit_percent
+       FROM approval_policies
+       WHERE active=TRUE AND scope_type='global'
+       ORDER BY id DESC
+       LIMIT 1`
+    )
+    if (r.rows.length > 0) {
+      const v = Number(r.rows[0].policy_limit_percent)
+      if (Number.isFinite(v) && v > 0) return v
+    }
+  } catch (e) {
+    // swallow; fall back
+  }
+  return 5
+}
 
 // Security headers
 app.use(helmet())
@@ -62,6 +133,129 @@ app.use('/api/sales', salesPeopleRoutes)
 app.use('/api/commission-policies', commissionPoliciesRoutes)
 app.use('/api/commissions', commissionsRoutes)
 app.use('/api/ocr', ocrRoutes)
+app.use('/api/workflow', workflowRoutes)
+app.use('/api/inventory', inventoryRoutes)
+app.use('/api/reports', reportsRoutes)
+app.use('/api/pricing', pricingRoutes) // THIS LINE IS NEW
+app.use('/api/config', configRoutes)
+app.use('/api/standard-plan', standardPlanRoutes) // NEW
+app.use('/api', calculateRoutes) // NEW calculation engine (POST /api/calculate)
+
+// NEW ROUTE REGISTRATIONS - Add these
+app.use('/api/roles', roleManagementRoutes)
+app.use('/api/offers', offerWorkflowRoutes)
+app.use('/api/blocks', blockManagementRoutes)
+app.use('/api/customers', customerRoutes)
+app.use('/api/dashboard', dashboardRoutes)
+
+// Notification endpoints
+app.get('/api/notifications', authLimiter, authMiddleware, async (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 20)
+    const offset = Number(req.query.offset || 0)
+    const notifications = await notificationService.getUserNotifications(req.user.id, limit, offset)
+    res.json({ ok: true, notifications })
+  } catch (error) {
+    console.error('Get notifications error:', error)
+    res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+app.get('/api/notifications/unread-count', authLimiter, authMiddleware, async (req, res) => {
+  try {
+    const count = await notificationService.getUnreadNotificationCount(req.user.id)
+    res.json({ ok: true, count })
+  } catch (error) {
+    console.error('Get unread count error:', error)
+    res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+app.patch('/api/notifications/:id/read', authLimiter, authMiddleware, async (req, res) => {
+  try {
+    const notificationId = Number(req.params.id)
+    await notificationService.markNotificationAsRead(notificationId, req.user.id)
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('Mark as read error:', error)
+    res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+app.patch('/api/notifications/mark-all-read', authLimiter, authMiddleware, async (req, res) => {
+  try {
+    await pool.query(
+      'UPDATE notifications SET is_read = true WHERE user_id = $1 AND is_read = false',
+      [req.user.id]
+    )
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('Mark all as read error:', error)
+    res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Simple in-process notifier for hold reminders (runs hourly)
+setInterval(async () => {
+  try {
+    const now = new Date()
+    const r = await pool.query(
+      `SELECT h.id, h.unit_id, h.next_notify_at
+       FROM holds h
+       WHERE h.status='approved' AND (h.next_notify_at IS NULL OR h.next_notify_at <= now())`
+    )
+    for (const row of r.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+         SELECT u.id, 'hold_reminder', 'holds', $1, 'Hold requires decision: unblock or extend.'
+         FROM users u WHERE u.role='financial_manager' AND u.active=TRUE`,
+        [row.id]
+      )
+      await pool.query(
+        `UPDATE holds SET next_notify_at = now() + INTERVAL '7 days' WHERE id=$1`,
+        [row.id]
+      )
+    }
+  } catch (e) {
+    console.error('Hold reminder scheduler error:', e)
+  }
+}, 60 * 60 * 1000)
+
+// Daily job to expire holds past expires_at (runs every 24 hours)
+setInterval(async () => {
+  try {
+    // Expire approved holds whose expires_at is in the past, and unit not reserved
+    const rows = await pool.query(
+      `SELECT h.id, h.unit_id, h.payment_plan_id
+       FROM holds h
+       WHERE h.status='approved' AND h.expires_at IS NOT NULL AND h.expires_at < now()`
+    )
+    for (const h of rows.rows) {
+      // Check reservation exists
+      let reserved = false
+      if (h.payment_plan_id) {
+        const rf = await pool.query(
+          `SELECT 1 FROM reservation_forms WHERE payment_plan_id=$1 AND status='approved' LIMIT 1`,
+          [h.payment_plan_id]
+        )
+        reserved = rf.rows.length > 0
+      }
+      if (!reserved) {
+        await pool.query('UPDATE holds SET status=\'expired\', updated_at=now() WHERE id=$1', [h.id])
+        await pool.query('UPDATE units SET available=TRUE, updated_at=now() WHERE id=$1', [h.unit_id])
+        // notify FMs
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+           SELECT u.id, 'hold_expired', 'holds', $1, 'Hold expired automatically and unit was unblocked.'
+           FROM users u WHERE u.role='financial_manager' AND u.active=TRUE`,
+          [h.id]
+        )
+      }
+    }
+  } catch (e) {
+    console.error('Daily hold expiry job error:', e)
+  }
+}, 24 * 60 * 60 * 1000)
 
 // Health endpoint (now protected by middleware below)
 app.get('/api/health', (req, res) => {
@@ -82,8 +276,77 @@ app.get('/api/metrics', (req, res) => {
   })
 })
 
+// --- Schema capability check utilities ---
+async function getMissingColumns(table, columns) {
+  try {
+    const q = `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = $1
+    `
+    const r = await pool.query(q, [table])
+    const present = new Set(r.rows.map(row => row.column_name))
+    return columns.filter(c => !present.has(c))
+  } catch (e) {
+    return columns // if introspection failed, assume all missing
+  }
+}
+
+async function runSchemaCheck() {
+  const required = {
+    units: [
+      'id','code','unit_type','unit_type_id','base_price','currency','model_id','area','orientation',
+      'has_garden','garden_area','has_roof','roof_area','maintenance_price','garage_price','garden_price',
+      'roof_price','storage_price','available','unit_status'
+    ],
+    unit_types: ['id','name'],
+    unit_models: [
+      'id','model_name','model_code','area','orientation','has_garden','garden_area','has_roof','roof_area',
+      'garage_area','garage_standard_code'
+    ]
+  }
+  const missing = {}
+  for (const [table, cols] of Object.entries(required)) {
+    const miss = await getMissingColumns(table, cols)
+    if (miss.length) missing[table] = miss
+  }
+  return missing
+}
+
+// Endpoint to report schema readiness (restricted to admin and superadmin)
+app.get('/api/schema-check', requireRole(['admin','superadmin']), async (req, res) => {
+  try {
+    const missing = await runSchemaCheck()
+    const okAll = Object.keys(missing).length === 0
+    res.json({
+      ok: okAll,
+      missing,
+      timestamp: new Date().toISOString()
+    })
+  } catch (e) {
+    console.error('Schema check error:', e)
+    res.status(500).json({ ok: false, error: { message: 'Schema check failed' } })
+  }
+})
+
+// Run check at startup and log readable warning
+;(async () => {
+  try {
+    const missing = await runSchemaCheck()
+    if (Object.keys(missing).length) {
+      console.warn('Database schema check: missing columns detected:')
+      console.warn(JSON.stringify(missing, null, 2))
+      console.warn('Apply latest migrations to avoid runtime errors.')
+    } else {
+      console.log('Database schema check: OK')
+    }
+  } catch (e) {
+    console.warn('Database schema check failed to run:', e?.message || e)
+  }
+})()
+
 // Enforce auth on all /api routes except /api/auth/*
-import { authMiddleware } from './authRoutes.js'
+import { authMiddleware, requireRole } from './authRoutes.js'
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/auth')) return next()
   if (req.path.startsWith('/api/')) return authMiddleware(req, res, next)
@@ -127,7 +390,11 @@ function validateInputs(inputs) {
     errors.push({ field: 'planDurationYears', message: 'Required' })
   } else {
     const yrs = Number(inputs.planDurationYears)
-    if (!Number.isInteger(yrs) || yrs <= 0) errors.push({ field: 'planDurationYears', message: 'Must be integer >= 1' })
+    if (!Number.isInteger(yrs) || yrs <= 0) {
+      errors.push({ field: 'planDurationYears', message: 'Must be integer >= 1' })
+    } else if (yrs > 12) {
+      errors.push({ field: 'planDurationYears', message: 'Max allowed is 12 years' })
+    }
   }
 
   // dpType and value
@@ -186,40 +453,87 @@ function validateInputs(inputs) {
  *   splitFirstYearPayments, firstYearPayments[], subsequentYears[]
  * }
  */
-app.post('/api/calculate', (req, res) => {
+app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
   try {
-    const { mode, stdPlan, inputs } = req.body || {}
+    const { mode, stdPlan, inputs, standardPricingId, unitId } = req.body || {}
 
     if (!mode || !allowedModes.has(mode)) {
       return bad(res, 400, 'Invalid or missing mode', { allowedModes: [...allowedModes] })
     }
-    if (!isObject(stdPlan)) {
-      return bad(res, 400, 'stdPlan must be an object with totalPrice, financialDiscountRate, calculatedPV')
-    }
-    // Basic presence checks
-    const stdTotal = Number(stdPlan.totalPrice)
-    const stdRate = Number(stdPlan.financialDiscountRate)
-    const stdPV = Number(stdPlan.calculatedPV)
-    if (!isFinite(stdTotal) || stdTotal < 0) {
-      return bad(res, 400, 'stdPlan.totalPrice must be a non-negative number')
-    }
-    if (!isFinite(stdRate)) {
-      return bad(res, 400, 'stdPlan.financialDiscountRate must be a number (percent)')
-    }
-    if (!isFinite(stdPV) || stdPV < 0) {
-      return bad(res, 400, 'stdPlan.calculatedPV must be a non-negative number')
+
+    let effectiveStdPlan = null
+
+    if (standardPricingId || unitId) {
+      // Load approved standard by id or unit id
+      const clauses = ["status='approved'"]
+      const params = []
+      if (standardPricingId) {
+        params.push(Number(standardPricingId))
+        clauses.push(`id = $${params.length}`)
+      }
+      if (unitId) {
+        params.push(Number(unitId))
+        clauses.push(`unit_id = $${params.length}`)
+      }
+      const where = 'WHERE ' + clauses.join(' AND ')
+      const q = `SELECT price, std_financial_rate_percent, plan_duration_years, installment_frequency FROM standard_pricing ${where} ORDER BY id DESC LIMIT 1`
+      const r = await pool.query(q, params)
+      if (r.rows.length === 0) {
+        return bad(res, 404, 'Approved standard data not found for given identifier(s)')
+      }
+      const row = r.rows[0]
+      effectiveStdPlan = {
+        totalPrice: Number(row.price) || 0,
+        financialDiscountRate: Number(row.std_financial_rate_percent) || 0,
+        calculatedPV: Number(row.price) || 0 // baseline PV equals nominal when rate is zero; algorithm uses target PV for some modes
+      }
+      // Default inputs fields from standard if not provided
+      if (!isObject(req.body.inputs)) req.body.inputs = {}
+      if (req.body.inputs.planDurationYears == null) req.body.inputs.planDurationYears = row.plan_duration_years
+      if (!req.body.inputs.installmentFrequency) req.body.inputs.installmentFrequency = row.installment_frequency
+    } else {
+      if (!isObject(stdPlan)) {
+        return bad(res, 400, 'Provide either standardPricingId/unitId or stdPlan object')
+      }
+      // Basic presence checks
+      const stdTotal = Number(stdPlan.totalPrice)
+      const stdRate = Number(stdPlan.financialDiscountRate)
+      const stdPV = Number(stdPlan.calculatedPV)
+      if (!isFinite(stdTotal) || stdTotal < 0) {
+        return bad(res, 400, 'stdPlan.totalPrice must be a non-negative number')
+      }
+      if (!isFinite(stdRate)) {
+        return bad(res, 400, 'stdPlan.financialDiscountRate must be a number (percent)')
+      }
+      if (!isFinite(stdPV) || stdPV < 0) {
+        return bad(res, 400, 'stdPlan.calculatedPV must be a non-negative number')
+      }
+      effectiveStdPlan = stdPlan
     }
 
-    if (!isObject(inputs)) {
+    const effInputs = req.body.inputs || inputs
+    if (!isObject(effInputs)) {
       return bad(res, 400, 'inputs must be an object')
     }
-    const inputErrors = validateInputs(inputs)
+    const inputErrors = validateInputs(effInputs)
     if (inputErrors.length > 0) {
       return bad(res, 422, 'Invalid inputs', inputErrors)
     }
 
-    const result = calculateByMode(mode, stdPlan, inputs)
-    return res.json({ ok: true, data: result })
+    // Role-based authority warnings only (do not block calculations)
+    const role = req.user?.role
+    const disc = Number(effInputs.salesDiscountPercent) || 0
+    let authorityLimit = null
+    if (role === 'property_consultant') authorityLimit = 2
+    if (role === 'financial_manager') authorityLimit = 5
+    const overAuthority = authorityLimit != null ? disc > authorityLimit : false
+
+    // Policy limit warning only (do not block; routing handled in workflow endpoints)
+    const policyLimit = await getActivePolicyLimitPercent()
+    const overPolicy = disc > policyLimit
+
+    const result = calculateByMode(mode, effectiveStdPlan, effInputs)
+    return res.json({ ok: true, data: result, meta: { policyLimit, overPolicy, authorityLimit, overAuthority } })
   } catch (err) {
     console.error('POST /api/calculate error:', err)
     return bad(res, 500, 'Internal error during calculation')
@@ -233,16 +547,49 @@ app.post('/api/calculate', (req, res) => {
  * - currency: optional. For English, can be code (EGP, USD, SAR, EUR, AED, KWD) or full name (e.g., "Egyptian Pounds")
  * Returns: { ok: true, schedule: [{label, month, amount, writtenAmount}], totals, meta }
  */
-app.post('/api/generate-plan', (req, res) => {
+app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) => {
   try {
-    const { mode, stdPlan, inputs, language, currency, languageForWrittenAmounts } = req.body || {}
+    const { mode, stdPlan, inputs, language, currency, languageForWrittenAmounts, standardPricingId, unitId } = req.body || {}
     if (!mode || !allowedModes.has(mode)) {
       return bad(res, 400, 'Invalid or missing mode', { allowedModes: [...allowedModes] })
     }
-    if (!isObject(stdPlan) || !isObject(inputs)) {
-      return bad(res, 400, 'Missing stdPlan or inputs')
+
+    let effectiveStdPlan = null
+    const effInputs = req.body.inputs || inputs || {}
+
+    if (standardPricingId || unitId) {
+      const clauses = ["status='approved'"]
+      const params = []
+      if (standardPricingId) {
+        params.push(Number(standardPricingId))
+        clauses.push(`id = $${params.length}`)
+      }
+      if (unitId) {
+        params.push(Number(unitId))
+        clauses.push(`unit_id = $${params.length}`)
+      }
+      const where = 'WHERE ' + clauses.join(' AND ')
+      const q = `SELECT price, std_financial_rate_percent, plan_duration_years, installment_frequency FROM standard_pricing ${where} ORDER BY id DESC LIMIT 1`
+      const r = await pool.query(q, params)
+      if (r.rows.length === 0) {
+        return bad(res, 404, 'Approved standard data not found for given identifier(s)')
+      }
+      const row = r.rows[0]
+      effectiveStdPlan = {
+        totalPrice: Number(row.price) || 0,
+        financialDiscountRate: Number(row.std_financial_rate_percent) || 0,
+        calculatedPV: Number(row.price) || 0
+      }
+      if (effInputs.planDurationYears == null) effInputs.planDurationYears = row.plan_duration_years
+      if (!effInputs.installmentFrequency) effInputs.installmentFrequency = row.installment_frequency
+    } else {
+      if (!isObject(stdPlan) || !isObject(effInputs)) {
+        return bad(res, 400, 'Provide either standardPricingId/unitId or stdPlan with inputs')
+      }
+      effectiveStdPlan = stdPlan
     }
-    const inputErrors = validateInputs(inputs)
+
+    const inputErrors = validateInputs(effInputs)
     if (inputErrors.length > 0) {
       return bad(res, 422, 'Invalid inputs', inputErrors)
     }
@@ -251,33 +598,61 @@ app.post('/api/generate-plan', (req, res) => {
     const langInput = language || languageForWrittenAmounts || 'en'
     const lang = String(langInput).toLowerCase().startsWith('ar') ? 'ar' : 'en'
 
-    const result = calculateByMode(mode, stdPlan, inputs)
+    // Enforce role-based discount limits
+    const role = req.user?.role
+    const disc = Number(effInputs.salesDiscountPercent) || 0
+    if (role === 'property_consultant' && disc > 2) {
+      return bad(res, 403, 'Sales consultants can apply a maximum discount of 2%.')
+    }
+    if (role === 'financial_manager' && disc > 5) {
+      return bad(res, 403, 'Financial managers can apply a maximum discount of 5% (requires CEO approval in workflow if over 2%).')
+    }
+
+    const result = calculateByMode(mode, effectiveStdPlan, effInputs)
+
+    // NPV tolerance warning check
+    const policyLimit = await getActivePolicyLimitPercent()
+    const npvTolerancePercent = 70 // default; could be read per project/type in future
+    const toleranceValue = (Number(effectiveStdPlan.totalPrice) || 0) * (npvTolerancePercent / 100)
+    const npvWarning = (Number(result.calculatedPV) || 0) < toleranceValue
 
     const schedule = []
-    const pushEntry = (label, month, amount) => {
+    const pushEntry = (label, month, amount, baseDateStr) => {
       const amt = Number(amount) || 0
       if (amt <= 0) return
+      const m = Number(month) || 0
+      let dueDate = null
+      if (baseDateStr) {
+        const base = new Date(baseDateStr)
+        if (!isNaN(base.getTime())) {
+          const d = new Date(base)
+          d.setMonth(d.getMonth() + m)
+          dueDate = d.toISOString().slice(0, 10) // YYYY-MM-DD
+        }
+      }
       schedule.push({
         label,
-        month: Number(month) || 0,
+        month: m,
         amount: amt,
+        date: dueDate,
         writtenAmount: convertToWords(amt, lang, { currency })
       })
     }
 
+    // Base date for computing absolute dates (optional)
+    const baseDate = effInputs.baseDate || effInputs.contractDate || null
+
     // Down payment or split first year
-    const splitY1 = !!inputs.splitFirstYearPayments
+    const splitY1 = !!effInputs.splitFirstYearPayments
     if (splitY1) {
-      for (const p of (inputs.firstYearPayments || [])) {
-        pushEntry(p.type === 'dp' ? 'Down Payment (Y1 split)' : 'First Year', p.month, p.amount)
+      for (const p of (effInputs.firstYearPayments || [])) {
+        pushEntry(p.type === 'dp' ? 'Down Payment (Y1 split)' : 'First Year', p.month, p.amount, baseDate)
       }
     } else {
-      // single down payment at month 0
-      pushEntry('Down Payment', 0, result.downPaymentAmount)
+      pushEntry('Down Payment', 0, result.downPaymentAmount, baseDate)
     }
 
-    // Subsequent custom years (expand totals into installments)
-    const subs = inputs.subsequentYears || []
+    const subs = effInputs.subsequentYears || []
     subs.forEach((y, idx) => {
       let nInYear = 0
       switch (y.frequency) {
@@ -288,23 +663,28 @@ app.post('/api/generate-plan', (req, res) => {
         default: nInYear = 0;
       }
       const per = (Number(y.totalNominal) || 0) / (nInYear || 1)
-      // determine absolute year number
       const startAfterYear = (splitY1 ? 1 : 0) + idx
       const months = getPaymentMonths(nInYear, y.frequency, startAfterYear)
-      months.forEach((m, i) => pushEntry(`Year ${startAfterYear + 1} (${y.frequency})`, m, per))
+      months.forEach((m, i) => pushEntry(`Year ${startAfterYear + 1} (${y.frequency})`, m, per, baseDate))
     })
 
-    // Additional handover
-    if ((Number(inputs.additionalHandoverPayment) || 0) > 0 && (Number(inputs.handoverYear) || 0) > 0) {
-      pushEntry('Handover', Number(inputs.handoverYear) * 12, inputs.additionalHandoverPayment)
+    if ((Number(effInputs.additionalHandoverPayment) || 0) > 0 && (Number(effInputs.handoverYear) || 0) > 0) {
+      pushEntry('Handover', Number(effInputs.handoverYear) * 12, effInputs.additionalHandoverPayment, baseDate)
     }
 
-    // Equal installments
+    // Additional one-time fees (NOT included in PV calculation — appended only to schedule)
+    const maintAmt = Number(effInputs.maintenancePaymentAmount) || 0
+    const maintMonth = Number(effInputs.maintenancePaymentMonth) || 0
+    if (maintAmt > 0) pushEntry('Maintenance Fee', maintMonth, maintAmt, baseDate)
+
+    const garAmt = Number(effInputs.garagePaymentAmount) || 0
+    const garMonth = Number(effInputs.garagePaymentMonth) || 0
+    if (garAmt > 0) pushEntry('Garage Fee', garMonth, garAmt, baseDate)
+
     const eqMonths = result.equalInstallmentMonths || []
     const eqAmt = Number(result.equalInstallmentAmount) || 0
-    eqMonths.forEach((m, i) => pushEntry('Equal Installment', m, eqAmt))
+    eqMonths.forEach((m, i) => pushEntry('Equal Installment', m, eqAmt, baseDate))
 
-    // Sort by month then by label for consistency
     schedule.sort((a, b) => (a.month - b.month) || a.label.localeCompare(b.label))
 
     const totals = {
@@ -312,7 +692,7 @@ app.post('/api/generate-plan', (req, res) => {
       totalNominal: schedule.reduce((s, e) => s + e.amount, 0)
     }
 
-    return res.json({ ok: true, schedule, totals, meta: result.meta || {} })
+    return res.json({ ok: true, schedule, totals, meta: { ...result.meta, npvWarning } })
   } catch (err) {
     console.error('POST /api/generate-plan error:', err)
     return bad(res, 500, 'Internal error during plan generation')
@@ -331,15 +711,76 @@ app.post('/api/generate-plan', (req, res) => {
  * - Placeholders in the .docx should use Autocrat-style delimiters: <<placeholder_name>>
  * - Service will also add *_words fields for numeric values in data using the requested language
  */
-app.post('/api/generate-document', async (req, res) => {
+app.post('/api/generate-document', validate(generateDocumentSchema), async (req, res) => {
   try {
-    const { templateName, data, language, currency } = req.body || {}
+    let { templateName, documentType, deal_id, data, language, currency } = req.body || {}
+    const role = req.user?.role
 
-    if (!templateName || typeof templateName !== 'string') {
-      return bad(res, 400, 'templateName is required and must be a string')
-    }
-    if (!isObject(data)) {
+    // Accept either templateName or documentType; enforce role-based rules when documentType is used
+    const type = documentType && String(documentType).trim()
+    // Accept either explicit "data" or the entire body as data if not provided
+    let docData = isObject(data) ? data : (isObject(req.body) ? { ...req.body } : null)
+    if (!docData) {
       return bad(res, 400, 'data must be an object with key/value pairs for placeholders')
+    }
+    // Remove control keys from docData so they don't appear as placeholders
+    delete docData.templateName
+    delete docData.documentType
+    delete docData.deal_id
+
+    // Role-based access control and default template mapping
+    const TYPE_RULES = {
+      pricing_form: {
+        allowedRoles: ['property_consultant', 'sales_manager'],
+        defaultTemplate: 'pricing_form.docx'
+      },
+      reservation_form: {
+        allowedRoles: ['financial_admin'],
+        defaultTemplate: 'reservation_form.docx'
+      },
+      contract: {
+        allowedRoles: ['contract_person'],
+        defaultTemplate: 'contract.docx'
+      }
+    }
+
+    if (type) {
+      const rules = TYPE_RULES[type]
+      if (!rules) {
+        return bad(res, 400, `Unknown documentType: ${type}`)
+      }
+      if (!rules.allowedRoles.includes(role)) {
+        return bad(res, 403, `Forbidden: role ${role} cannot generate ${type}`)
+      }
+      // If a deal_id is provided, ensure the deal is approved before allowing generation
+      if (deal_id != null) {
+        const id = Number(deal_id)
+        if (!Number.isFinite(id) || id <= 0) {
+          return bad(res, 400, 'deal_id must be a positive number')
+        }
+        const dq = await pool.query('SELECT status FROM deals WHERE id=$1', [id])
+        if (dq.rows.length === 0) {
+          return bad(res, 404, 'Deal not found')
+        }
+        if (dq.rows[0].status !== 'approved') {
+          return bad(res, 400, 'Deal must be approved before generating this document')
+        }
+        // Enforce override if required (acceptable criteria not met and override not approved)
+        const dealRow = dq.rows[0]
+        // If needs_override is true, require override_approved_at to be set
+        if (dealRow.needs_override === true && !dealRow.override_approved_at) {
+          return bad(res, 403, 'Top-Management override required before generating this document')
+        }
+      }
+      // Use default template if templateName not provided
+      if (!templateName) {
+        templateName = rules.defaultTemplate
+      }
+    } else {
+      // If not using documentType, require explicit templateName
+      if (!templateName || typeof templateName !== 'string') {
+        return bad(res, 400, 'Provide either documentType or templateName (string)')
+      }
     }
 
     const lang = String(language || 'en').toLowerCase().startsWith('ar') ? 'ar' : 'en'
@@ -406,5 +847,8 @@ app.post('/api/generate-document', async (req, res) => {
     return bad(res, 500, 'Internal error during document generation')
   }
 })
+
+// Global error handler
+app.use(errorHandler)
 
 export default app

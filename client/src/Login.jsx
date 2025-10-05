@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import BrandHeader from './lib/BrandHeader.jsx'
+import { notifyError, notifySuccess } from './lib/notifications.js'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -10,12 +12,11 @@ const BRAND = {
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
 
   async function onSubmit(e) {
     e.preventDefault()
-    setError('')
     setLoading(true)
     try {
       const resp = await fetch(`${API_URL}/api/auth/login`, {
@@ -25,16 +26,21 @@ export default function Login() {
       })
       const data = await resp.json()
       if (!resp.ok) {
-        throw new Error(data?.error?.message || 'Login failed')
+        notifyError(data || { message: 'Login failed' })
+        return
       }
       const access = data.accessToken || data.token
-      if (!access) throw new Error('No access token in response')
+      if (!access) {
+        notifyError('No access token in response')
+        return
+      }
       localStorage.setItem('auth_token', access)
       if (data.refreshToken) localStorage.setItem('refresh_token', data.refreshToken)
       localStorage.setItem('auth_user', JSON.stringify(data.user))
-      window.location.href = '/'
+      notifySuccess('Logged in successfully')
+      navigate('/')
     } catch (e) {
-      setError(e.message || String(e))
+      notifyError(e, 'Login failed')
     } finally {
       setLoading(false)
     }
@@ -54,10 +60,14 @@ export default function Login() {
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Password</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee' }} />
           </div>
-          {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
           <button type="submit" disabled={loading} style={{ padding: '10px 14px', borderRadius: 10, border: `1px solid ${BRAND.primary}`, background: BRAND.primary, color: '#fff', fontWeight: 600, width: '100%' }}>
             {loading ? 'Logging in...' : 'Login'}
           </button>
+          <div style={{ marginTop: 12, textAlign: 'center' }}>
+            <small>
+              No account? <Link to="/register">Register</Link>
+            </small>
+          </div>
         </form>
       </div>
     </div>

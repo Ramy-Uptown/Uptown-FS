@@ -1,0 +1,21 @@
+{
+  "name": "uptown-fs",
+  "version": "1.0.0",
+  "description": "Full-stack financial system with React + Express",
+  "private": true,
+  "engines": {
+    "node": "20.18.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "docker compose up --build",
+    "down": "docker compose down",
+    "logs": "docker compose logs -f"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ramy-Uptown/Uptown-FS.git"
+  },
+  "author": "",
+  "license": "ISC"
+}

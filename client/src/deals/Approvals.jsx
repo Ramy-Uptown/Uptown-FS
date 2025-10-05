@@ -1,10 +1,30 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import LoadingButton from '../components/LoadingButton.jsx'
+import { notifyError, notifySuccess } from '../lib/notifications.js'
+import PromptModal from '../components/PromptModal.jsx'
+
+const th = {
+  textAlign: 'left',
+  padding: 10,
+  borderBottom: '1px solid #eef2f7',
+  fontSize: 13,
+  color: '#475569',
+  background: '#f9fbfd'
+}
+
+const td = {
+  padding: 10,
+  borderBottom: '1px solid #f2f5fa',
+  fontSize: 14
+}
 
 export default function Approvals() {
   const [deals, setDeals] = useState([])
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(0)
+  const [promptRejectId, setPromptRejectId] = useState(0)
+
   const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const role = user?.role || 'user'
 
@@ -12,15 +32,40 @@ export default function Approvals() {
     async function load() {
       try {
         setError('')
-        const resp = await fetchWithAuth(`${API_URL}/api/deals`)
+        const resp = await fetchWithAuth(`${API_URL}/api/deals/pending-sm`)
         const data = await resp.json()
-        if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load deals')
-        setDeals((data.deals || []).filter(d => d.status === 'pending_approval'))
+        if (!resp.ok) throw new Error(data?.error?.message || 'Unable to load deals')
+        setDeals(data.deals || [])
       } catch (e) {
-        setError(e.message || String(e))
+        const msg = e.message || String(e)
+        setError(msg)
+        notifyError(e, 'Unable to load deals')
       }
     }
     load()
+
+    // Real-time updates: listen for 'deal_submitted' notifications
+    try {
+      const authUserRaw = localStorage.getItem('auth_user')
+      const authUser = authUserRaw ? JSON.parse(authUserRaw) : null
+      const userId = authUser?.id || null
+      // Initialize socket and listen for notifications
+      // Dynamically import to avoid bundling issues if not needed elsewhere
+      import('../socket.js').then(mod => {
+        const sock = mod.initSocket(userId)
+        const handler = (notif) => {
+          if (notif?.type === 'deal_submitted') {
+            // Refetch pending deals list
+            load()
+          }
+        }
+        sock.on('notification', handler)
+        // Cleanup
+        return () => {
+          sock.off('notification', handler)
+        }
+      }).catch(() => {})
+    } catch {}
   }, [])
 
   async function approve(id) {
@@ -28,17 +73,21 @@ export default function Approvals() {
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/approve`, { method: 'POST' })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Approve failed')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to approve deal')
       setDeals(ds => ds.filter(d => d.id !== id))
+      notifySuccess('Deal approved successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to approve deal')
     } finally {
       setBusyId(0)
     }
   }
 
-  async function reject(id) {
-    const reason = prompt('Reason for rejection (optional):') || ''
+  function reject(id) {
+    setPromptRejectId(id)
+  }
+
+  async function performReject(id, reason) {
     setBusyId(id)
     try {
       const resp = await fetchWithAuth(`${API_URL}/api/deals/${id}/reject`, {
@@ -47,17 +96,18 @@ export default function Approvals() {
         body: JSON.stringify({ reason })
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data?.error?.message || 'Reject failed')
+      if (!resp.ok) throw new Error(data?.error?.message || 'Unable to reject deal')
       setDeals(ds => ds.filter(d => d.id !== id))
+      notifySuccess('Deal rejected successfully.')
     } catch (e) {
-      alert(e.message || String(e))
+      notifyError(e, 'Unable to reject deal')
     } finally {
       setBusyId(0)
     }
   }
 
-  if (!(role === 'manager' || role === 'admin')) {
-    return <p>Access denied. Manager role required.</p>
+  if (!(role === 'sales_manager' || role === 'admin')) {
+    return <p>Access denied. Sales Manager role required.</p>
   }
 
   return (
@@ -80,26 +130,49 @@ export default function Approvals() {
               <tr key={d.id}>
                 <td style={td}>{d.id}</td>
                 <td style={td}>{d.title}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{Number(d.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                <td style={{ ...td, textAlign: 'right' }}>
+                  {Number(d.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </td>
                 <td style={td}>{d.created_by_email || '-'}</td>
                 <td style={td}>
-                  <button disabled={busyId === d.id} onClick={() => approve(d.id)} style={btn}>Approve</button>
-                  <button disabled={busyId === d.id} onClick={() => reject(d.id)} style={btn}>Reject</button>
+                  <LoadingButton disabled={busyId === d.id} onClick={() => approve(d.id)}>
+                    Approve
+                  </LoadingButton>
+                  <LoadingButton
+                    disabled={busyId === d.id}
+                    onClick={() => reject(d.id)}
+                    style={{ marginLeft: 8 }}
+                  >
+                    Reject
+                  </LoadingButton>
                 </td>
               </tr>
             ))}
             {deals.length === 0 && (
               <tr>
-                <td style={td} colSpan={5}>No pending deals.</td>
+                <td style={td} colSpan={5}>
+                  No pending deals.
+                </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      <PromptModal
+        open={!!promptRejectId}
+        title="Reject Deal"
+        message="Optionally provide a reason for rejection:"
+        placeholder="Reason (optional)"
+        confirmText="Reject"
+        cancelText="Cancel"
+        onSubmit={(val) => {
+          const id = promptRejectId
+          setPromptRejectId(0)
+          performReject(id, val || '')
+        }}
+        onCancel={() => setPromptRejectId(0)}
+      />
     </div>
   )
 }
-
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
-const btn = { marginRight: 8, padding: '6px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }

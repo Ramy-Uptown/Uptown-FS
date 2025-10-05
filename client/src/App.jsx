@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { fetchWithAuth } from './lib/apiClient.js'
 import BrandHeader from './lib/BrandHeader.jsx'
+import { getArabicMonth } from './lib/i18n.js'
+import numberToArabic from './lib/numberToArabic.js'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 const LS_KEY = 'uptown_calc_form_state_v2'
@@ -103,6 +105,26 @@ const styles = {
   error: { color: '#e11d48' }
 }
 
+function DiscountHint({ role, value }) {
+  const v = Number(value) || 0
+  const noteStyle = { color: '#6b7280', fontSize: 12, marginTop: 4 }
+  if (!role) return null
+  if (role === 'property_consultant') {
+    if (v <= 2) return <div style={noteStyle}>Within sales consultant authority. Sales manager review required.</div>
+    return <div style={{ ...noteStyle, color: '#b45309' }}>Exceeds 2%. Not permitted for sales consultant.</div>
+  }
+  if (role === 'sales_manager') {
+    if (v <= 2) return <div style={noteStyle}>Within sales consultant/sales manager authority.</div>
+    return <div style={{ ...noteStyle, color: '#b45309' }}>Over 2% requires escalation to Financial Manager and CEO.</div>
+  }
+  if (role === 'financial_manager') {
+    if (v <= 2) return <div style={noteStyle}>Within 2% band.</div>
+    if (v > 2 && v <= 5) return <div style={{ ...noteStyle, color: '#b45309' }}>Selected discount requires CEO approval.</div>
+    return <div style={{ ...noteStyle, color: '#e11d48' }}>Exceeds 5%. Not permitted.</div>
+  }
+  return null
+}
+
 export default function App(props) {
   const embedded = !!(props && props.embedded)
   const [message, setMessage] = useState('Loading...')
@@ -131,6 +153,16 @@ export default function App(props) {
     splitFirstYearPayments: false
   })
 
+  // Current user (for role-based UI and hints)
+  const [authUser, setAuthUser] = useState(null)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('auth_user')
+      if (raw) setAuthUser(JSON.parse(raw))
+    } catch {}
+  }, [])
+  const role = authUser?.role
+
   // Dynamic arrays
   const [firstYearPayments, setFirstYearPayments] = useState([])
   const [subsequentYears, setSubsequentYears] = useState([])
@@ -157,6 +189,15 @@ export default function App(props) {
     zone: '',
     garden_details: ''
   })
+  const [unitPricingBreakdown, setUnitPricingBreakdown] = useState({
+    base: 0,
+    garden: 0,
+    roof: 0,
+    storage: 0,
+    garage: 0,
+    maintenance: 0,
+    totalExclMaintenance: 0
+  })
   // Units catalog (typeahead)
   const [unitsCatalog, setUnitsCatalog] = useState([])
   const [unitQuery, setUnitQuery] = useState('')
@@ -169,6 +210,14 @@ export default function App(props) {
     reservation_payment_date: '',
     maintenance_fee: '',
     delivery_period: ''
+  })
+
+  // Additional fees schedule (not part of PV calc)
+  const [feeSchedule, setFeeSchedule] = useState({
+    maintenancePaymentAmount: '',
+    maintenancePaymentMonth: '',
+    garagePaymentAmount: '',
+    garagePaymentMonth: ''
   })
   const [customNotes, setCustomNotes] = useState({
     dp_explanation: '',
@@ -188,6 +237,22 @@ export default function App(props) {
   // Document generation state
   const [docLoading, setDocLoading] = useState(false)
   const [docError, setDocError] = useState('')
+
+  // Centrally-managed payment thresholds (loaded from API)
+  const [thresholdsCfg, setThresholdsCfg] = useState({})
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const resp = await fetchWithAuth(`${API_URL}/api/config/payment-thresholds`)
+        const data = await resp.json()
+        if (mounted && resp.ok) {
+          setThresholdsCfg(data.thresholds || {})
+        }
+      } catch {}
+    })()
+    return () => { mounted = false }
+  }, [])
 
   // Load persisted state
   useEffect(() => {
@@ -239,11 +304,193 @@ export default function App(props) {
     return () => t && clearTimeout(t)
   }, [unitQuery])
 
+    // When we have a selected unit_id, prefer server-approved standard via calculate/generate endpoints using unitId
+    useEffect(() => {
+      const uid = Number(unitInfo.unit_id)
+      if (!Number.isFinite(uid) || uid <= 0) return
+      let abort = false
+      async function loadStdFromServer() {
+        try {
+          // Hit calculate endpoint minimally to fetch meta based on approved standard for this unit
+          const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mode,
+              unitId: uid,
+              // provide minimal inputs to pass validation
+              inputs: {
+                salesDiscountPercent: Number(inputs.salesDiscountPercent) || 0,
+                dpType: inputs.dpType || 'percentage',
+                downPaymentValue: Number(inputs.downPaymentValue) || 20,
+                planDurationYears: Number(inputs.planDurationYears) || 5,
+                installmentFrequency: inputs.installmentFrequency || 'monthly',
+                additionalHandoverPayment: Number(inputs.additionalHandoverPayment) || 0,
+                handoverYear: Number(inputs.handoverYear) || 2,
+                splitFirstYearPayments: !!inputs.splitFirstYearPayments,
+                firstYearPayments: [],
+                subsequentYears: []
+              }
+            })
+          })
+          const data = await resp.json()
+          if (!resp.ok) return
+          if (abort) return
+          // The server used the unit's approved standard as effectiveStdPlan
+          // Reuse our current stdPlan but ensure it’s aligned by reusing unitPricingBreakdown total
+          // No explicit std values come back, so leave as-is; subsequent generate-plan will use unitId too
+        } catch {}
+      }
+      loadStdFromServer()
+      return () => { abort = true }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [unitInfo.unit_id])
+
+  function TypeAndUnitPicker({ unitInfo, setUnitInfo, setStdPlan, setInputs, setCurrency, setFeeSchedule, setUnitPricingBreakdown }) {
+    const [types, setTypes] = useState([])
+    const [selectedTypeId, setSelectedTypeId] = useState('')
+    const [units, setUnits] = useState([])
+    const [loadingTypes, setLoadingTypes] = useState(false)
+    const [loadingUnits, setLoadingUnits] = useState(false)
+
+    useEffect(() => {
+      const loadTypes = async () => {
+        try {
+          setLoadingTypes(true)
+          const resp = await fetchWithAuth(`${API_URL}/api/inventory/types`)
+          const data = await resp.json()
+          if (resp.ok) setTypes(data.unit_types || [])
+        } finally {
+          setLoadingTypes(false)
+        }
+      }
+      loadTypes()
+    }, [])
+
+    useEffect(() => {
+      const loadUnits = async () => {
+        if (!selectedTypeId) { setUnits([]); return }
+        try {
+          setLoadingUnits(true)
+          const resp = await fetchWithAuth(`${API_URL}/api/inventory/units?unit_type_id=${encodeURIComponent(selectedTypeId)}`)
+          const data = await resp.json()
+          if (resp.ok) setUnits(data.units || [])
+        } finally {
+          setLoadingUnits(false)
+        }
+      }
+      loadUnits()
+    }, [selectedTypeId])
+
+    return (
+      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
+        <div>
+          <select value={selectedTypeId} onChange={e => setSelectedTypeId(e.target.value)} style={styles.select()}>
+            <option value="">Select type…</option>
+            {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          {loadingTypes ? <small style={styles.metaText}>Loading types…</small> : null}
+        </div>
+        <div>
+          <select
+            value=""
+            onChange={async e => {
+              const id = Number(e.target.value)
+              const u = units.find(x => x.id === id)
+              if (!u) return
+              // Compute total price excluding maintenance (PV base)
+              const base = Number(u.base_price || 0)
+              const garden = Number(u.garden_price || 0)
+              const roof = Number(u.roof_price || 0)
+              const storage = Number(u.storage_price || 0)
+              const garage = Number(u.garage_price || 0)
+              const maintenance = Number(u.maintenance_price || 0)
+              const total = base + garden + roof + storage + garage
+
+              setStdPlan(s => ({ ...s, totalPrice: total }))
+              setCurrency(u.currency || 'EGP')
+              setUnitInfo(s => ({
+                ...s,
+                unit_type: u.unit_type || s.unit_type,
+                unit_code: u.code || s.unit_code,
+                unit_number: s.unit_number,
+                description: u.description || s.description,
+                unit_id: u.id
+              }))
+              if (setFeeSchedule) {
+                setFeeSchedule(fs => ({
+                  ...fs,
+                  maintenancePaymentAmount: maintenance || '',
+                  // leave months empty for consultant to choose
+                }))
+              }
+              if (setUnitPricingBreakdown) {
+                setUnitPricingBreakdown({
+                  base, garden, roof, storage, garage, maintenance,
+                  totalExclMaintenance: total
+                })
+              }
+              // Pull standard financials for this unit via approved standard (server will resolve from unitId)
+              try {
+                // Use calculate with unitId to cause server to load approved standard and suggest defaults
+                const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    mode,
+                    unitId: Number(u.id),
+                    inputs: {
+                      salesDiscountPercent: Number(inputs.salesDiscountPercent) || 0,
+                      dpType: inputs.dpType || 'percentage',
+                      downPaymentValue: Number(inputs.downPaymentValue) || 20,
+                      planDurationYears: Number(inputs.planDurationYears) || 5,
+                      installmentFrequency: inputs.installmentFrequency || 'monthly',
+                      additionalHandoverPayment: Number(inputs.additionalHandoverPayment) || 0,
+                      handoverYear: Number(inputs.handoverYear) || 2,
+                      splitFirstYearPayments: !!inputs.splitFirstYearPayments,
+                      firstYearPayments: [],
+                      subsequentYears: []
+                    }
+                  })
+                })
+                // Even if this call fails, we keep sensible defaults below
+                await resp.json().catch(() => ({}))
+                // Defaults used when server does not return explicit std values
+                setInputs(s => ({
+                  ...s,
+                  planDurationYears: s.planDurationYears || 5,
+                  installmentFrequency: s.installmentFrequency || 'monthly',
+                  dpType: 'percentage',
+                  downPaymentValue: s.downPaymentValue || 20
+                }))
+              } catch {
+                setInputs(s => ({
+                  ...s,
+                  planDurationYears: s.planDurationYears || 5,
+                  installmentFrequency: s.installmentFrequency || 'monthly',
+                  dpType: 'percentage',
+                  downPaymentValue: s.downPaymentValue || 20
+                }))
+              }
+            }}
+            style={styles.select()}
+            disabled={!selectedTypeId || loadingUnits || units.length === 0}
+          >
+            <option value="">{loadingUnits ? 'Loading…' : (units.length ? 'Select unit…' : 'No units')}</option>
+            {units.map(u => (
+              <option key={u.id} value={u.id}>{u.code} — {u.description || ''}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+    )
+  }
+
   // Persist on change
   useEffect(() => {
-    const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes }
+    const snapshot = { mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes, feeSchedule }
     localStorage.setItem(LS_KEY, JSON.stringify(snapshot))
-  }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes])
+  }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes, feeSchedule])
 
   // Expose imperative APIs for embedding contexts
   useEffect(() => {
@@ -277,14 +524,45 @@ export default function App(props) {
         ...partial
       }))
     }
+    const applyUnitInfo = (partial) => {
+      if (!partial || typeof partial !== 'object') return
+      setUnitInfo(s => ({
+        ...s,
+        ...partial
+      }))
+    }
+    const applyUnitPrefill = (payload) => {
+      if (!payload || typeof payload !== 'object') return
+      const { unitInfo: ui, stdPlan: sp, unitPricingBreakdown: upb, currency: curr } = payload
+      if (ui && typeof ui === 'object') {
+        setUnitInfo(s => ({ ...s, ...ui }))
+      }
+      if (sp && typeof sp === 'object') {
+        setStdPlan(s => ({ ...s, ...sp }))
+      }
+      if (upb && typeof upb === 'object') {
+        setUnitPricingBreakdown({ ...upb })
+      }
+      if (curr) {
+        setCurrency(curr)
+      }
+    }
     window.__uptown_calc_getSnapshot = getSnapshot
     window.__uptown_calc_applyClientInfo = applyClientInfo
+    window.__uptown_calc_applyUnitInfo = applyUnitInfo
+    window.__uptown_calc_applyUnitPrefill = applyUnitPrefill
     return () => {
       if (window.__uptown_calc_getSnapshot === getSnapshot) {
         delete window.__uptown_calc_getSnapshot
       }
       if (window.__uptown_calc_applyClientInfo === applyClientInfo) {
         delete window.__uptown_calc_applyClientInfo
+      }
+      if (window.__uptown_calc_applyUnitInfo === applyUnitInfo) {
+        delete window.__uptown_calc_applyUnitInfo
+      }
+      if (window.__uptown_calc_applyUnitPrefill === applyUnitPrefill) {
+        delete window.__uptown_calc_applyUnitPrefill
       }
     }
   }, [mode, language, currency, stdPlan, inputs, firstYearPayments, subsequentYears, clientInfo, unitInfo, contractInfo, customNotes, genResult, preview])
@@ -309,6 +587,8 @@ export default function App(props) {
   function buildPayload() {
     return {
       mode,
+      // Pass unitId so server can load approved standard for this unit for comparison
+      unitId: Number(unitInfo.unit_id) || undefined,
       stdPlan: {
         totalPrice: Number(stdPlan.totalPrice),
         financialDiscountRate: Number(stdPlan.financialDiscountRate),
@@ -401,6 +681,26 @@ export default function App(props) {
           setPreviewError(data?.error?.message || 'Preview error')
         } else {
           setPreview(data?.data || null)
+          // surface meta warnings
+          const meta = data?.meta || {}
+          const warn = []
+          if (meta.policyLimit != null) {
+            warn.push(`Policy limit: ${meta.policyLimit}%`)
+          }
+          if (meta.overPolicy) {
+            warn.push('Selected discount exceeds current policy limit. Workflow will route to Top-Management.')
+          }
+          if (meta.authorityLimit != null) {
+            warn.push(`Your authority limit: ${meta.authorityLimit}%`)
+          }
+          if (meta.overAuthority) {
+            warn.push('Selected discount exceeds your authority. It will be escalated in workflow.')
+          }
+          if (warn.length) {
+            setPreviewError(warn.join(' '))
+          } else {
+            setPreviewError('')
+          }
         }
       } catch (err) {
         setPreview(null)
@@ -422,7 +722,20 @@ export default function App(props) {
     setGenError('')
     setGenResult(null)
     try {
-      const body = { ...payload, language, currency }
+      const body = {
+        ...payload,
+        language,
+        currency,
+        // base date for absolute due dates on schedule; prefer contract date, fallback to reservation form date
+        inputs: {
+          ...payload.inputs,
+          baseDate: contractInfo.contract_date || contractInfo.reservation_form_date || null,
+          maintenancePaymentAmount: Number(feeSchedule.maintenancePaymentAmount) || 0,
+          maintenancePaymentMonth: Number(feeSchedule.maintenancePaymentMonth) || 0,
+          garagePaymentAmount: Number(feeSchedule.garagePaymentAmount) || 0,
+          garagePaymentMonth: Number(feeSchedule.garagePaymentMonth) || 0
+        }
+      }
       const resp = await fetchWithAuth(`${API_URL}/api/generate-plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -581,7 +894,7 @@ export default function App(props) {
 
     const headerRows = [
       [title],
-      [`Buyer: ${buyer}    Unit: ${unit}    Currency: ${curr}`],
+      [`Buyer: ${buyer}     Unit: ${unit}     Currency: ${curr}`],
       [], // spacer
       ['#', 'Cheque No.', 'Date', 'Pay To', 'Amount', 'Amount in Words', 'Notes']
     ]
@@ -590,13 +903,15 @@ export default function App(props) {
       const amount = Number(row.amount || 0)
       const amountStr = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       return [
-        i + 1,         // #
-        '',            // Cheque No. (to be filled manually)
-        '',            // Date (to be filled manually)
-        buyer,         // Pay To
-        amountStr,     // Amount
+        i + 1,       // #
+        '',          // Cheque No. (to be filled manually)
+        '',          // Date (to be filled manually)
+        buyer,       // Pay To
+        amountStr,   // Amount
         row.writtenAmount || '', // Amount in Words
-        `${row.label} (Month ${row.month})` // Notes
+        language === 'ar'
+          ? `${row.label} (شهر ${getArabicMonth(row.month)})`
+          : `${row.label} (Month ${row.month})` // Notes
       ]
     })
 
@@ -653,6 +968,129 @@ export default function App(props) {
       effectiveStartYears: meta?.effectiveStartYears
     }
   }, [preview])
+
+  // Comparison: Approved Standard PV vs Current Offer PV
+  const comparison = useMemo(() => {
+    const stdPV = Number(stdPlan.calculatedPV ?? 0)
+    const stdRate = Number(stdPlan.financialDiscountRate ?? 0)
+    const offerPV = Number((preview && preview.calculatedPV) ?? 0)
+    const discountPercent = Number(inputs.salesDiscountPercent ?? 0)
+    const deltaPV = offerPV - stdPV
+    const deltaPercentPV = stdPV ? (deltaPV / stdPV) * 100 : 0
+
+    // Payment structure metrics (percentages of total nominal)
+    const totalsNominal = Number(
+      (preview && preview.totalNominalPrice) ??
+      (genResult && genResult.totals && genResult.totals.totalNominal) ??
+      0
+    )
+
+    // First year sum (if split)
+    let firstYearNominal = 0
+    if (inputs.splitFirstYearPayments) {
+      for (const p of (firstYearPayments || [])) {
+        firstYearNominal += Number(p?.amount) || 0
+      }
+    } else {
+      // If not split, treat down payment as first-year component for percentage context
+      const dpBase = Number(stdPlan.totalPrice) || totalsNominal || 0
+      const actualDP = inputs.dpType === 'percentage'
+        ? dpBase * ((Number(inputs.downPaymentValue) || 0) / 100)
+        : (Number(inputs.downPaymentValue) || 0)
+      firstYearNominal = actualDP
+    }
+
+    // Subsequent year 1 (Year 2 if split) — take first entry in subsequentYears
+    let secondYearNominal = 0
+    if (Array.isArray(subsequentYears) && subsequentYears.length > 0) {
+      secondYearNominal = Number(subsequentYears[0]?.totalNominal) || 0
+    }
+
+    const handoverNominal = Number(inputs.additionalHandoverPayment) || 0
+
+    const pct = (part, total) => {
+      const t = Number(total) || 0
+      const p = Number(part) || 0
+      if (!t || t <= 0) return 0
+      return (p / t) * 100
+    }
+
+    const firstYearPercent = pct(firstYearNominal, totalsNominal)
+    const secondYearPercent = pct(secondYearNominal, totalsNominal)
+    const handoverPercent = pct(handoverNominal, totalsNominal)
+
+    // Use centrally-loaded thresholds
+    const thresholds = thresholdsCfg || {}
+    const check = (value, min, max) => {
+      if (min == null && max == null) return null
+      if (min != null && Number(value) < Number(min)) return false
+      if (max != null && Number(value) > Number(max)) return false
+      return true
+    }
+
+    const pvPass = Number(offerPV || 0) >= Number(stdPV || 0)
+    const fyPass = check(firstYearPercent, thresholds.firstYearPercentMin, thresholds.firstYearPercentMax)
+    const syPass = check(secondYearPercent, thresholds.secondYearPercentMin, thresholds.secondYearPercentMax)
+    const hoPass = check(handoverPercent, thresholds.handoverPercentMin, thresholds.handoverPercentMax)
+
+    // Overall acceptability: PV must be >= standard AND all defined thresholds must pass
+    const overallAcceptable =
+      pvPass &&
+      (fyPass !== false) &&
+      (syPass !== false) &&
+      (hoPass !== false)
+
+    return {
+      stdPV,
+      stdRate,
+      offerPV,
+      discountPercent,
+      deltaPV,
+      deltaPercentPV,
+      totalsNominal,
+      firstYearNominal,
+      secondYearNominal,
+      handoverNominal,
+      firstYearPercent,
+      secondYearPercent,
+      handoverPercent,
+      thresholds,
+      firstYearPass: fyPass,
+      secondYearPass: syPass,
+      handoverPass: hoPass,
+      pvPass,
+      overallAcceptable
+    }
+  }, [stdPlan, preview, inputs, firstYearPayments, subsequentYears, genResult, thresholdsCfg])
+
+  // --- Handlers for dynamic arrays ---
+  function addFirstYearPayment() {
+    setFirstYearPayments(s => [...s, { amount: 0, month: 1, type: 'regular' }])
+  }
+  function updateFirstYearPayment(index, field, value) {
+    setFirstYearPayments(s => {
+      const copy = [...s]
+      copy[index] = { ...copy[index], [field]: value }
+      return copy
+    })
+  }
+  function removeFirstYearPayment(index) {
+    setFirstYearPayments(s => s.filter((_, i) => i !== index))
+  }
+  function addSubsequentYear() {
+    setSubsequentYears(s => [...s, { totalNominal: 0, frequency: 'annually' }])
+  }
+  function updateSubsequentYear(index, field, value) {
+    setSubsequentYears(s => {
+      const copy = [...s]
+      copy[index] = { ...copy[index], [field]: value }
+      return copy
+    })
+  }
+  function removeSubsequentYear(index) {
+    setSubsequentYears(s => s.filter((_, i) => i !== index))
+  }
+  // --- End Handlers ---
 
   const schedule = genResult?.schedule || []
   const totals = genResult?.totals || null
@@ -744,6 +1182,17 @@ export default function App(props) {
               <label style={styles.label}>Std Total Price</label>
               <input type="number" value={stdPlan.totalPrice} onChange={e => setStdPlan(s => ({ ...s, totalPrice: e.target.value }))} style={styles.input(errors.std_totalPrice)} />
               {errors.std_totalPrice && <small style={styles.error}>{errors.std_totalPrice}</small>}
+              {/* Unit total breakdown */}
+              <div style={{ marginTop: 6, fontSize: 12, color: '#4b5563', background: '#fbfaf7', border: '1px dashed #ead9bd', borderRadius: 8, padding: 8 }}>
+                <div><strong>Unit Breakdown</strong></div>
+                <div>Base: {Number(unitPricingBreakdown.base || 0).toLocaleString()}</div>
+                <div>Garden: {Number(unitPricingBreakdown.garden || 0).toLocaleString()}</div>
+                <div>Roof: {Number(unitPricingBreakdown.roof || 0).toLocaleString()}</div>
+                <div>Storage: {Number(unitPricingBreakdown.storage || 0).toLocaleString()}</div>
+                <div>Garage: {Number(unitPricingBreakdown.garage || 0).toLocaleString()}</div>
+                <div style={{ marginTop: 4 }}><strong>Total (excl. maintenance): {Number(unitPricingBreakdown.totalExclMaintenance || 0).toLocaleString()}</strong></div>
+                <div>Maintenance (scheduled separately): {Number(unitPricingBreakdown.maintenance || 0).toLocaleString()}</div>
+              </div>
             </div>
             <div>
               <label style={styles.label}>Std Financial Rate (%)</label>
@@ -759,6 +1208,7 @@ export default function App(props) {
             <div>
               <label style={styles.label}>Sales Discount (%)</label>
               <input type="number" value={inputs.salesDiscountPercent} onChange={e => setInputs(s => ({ ...s, salesDiscountPercent: e.target.value }))} style={styles.input()} />
+              <DiscountHint role={authUser?.role} value={inputs.salesDiscountPercent} />
             </div>
 
             <div>
@@ -823,6 +1273,7 @@ export default function App(props) {
                           <div>
                             <label style={styles.label}>Month (1-12)</label>
                             <input type="number" min="1" max="12" value={p.month} onChange={e => updateFirstYearPayment(idx, 'month', e.target.value)} style={styles.input(errMonth)} />
+                            {language === 'ar' && <small style={{...styles.metaText, fontStyle: 'italic'}}>{getArabicMonth(p.month)}</small>}
                             {errMonth && <small style={styles.error}>{errMonth}</small>}
                           </div>
                           <div>
@@ -908,215 +1359,469 @@ export default function App(props) {
           </form>
         </section>
 
+        {/* Standard vs Offer PV Comparison */}
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Standard PV vs Offer PV</h2>
+
+          {/* Overall acceptability (PV + thresholds) */}
+          {(() => {
+            const ok = !!comparison.overallAcceptable
+            const box = {
+              marginBottom: 12,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: `1px solid ${ok ? '#10b981' : '#ef4444'}`,
+              background: ok ? '#ecfdf5' : '#fef2f2',
+              color: ok ? '#065f46' : '#7f1d1d',
+              fontWeight: 600
+            }
+            return (
+              <div style={box}>
+                {ok ? 'Offer Acceptable' : 'Offer Not Acceptable'} — requires:
+                <span style={{ marginLeft: 8, fontWeight: 500 }}>
+                  PV ≥ Standard, First Year within threshold, Second Year within threshold, Handover within threshold
+                </span>
+              </div>
+            )
+          })()}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12, background: '#fbfaf7' }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Approved Standard</h3>
+              <ul style={{ margin: 0, paddingLeft: 16 }}>
+                <li>Calculated PV (Standard): {Number(comparison.stdPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
+                <li>Financial Discount Rate: {Number(comparison.stdRate || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</li>
+              </ul>
+              <small style={styles.metaText}>
+                Pulled from approved standard pricing for the selected unit/type.
+              </small>
+            </div>
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12, background: '#fff' }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Current Offer</h3>
+              <ul style={{ margin: 0, paddingLeft: 16 }}>
+                <li>Calculated PV (Offer): {Number(comparison.offerPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
+                <li>Sales Discount Applied: {Number(comparison.discountPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</li>
+              </ul>
+              {(() => {
+                const good = !!comparison.pvPass
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${good ? '#10b981' : '#ef4444'}`,
+                  background: good ? '#ecfdf5' : '#fef2f2',
+                  color: good ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: good ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{good ? 'Offer PV ≥ Standard PV' : 'Offer PV < Standard PV'}</span>
+                  </div>
+                )
+              })()}
+              <div style={{
+                marginTop: 8,
+                padding: 8,
+                borderRadius: 8,
+                background: '#f6efe3',
+                border: '1px solid #ead9bd'
+              }}>
+                <strong>PV Difference vs Standard:</strong>
+                <div>
+                  Delta PV: {Number(comparison.deltaPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} ({Number(comparison.deltaPercentPV || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%)
+                </div>
+              </div>
+            </div>
+          </div>
+          <small style={styles.metaText}>
+            Generate a plan to update the offer PV. The comparison uses the latest preview/generation results.
+          </small>
+        </section>
+
+        {/* Payment Structure Metrics vs Thresholds */}
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Payment Structure Metrics</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            {/* First Year */}
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>First Year</h3>
+              <div>Nominal: {Number(comparison.firstYearNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <div>Percent of Total: {Number(comparison.firstYearPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
+              {comparison.firstYearPass !== null && (() => {
+                const pass = comparison.firstYearPass
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
+                  background: pass ? '#ecfdf5' : '#fef2f2',
+                  color: pass ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: pass ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
+                  </div>
+                )
+              })()}
+              {comparison.thresholds?.firstYearPercentMin != null && (
+                <small style={styles.metaText}>Min: {Number(comparison.thresholds.firstYearPercentMin).toLocaleString()}%</small>
+              )}
+              {comparison.thresholds?.firstYearPercentMax != null && (
+                <small style={styles.metaText}>Max: {Number(comparison.thresholds.firstYearPercentMax).toLocaleString()}%</small>
+              )}
+            </div>
+
+            {/* Second Year */}
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Second Year</h3>
+              <div>Nominal: {Number(comparison.secondYearNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <div>Percent of Total: {Number(comparison.secondYearPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
+              {comparison.secondYearPass !== null && (() => {
+                const pass = comparison.secondYearPass
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
+                  background: pass ? '#ecfdf5' : '#fef2f2',
+                  color: pass ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: pass ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
+                  </div>
+                )
+              })()}
+              {comparison.thresholds?.secondYearPercentMin != null && (
+                <small style={styles.metaText}>Min: {Number(comparison.thresholds.secondYearPercentMin).toLocaleString()}%</small>
+              )}
+              {comparison.thresholds?.secondYearPercentMax != null && (
+                <small style={styles.metaText}>Max: {Number(comparison.thresholds.secondYearPercentMax).toLocaleString()}%</small>
+              )}
+            </div>
+
+            {/* Handover */}
+            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Handover</h3>
+              <div>Nominal: {Number(comparison.handoverNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <div>Percent of Total: {Number(comparison.handoverPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
+              {comparison.handoverPass !== null && (() => {
+                const pass = comparison.handoverPass
+                const badgeStyle = {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
+                  background: pass ? '#ecfdf5' : '#fef2f2',
+                  color: pass ? '#065f46' : '#7f1d1d',
+                  fontWeight: 600
+                }
+                const dotStyle = {
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: pass ? '#10b981' : '#ef4444',
+                  display: 'inline-block'
+                }
+                return (
+                  <div style={badgeStyle}>
+                    <span style={dotStyle}></span>
+                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
+                  </div>
+                )
+              })()}
+              {(comparison.thresholds?.handoverPercentMin != null || comparison.thresholds?.handoverPercentMax != null) && (
+                <small style={styles.metaText}>
+                  {comparison.thresholds?.handoverPercentMin != null ? `Min: ${Number(comparison.thresholds.handoverPercentMin).toLocaleString()}%` : ''}
+                  {comparison.thresholds?.handoverPercentMax != null ? `  Max: ${Number(comparison.thresholds.handoverPercentMax).toLocaleString()}%` : ''}
+                </small>
+              )}
+            </div>
+          </div>
+          <small style={styles.metaText}>Thresholds are centrally managed and loaded from the server. Contact an admin to update them.</small>
+        </section>
+
         {/* Data Entry UI — New Sections */}
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Client Information</h2>
-          <div style={styles.grid2}>
-            <div>
-              <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
+          {role === 'property_consultant' ? (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
+                <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>Nationality (<span style={styles.arInline}>[[الجنسية]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={clientInfo.nationality} onChange={e => setClientInfo(s => ({ ...s, nationality: e.target.value }))} />
+          ) : (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Nationality (<span style={styles.arInline}>[[الجنسية]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.nationality} onChange={e => setClientInfo(s => ({ ...s, nationality: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>National ID / Passport No. (<span style={styles.arInline}>[[رقم قومي/ رقم جواز]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={clientInfo.id_or_passport} onChange={e => setClientInfo(s => ({ ...s, id_or_passport: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>ID/Passport Issue Date (<span style={styles.arInline}>[[تاريخ الاصدار]]</span>)</label>
+                <input type="date" style={styles.input()} value={clientInfo.id_issue_date} onChange={e => setClientInfo(s => ({ ...s, id_issue_date: e.target.value }))} />
+              </div>
+              <div style={styles.blockFull}>
+                <label style={styles.label}>Address (<span style={styles.arInline}>[[العنوان]]</span>)</label>
+                <textarea dir="auto" style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
+                <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Secondary Phone No. (<span style={styles.arInline}>[[رقم الهاتف (2)]]</span>)</label>
+                <input style={styles.input()} value={clientInfo.phone_secondary} onChange={e => setClientInfo(s => ({ ...s, phone_secondary: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Email Address (<span style={styles.arInline}>[[البريد الالكتروني]]</span>)</label>
+                <input type="email" style={styles.input()} value={clientInfo.email} onChange={e => setClientInfo(s => ({ ...s, email: e.target.value }))} />
+              </div>
             </div>
-            <div>
-              <label style={styles.label}>National ID / Passport No. (<span style={styles.arInline}>[[رقم قومي/ رقم جواز]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={clientInfo.id_or_passport} onChange={e => setClientInfo(s => ({ ...s, id_or_passport: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>ID/Passport Issue Date (<span style={styles.arInline}>[[تاريخ الاصدار]]</span>)</label>
-              <input type="date" style={styles.input()} value={clientInfo.id_issue_date} onChange={e => setClientInfo(s => ({ ...s, id_issue_date: e.target.value }))} />
-            </div>
-            <div style={styles.blockFull}>
-              <label style={styles.label}>Address (<span style={styles.arInline}>[[العنوان]]</span>)</label>
-              <textarea dir="auto" style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
-              <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Secondary Phone No. (<span style={styles.arInline}>[[رقم الهاتف (2)]]</span>)</label>
-              <input style={styles.input()} value={clientInfo.phone_secondary} onChange={e => setClientInfo(s => ({ ...s, phone_secondary: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Email Address (<span style={styles.arInline}>[[البريد الالكتروني]]</span>)</label>
-              <input type="email" style={styles.input()} value={clientInfo.email} onChange={e => setClientInfo(s => ({ ...s, email: e.target.value }))} />
-            </div>
-          </div>
+          )}
         </section>
 
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Unit & Project Information</h2>
-          <div style={styles.grid2}>
-            <div style={{ position: 'relative' }}>
-              <label style={styles.label}>Unit Catalog (type to search)</label>
-              <input
-                style={styles.input()}
-                value={unitQuery}
-                onChange={e => { setUnitQuery(e.target.value); }}
-                onFocus={() => { if (unitsCatalog.length) setUnitDropdownOpen(true) }}
-                placeholder="Search by code or description…"
-              />
-              {unitSearchLoading ? <small style={styles.metaText}>Searching…</small> : null}
-              {unitDropdownOpen && unitsCatalog.length > 0 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    background: '#fff',
-                    border: '1px solid #e6eaf0',
-                    borderRadius: 10,
-                    boxShadow: '0 6px 14px rgba(21,24,28,0.08)',
-                    marginTop: 4,
-                    zIndex: 20,
-                    maxHeight: 280,
-                    overflow: 'auto'
-                  }}
-                >
-                  {unitsCatalog.map(u => (
-                    <div
-                      key={u.id}
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        // Apply selected unit to calculator
-                        setUnitDropdownOpen(false)
-                        setUnitQuery(`${u.code} — ${u.description || ''}`)
-                        setStdPlan(s => ({ ...s, totalPrice: Number(u.base_price) || s.totalPrice }))
-                        setCurrency(u.currency || 'EGP')
-                        // Heuristics: plan duration defaults (Villa -> 7 years, otherwise 5)
-                        const inferredYears = (u.unit_type || '').toLowerCase().includes('villa') ? 7 : 5
-                        setInputs(s => ({ ...s, planDurationYears: s.planDurationYears || inferredYears }))
-                        setUnitInfo(s => ({
-                          ...s,
-                          unit_type: u.unit_type || s.unit_type,
-                          unit_code: u.code || s.unit_code,
-                          description: u.description || s.description,
-                          // If you want to copy code into unit_number by default, uncomment:
-                          // unit_number: s.unit_number || u.code || ''
-                        }))
-                      }}
-                      style={{
-                        padding: '10px 12px',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid #f2f5fa'
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{u.code} — {u.description || ''}</div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>
-                        {u.unit_type || '-'} • {u.currency} {Number(u.base_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  ))}
+          {role === 'property_consultant' ? (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Unit Type</label>
+                <TypeAndUnitPicker
+                  unitInfo={unitInfo}
+                  setUnitInfo={setUnitInfo}
+                  setStdPlan={setStdPlan}
+                  setInputs={setInputs}
+                  setCurrency={setCurrency}
+                  setFeeSchedule={setFeeSchedule}
+                />
+                <small style={styles.metaText}>
+                  Choose a type to view available inventory. Selecting a unit will set price and details automatically.
+                </small>
+              </div>
+              <div>
+                <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
+              </div>
+            </div>
+          ) : (
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Unit Type</label>
+                <TypeAndUnitPicker
+                  unitInfo={unitInfo}
+                  setUnitInfo={setUnitInfo}
+                  setStdPlan={setStdPlan}
+                  setInputs={setInputs}
+                  setCurrency={setCurrency}
+                  setFeeSchedule={setFeeSchedule}
+                />
+                <small style={styles.metaText}>
+                  Choose a type to view available inventory. Selecting a unit will set price and details automatically.
+                </small>
+              </div>
+              <div>
+                <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Description</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
+              </div>
+              <div>
+                <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Floor (<span style={styles.arInline}>[[الدور]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.floor} onChange={e => setUnitInfo(s => ({ ...s, floor: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Building Number (<span style={styles.arInline}>[[مبنى رقم]]</span>)</label>
+                <input style={styles.input()} value={unitInfo.building_number} onChange={e => setUnitInfo(s => ({ ...s, building_number: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Block / Sector (<span style={styles.arInline}>[[قطاع]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.block_sector} onChange={e => setUnitInfo(s => ({ ...s, block_sector: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Zone / Neighborhood (<span style={styles.arInline}>[[مجاورة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.zone} onChange={e => setUnitInfo(s => ({ ...s, zone: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Garden Details (<span style={styles.arInline}>[[مساحة الحديقة]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={unitInfo.garden_details} onChange={e => setUnitInfo(s => ({ ...s, garden_details: e.target.value }))} placeholder='مثال: "و حديقة بمساحة ٥٠ م٢"' />
+              </div>
+            </div>
+          )}
+        </section>
+
+        {(role === 'financial_admin' || role === 'financial_manager' || role === 'contract_manager' || role === 'contract_person') && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Contract & Financial Details</h2>
+            <div style={styles.grid2}>
+              <div>
+                <label style={styles.label}>Reservation Form Date (<span style={styles.arInline}>[[تاريخ استمارة الحجز]]</span>)</label>
+                <input type="date" style={styles.input()} value={contractInfo.reservation_form_date} onChange={e => setContractInfo(s => ({ ...s, reservation_form_date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Contract Date (<span style={styles.arInline}>[[تاريخ العقد]]</span>)</label>
+                <input type="date" style={styles.input()} value={contractInfo.contract_date} onChange={e => setContractInfo(s => ({ ...s, contract_date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Reservation Payment Amount (<span style={styles.arInline}>[[قيمة دفعة الحجز]]</span>)</label>
+                <input type="number" style={styles.input()} value={contractInfo.reservation_payment_amount} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_amount: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Reservation Payment Date (<span style={styles.arInline}>[[تاريخ سداد دفعة الحجز]]</span>)</label>
+                <input type="date" style={styles.input()} value={contractInfo.reservation_payment_date} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Maintenance Fee (<span style={styles.arInline}>[[مصاريف الصيانة بالأرقام]]</span>)</label>
+                <input type="number" style={styles.input()} value={contractInfo.maintenance_fee} onChange={e => setContractInfo(s => ({ ...s, maintenance_fee: e.target.value }))} />
+              </div>
+              <div>
+                <label style={styles.label}>Delivery Period (<span style={styles.arInline}>[[مدة التسليم]]</span>)</label>
+                <input dir="auto" style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12, borderTop: '1px dashed #ead9bd', paddingTop: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Additional Fees Schedule (not included in PV)</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={styles.label}>Maintenance Amount</label>
+                  <input type="number" style={styles.input()} value={feeSchedule.maintenancePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentAmount: e.target.value }))} placeholder="e.g. 150000" />
                 </div>
-              )}
-              <small style={styles.metaText}>Selecting a unit will set Std Total Price, currency, unit type, code, and description. Defaults plan duration to 5 years (7 years for Villas).</small>
+                <div>
+                  <label style={styles.label}>Maintenance Due Month (from contract date)</label>
+                  <input type="number" min="0" style={styles.input()} value={feeSchedule.maintenancePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentMonth: e.target.value }))} placeholder="e.g. 0 for at contract" />
+                </div>
+                <div>
+                  <label style={styles.label}>Garage Amount</label>
+                  <input type="number" style={styles.input()} value={feeSchedule.garagePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentAmount: e.target.value }))} placeholder="e.g. 200000" />
+                </div>
+                <div>
+                  <label style={styles.label}>Garage Due Month (from contract date)</label>
+                  <input type="number" min="0" style={styles.input()} value={feeSchedule.garagePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentMonth: e.target.value }))} placeholder="e.g. 12" />
+                </div>
+              </div>
+              <small style={styles.metaText}>These fees will be appended to the generated schedule with dates based on the contract date (or reservation form date if contract date is empty). They are not part of PV calculation.</small>
             </div>
-            <div>
-              <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
-            </div>
-            <div>
-              <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Unit Description</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
-            </div>
-            <div>
-              <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Floor (<span style={styles.arInline}>[[الدور]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.floor} onChange={e => setUnitInfo(s => ({ ...s, floor: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Building Number (<span style={styles.arInline}>[[مبنى رقم]]</span>)</label>
-              <input style={styles.input()} value={unitInfo.building_number} onChange={e => setUnitInfo(s => ({ ...s, building_number: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Block / Sector (<span style={styles.arInline}>[[قطاع]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.block_sector} onChange={e => setUnitInfo(s => ({ ...s, block_sector: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Zone / Neighborhood (<span style={styles.arInline}>[[مجاورة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.zone} onChange={e => setUnitInfo(s => ({ ...s, zone: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Garden Details (<span style={styles.arInline}>[[مساحة الحديقة]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={unitInfo.garden_details} onChange={e => setUnitInfo(s => ({ ...s, garden_details: e.target.value }))} placeholder='مثال: "و حديقة بمساحة ٥٠ م٢"' />
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Contract & Financial Details</h2>
-          <div style={styles.grid2}>
+        {(role === 'contract_manager' || role === 'contract_person') && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Custom Text Notes</h2>
             <div>
-              <label style={styles.label}>Reservation Form Date (<span style={styles.arInline}>[[تاريخ استمارة الحجز]]</span>)</label>
-              <input type="date" style={styles.input()} value={contractInfo.reservation_form_date} onChange={e => setContractInfo(s => ({ ...s, reservation_form_date: e.target.value }))} />
+              <label style={styles.label}>Down Payment Explanation (<span style={styles.arInline}>[[بيان الباقي من دفعة التعاقد]]</span>)</label>
+              <textarea dir="auto" style={styles.textarea()} value={customNotes.dp_explanation} onChange={e => setCustomNotes(s => ({ ...s, dp_explanation: e.target.value }))} placeholder='مثال: "يسدد الباقي على شيكين"' />
             </div>
-            <div>
-              <label style={styles.label}>Contract Date (<span style={styles.arInline}>[[تاريخ العقد]]</span>)</label>
-              <input type="date" style={styles.input()} value={contractInfo.contract_date} onChange={e => setContractInfo(s => ({ ...s, contract_date: e.target.value }))} />
+            <div style={{ marginTop: 12 }}>
+              <label style={styles.label}>Power of Attorney Clause (<span style={styles.arInline}>[[بيان التوكيل]]</span>)</label>
+              <textarea style={styles.textarea()} value={customNotes.poa_clause} onChange={e => setCustomNotes(s => ({ ...s, poa_clause: e.target.value }))} placeholder='بنود قانونية خاصة إن وجدت' />
             </div>
-            <div>
-              <label style={styles.label}>Reservation Payment Amount (<span style={styles.arInline}>[[قيمة دفعة الحجز]]</span>)</label>
-              <input type="number" style={styles.input()} value={contractInfo.reservation_payment_amount} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_amount: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Reservation Payment Date (<span style={styles.arInline}>[[تاريخ سداد دفعة الحجز]]</span>)</label>
-              <input type="date" style={styles.input()} value={contractInfo.reservation_payment_date} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_date: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Maintenance Fee (<span style={styles.arInline}>[[مصاريف الصيانة بالأرقام]]</span>)</label>
-              <input type="number" style={styles.input()} value={contractInfo.maintenance_fee} onChange={e => setContractInfo(s => ({ ...s, maintenance_fee: e.target.value }))} />
-            </div>
-            <div>
-              <label style={styles.label}>Delivery Period (<span style={styles.arInline}>[[مدة التسليم]]</span>)</label>
-              <input dir="auto" style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
-            </div>
-          </div>
-        </section>
-
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Custom Text Notes</h2>
-          <div>
-            <label style={styles.label}>Down Payment Explanation (<span style={styles.arInline}>[[بيان الباقي من دفعة التعاقد]]</span>)</label>
-            <textarea dir="auto" style={styles.textarea()} value={customNotes.dp_explanation} onChange={e => setCustomNotes(s => ({ ...s, dp_explanation: e.target.value }))} placeholder='مثال: "يسدد الباقي على شيكين"' />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <label style={styles.label}>Power of Attorney Clause (<span style={styles.arInline}>[[بيان التوكيل]]</span>)</label>
-            <textarea style={styles.textarea()} value={customNotes.poa_clause} onChange={e => setCustomNotes(s => ({ ...s, poa_clause: e.target.value }))} placeholder='بنود قانونية خاصة إن وجدت' />
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Results Table */}
         <section style={styles.section}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={styles.sectionTitle}>Payment Schedule</h2>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => generateDocument('pricing_form')}
-                disabled={docLoading}
-                style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
-              >
-                {docLoading ? 'Generating…' : 'Generate Pricing Form'}
-              </button>
-              <button
-                type="button"
-                onClick={() => generateDocument('contract')}
-                disabled={docLoading}
-                style={{ ...styles.btnPrimary, opacity: docLoading ? 0.7 : 1 }}
-              >
-                {docLoading ? 'Generating…' : 'Generate Contract'}
-              </button>
+              {/* Pricing Form — Property Consultant only */}
+              {authUser?.role === 'property_consultant' && (
+                <button
+                  type="button"
+                  onClick={() => generateDocument('pricing_form')}
+                  style={styles.btnPrimary}
+                >
+                  Generate Pricing Form
+                </button>
+              )}
+              {/* Reservation Form — Financial Admin only */}
+              {authUser?.role === 'financial_admin' && (
+                <button
+                  type="button"
+                  onClick={() => generateDocument('reservation_form')}
+                  style={styles.btnPrimary}
+                >
+                  Generate Reservation Form
+                </button>
+              )}
+              {/* Contract — Contract Person only */}
+              {authUser?.role === 'contract_person' && (
+                <button
+                  type="button"
+                  onClick={() => generateDocument('contract')}
+                  style={styles.btnPrimary}
+                >
+                  Generate Contract
+                </button>
+              )}
               <button type="button" onClick={exportScheduleXLSX} disabled={!schedule.length} style={styles.btn}>
                 Export to Excel (.xlsx)
               </button>
@@ -1139,6 +1844,7 @@ export default function App(props) {
                   <tr>
                     <th style={styles.th}>#</th>
                     <th style={styles.th}>Month</th>
+                    <th style={styles.th}>Date</th>
                     <th style={styles.th}>Label</th>
                     <th style={{ ...styles.th, textAlign: 'right' }}>Amount</th>
                     <th style={{ ...styles.th, textAlign: language === 'ar' ? 'right' : 'left' }}>Written Amount</th>
@@ -1149,12 +1855,13 @@ export default function App(props) {
                     <tr key={idx}>
                       <td style={styles.td}>{idx + 1}</td>
                       <td style={styles.td}>{row.month}</td>
+                      <td style={styles.td}>{row.date || ''}</td>
                       <td style={styles.td}>{row.label}</td>
                       <td style={{ ...styles.td, textAlign: 'right' }}>
                         {Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td style={{ ...styles.td, direction: language === 'ar' ? 'rtl' : 'ltr', textAlign: language === 'ar' ? 'right' : 'left' }}>
-                        {row.writtenAmount}
+                        {language === 'ar' ? numberToArabic(row.amount, 'جنيه مصري', 'قرش') : row.writtenAmount}
                       </td>
                     </tr>
                   ))}

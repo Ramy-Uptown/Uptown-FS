@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'url'
 import crypto from 'crypto'
 import { pool } from './db.js'
 
@@ -18,7 +19,9 @@ export async function runMigrations() {
     );
   `)
 
-  const migrationsDir = path.join(process.cwd(), 'api', 'src', 'migrations')
+  // Resolve migrations directory relative to this file to work in Docker (/app/src/migrations)
+  const thisDir = path.dirname(fileURLToPath(import.meta.url))
+  const migrationsDir = path.join(thisDir, 'migrations')
   if (!fs.existsSync(migrationsDir)) {
     // Nothing to do
     return
