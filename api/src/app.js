@@ -514,6 +514,30 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
         financialDiscountRate: Number.isFinite(stdRate) ? stdRate : 0,
         calculatedPV: totalPrice
       }
+      // Populate manager's target payment after 1 year when available
+      try {
+        if (standardPricingId) {
+          const t = await pool.query(
+            `SELECT target_payment_after_1y FROM standard_pricing WHERE id=$1`,
+            [Number(standardPricingId)]
+          )
+          if (t.rows[0] && t.rows[0].target_payment_after_1y != null) {
+            effectiveStdPlan.targetPaymentAfter1Year = Number(t.rows[0].target_payment_after_1y)
+          }
+        } else if (unitId) {
+          const t2 = await pool.query(
+            `SELECT target_payment_after_1y
+             FROM standard_pricing
+             WHERE status='approved' AND unit_id=$1
+             ORDER BY id DESC
+             LIMIT 1`,
+            [Number(unitId)]
+          )
+          if (t2.rows[0] && t2.rows[0].target_payment_after_1y != null) {
+            effectiveStdPlan.targetPaymentAfter1Year = Number(t2.rows[0].target_payment_after_1y)
+          }
+        }
+      } catch {}
       // If financial rate is missing from model pricing, attempt to read from legacy standard_pricing for this unit
       if ((!Number.isFinite(effectiveStdPlan.financialDiscountRate) || effectiveStdPlan.financialDiscountRate === 0) && unitId) {
         try {
@@ -661,6 +685,30 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
         financialDiscountRate: Number(row.std_financial_rate_percent) || 0,
         calculatedPV: Number(row.price) || 0
       }
+      // Populate manager's target payment after 1 year when available
+      try {
+        if (standardPricingId) {
+          const t = await pool.query(
+            `SELECT target_payment_after_1y FROM standard_pricing WHERE id=$1`,
+            [Number(standardPricingId)]
+          )
+          if (t.rows[0] && t.rows[0].target_payment_after_1y != null) {
+            effectiveStdPlan.targetPaymentAfter1Year = Number(t.rows[0].target_payment_after_1y)
+          }
+        } else if (unitId) {
+          const t2 = await pool.query(
+            `SELECT target_payment_after_1y
+             FROM standard_pricing
+             WHERE status='approved' AND unit_id=$1
+             ORDER BY id DESC
+             LIMIT 1`,
+            [Number(unitId)]
+          )
+          if (t2.rows[0] && t2.rows[0].target_payment_after_1y != null) {
+            effectiveStdPlan.targetPaymentAfter1Year = Number(t2.rows[0].target_payment_after_1y)
+          }
+        }
+      } catch {}
       // If financial rate is missing from model pricing, attempt to read from legacy standard_pricing for this unit
       if ((!Number.isFinite(effectiveStdPlan.financialDiscountRate) || effectiveStdPlan.financialDiscountRate === 0) && unitId) {
         try {
@@ -801,11 +849,11 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
       firstYearPercentMax: null,
       secondYearPercentMin: null,
       secondYearPercentMax: null,
-      thirdYearPercentMin: 65,
+      thirdYearPercentMin: null,
       thirdYearPercentMax: null,
-      handoverPercentMin: 65,
+      handoverPercentMin: null,
       handoverPercentMax: null,
-      pvTolerancePercent: 100
+      pvTolerancePercent: null
     }
     try {
       const tr = await pool.query('SELECT * FROM payment_thresholds ORDER BY id DESC LIMIT 1')
@@ -815,15 +863,21 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
         thresholds.firstYearPercentMax = row.first_year_percent_max == null ? null : Number(row.first_year_percent_max)
         thresholds.secondYearPercentMin = row.second_year_percent_min == null ? null : Number(row.second_year_percent_min)
         thresholds.secondYearPercentMax = row.second_year_percent_max == null ? null : Number(row.second_year_percent_max)
-        thresholds.handoverPercentMin = row.handover_percent_min == null ? thresholds.handoverPercentMin : Number(row.handover_percent_min)
+        thresholds.thirdYearPercentMin = row.third_year_percent_min == null ? null : Number(row.third_year_percent_min)
+        thresholds.thirdYearPercentMax = row.third_year_percent_max == null ? null : Number(row.third_year_percent_max)
+        thresholds.handoverPercentMin = row.handover_percent_min == null ? null : Number(row.handover_percent_min)
         thresholds.handoverPercentMax = row.handover_percent_max == null ? null : Number(row.handover_percent_max)
+        thresholds.pvTolerancePercent = row.pv_tolerance_percent == null ? null : Number(row.pv_tolerance_percent)
       }
     } catch (e) {
       // keep defaults
     }
-    // Fallback sensible defaults if null
+    // Fallback sensible defaults if null (mirror ver6.2)
     if (thresholds.firstYearPercentMin == null) thresholds.firstYearPercentMin = 35
     if (thresholds.secondYearPercentMin == null) thresholds.secondYearPercentMin = 50
+    if (thresholds.thirdYearPercentMin == null) thresholds.thirdYearPercentMin = 65
+    if (thresholds.handoverPercentMin == null) thresholds.handoverPercentMin = 65
+    if (thresholds.pvTolerancePercent == null) thresholds.pvTolerancePercent = 100
 
     // ----- Standard PV baseline -----
     const annualRate = Number(effectiveStdPlan.financialDiscountRate) || 0
@@ -856,9 +910,10 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
     // Use nominal base excluding non-PV extras; include handover in base as per ver6.2 intent
     const totalNominalForConditions = (Number(result.totalNominalPrice) || 0) + (Number(effInputs.additionalHandoverPayment) || 0)
 
-    // Helper to compute cumulative at month cutoff, excluding extra fees
+    // Helper to compute cumulative at month cutoff
+    // Include Garage amounts in acceptance totals, exclude Maintenance only (as per requirements)
     const sumUpTo = (monthCutoff) => schedule
-      .filter(s => s.label !== 'Maintenance Fee' && s.label !== 'Garage Fee')
+      .filter(s => s.label !== 'Maintenance Fee')
       .reduce((sum, s) => sum + (s.month <= monthCutoff ? (Number(s.amount) || 0) : 0), 0)
 
     const cutoffY1 = 12
@@ -883,7 +938,7 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
     const percentHandover = pct(paidByHandover, totalNominalForConditions)
 
     // Condition 1: Payment After 1 Year ≥ Target (fallback to threshold% of standard price if target not present)
-    const stdTargetY1 = Number(stdPlan?.targetPaymentAfter1Year) || ((Number(effectiveStdPlan.totalPrice) || 0) * (thresholds.firstYearPercentMin / 100))
+    const stdTargetY1 = Number(effectiveStdPlan?.targetPaymentAfter1Year) || ((Number(effectiveStdPlan.totalPrice) || 0) * (thresholds.firstYearPercentMin / 100))
     const cond1Pass = paidY1 >= stdTargetY1 - 1e-9
 
     const withinRange = (value, min, max) => {
