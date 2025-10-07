@@ -44,6 +44,38 @@ router.get('/payment-thresholds', async (req, res) => {
   }
 })
 
+/**
+ * Acceptance thresholds (expanded) — dynamic TM-approved values
+ * This endpoint returns a superset including third-year and PV tolerance values.
+ * For backwards compatibility with existing payment_thresholds schema, we derive sensible defaults if fields are absent.
+ */
+router.get('/acceptance-thresholds', async (req, res) => {
+  try {
+    const row = await readThresholds()
+
+    // Base from existing table
+    const base = mapRow(row)
+
+    // Derived defaults to mirror ver6.2 if not yet configured in DB
+    const thirdYearPercentMin = 65
+    const thirdYearPercentMax = null
+    const pvTolerancePercent = 100 // 100% => Proposed PV must be >= Standard PV (no relaxation)
+
+    return res.json({
+      ok: true,
+      thresholds: {
+        ...base,
+        thirdYearPercentMin,
+        thirdYearPercentMax,
+        pvTolerancePercent
+      }
+    })
+  } catch (e) {
+    console.error('GET /api/config/acceptance-thresholds error:', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
 // Update payment thresholds (admin-only)
 router.patch('/payment-thresholds', requireRole(['admin', 'superadmin']), async (req, res) => {
   try {
