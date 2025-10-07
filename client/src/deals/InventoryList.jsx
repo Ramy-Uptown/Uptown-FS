@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { useNavigate } from 'react-router-dom'
+import UnitDetailsTable from '../components/UnitDetailsTable.jsx'
+import { UnitCardsGrid } from '../components/UnitDetailsCard.jsx'
 
 export default function InventoryList() {
   const navigate = useNavigate()
@@ -13,6 +15,22 @@ export default function InventoryList() {
   const [pageSize, setPageSize] = useState(20)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
+
+  // Role-based defaults:
+  const role = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('auth_user') || '{}')?.role || ''
+    } catch {
+      return ''
+    }
+  })()
+  const initialLayout = (role === 'property_consultant' || role === 'sales_manager') ? 'grid' : 'table'
+  const initialGridMode = (role === 'property_consultant' || role === 'sales_manager') ? 'compact' : 'expanded'
+  const initialTableMode = (role === 'financial_manager' || role === 'financial_admin' || role === 'admin' || role === 'superadmin') ? 'expanded' : 'compact'
+
+  const [layout, setLayout] = useState(initialLayout) // 'table' | 'grid'
+  const [gridMode, setGridMode] = useState(initialGridMode) // 'compact' | 'expanded'
+  const [tableMode, setTableMode] = useState(initialTableMode) // 'compact' | 'expanded'
 
   useEffect(() => {
     async function loadTypes() {
@@ -63,12 +81,16 @@ export default function InventoryList() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <h2 style={{ marginTop: 0 }}>Inventory</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => navigate('/deals/create')} style={btnPrimary}>Go to Calculator</button>
+          <div style={{ display: 'inline-flex', gap: 6, marginLeft: 8 }}>
+            <button onClick={() => setLayout('table')} style={{ ...btn, ...(layout === 'table' ? { background: '#f9fbfd' } : {}) }}>Table</button>
+            <button onClick={() => setLayout('grid')} style={{ ...btn, ...(layout === 'grid' ? { background: '#f9fbfd' } : {}) }}>Grid</button>
+          </div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gap: 8, marginBottom: 12, gridTemplateColumns: '1fr 1fr 1fr 1fr auto' }}>
+      <div style={{ display: 'grid', gap: 8, marginBottom: 12, gridTemplateColumns: layout === 'grid' ? '1fr 1fr 1fr auto auto' : '1fr 1fr 1fr auto auto' }}>
         <input placeholder="Search code/description…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={ctrl} />
         <select value={typeId} onChange={e => { setTypeId(e.target.value); setPage(1) }} style={ctrl}>
           <option value="">All types</option>
@@ -79,48 +101,36 @@ export default function InventoryList() {
           <option value={20}>20</option>
           <option value={50}>50</option>
         </select>
+        {layout === 'grid' ? (
+          <select value={gridMode} onChange={e => setGridMode(e.target.value)} style={ctrl}>
+            <option value="compact">Compact</option>
+            <option value="expanded">Expanded</option>
+          </select>
+        ) : (
+          <select value={tableMode} onChange={e => setTableMode(e.target.value)} style={ctrl}>
+            <option value="compact">Compact</option>
+            <option value="expanded">Expanded</option>
+          </select>
+        )}
         <button onClick={() => load(1)} disabled={loading} style={btn}>Refresh</button>
       </div>
 
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
-      <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={th}>Code</th>
-              <th style={th}>Description</th>
-              <th style={th}>Type</th>
-              <th style={{ ...th, textAlign: 'right' }}>Total Price (excl. maintenance)</th>
-              <th style={th}>Status</th>
-              <th style={th}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {units.map(u => (
-              <tr key={u.id}>
-                <td style={td}>{u.code}</td>
-                <td style={td}>{u.description || ''}</td>
-                <td style={td}>{u.unit_type_name || u.unit_type || ''}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{Number(u.total_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                <td style={td}>{u.unit_status}</td>
-                <td style={td}>
-                  <button
-                    style={btn}
-                    onClick={() => navigate(`/deals/create?unit_id=${u.id}`)}
-                  >
-                    Create Offer
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {units.length === 0 && !loading && (
-              <tr>
-                <td style={td} colSpan={6}>No units found.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {layout === 'table' ? (
+        <UnitDetailsTable
+          units={units}
+          loading={loading}
+          onCreateOffer={(u) => navigate(`/deals/create?unit_id=${u.id}`)}
+          styles={{ th, td, btn }}
+          mode={tableMode}
+        />
+      ) : (
+        <UnitCardsGrid
+          units={units}
+          onCreateOffer={(u) => navigate(`/deals/create?unit_id=${u.id}`)}
+          mode={gridMode}
+        />
+      )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
         <span style={{ color: '#64748b', fontSize: 12 }}>

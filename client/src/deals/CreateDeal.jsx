@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
+import { buildPlanRequest, generatePlan } from '../lib/calculatorApi.js'
 import CalculatorApp from '../App.jsx'
 import FullPageLoader from '../components/FullPageLoader.jsx'
+import { useCalculatorSnapshot } from '../lib/useCalculatorSnapshot.js'
 
 export default function CreateDeal() {
   const [error, setError] = useState('')
@@ -42,6 +44,7 @@ export default function CreateDeal() {
   const [calcResult, setCalcResult] = useState(null)
 
   const navigate = useNavigate()
+  const { ready, getSnap, applyClient, apply, applyPrefill } = useCalculatorSnapshot()
 
   // Fetch global standard plan on mount
   useEffect(() => {
@@ -94,47 +97,44 @@ export default function CreateDeal() {
 
         // Prefill embedded calculator via exposed bridge and sync local UI
         try {
-          const applyPrefill = window.__uptown_calc_applyUnitPrefill
-          if (typeof applyPrefill === 'function') {
-            applyPrefill({
-              unitInfo: {
-                unit_type: u.unit_type || u.unit_type_name || '',
-                unit_code: u.code || '',
-                description: u.description || '',
-                unit_number: u.unit_number || '',
-                floor: u.floor || '',
-                building_number: u.building_number || '',
-                block_sector: u.block_sector || '',
-                zone: u.zone || '',
-                garden_details: u.garden_details || '',
-                area: u.area || '',
-                orientation: u.orientation || '',
-                has_garden: u.has_garden || false,
-                garden_area: u.garden_area || '',
-                has_roof: u.has_roof || false,
-                roof_area: u.roof_area || '',
-                garage_area: u.garage_area || '',
-                unit_id: u.id
-              },
-              stdPlan: {
-                totalPrice: stdTotal,
-                base_price: stdBase,
-                maintenance_price: stdMaintenance,
-                financialDiscountRate: Number(standardPlan?.std_financial_rate_percent) || 0,
-                calculatedPV: 0
-              },
-              unitPricingBreakdown: {
-                base: stdBase,
-                garden: stdGarden,
-                roof: stdRoof,
-                storage: stdStorage,
-                garage: stdGarage,
-                maintenance: stdMaintenance,
-                totalExclMaintenance: stdTotal
-              },
-              currency: u.currency || 'EGP'
-            })
-          }
+          applyPrefill({
+            unitInfo: {
+              unit_type: u.unit_type || u.unit_type_name || '',
+              unit_code: u.code || '',
+              description: u.description || '',
+              unit_number: u.unit_number || '',
+              floor: u.floor || '',
+              building_number: u.building_number || '',
+              block_sector: u.block_sector || '',
+              zone: u.zone || '',
+              garden_details: u.garden_details || '',
+              area: u.area || '',
+              orientation: u.orientation || '',
+              has_garden: u.has_garden || false,
+              garden_area: u.garden_area || '',
+              has_roof: u.has_roof || false,
+              roof_area: u.roof_area || '',
+              garage_area: u.garage_area || '',
+              unit_id: u.id
+            },
+            stdPlan: {
+              totalPrice: stdTotal,
+              base_price: stdBase,
+              maintenance_price: stdMaintenance,
+              financialDiscountRate: Number(standardPlan?.std_financial_rate_percent) || 0,
+              calculatedPV: 0
+            },
+            unitPricingBreakdown: {
+              base: stdBase,
+              garden: stdGarden,
+              roof: stdRoof,
+              storage: stdStorage,
+              garage: stdGarage,
+              maintenance: stdMaintenance,
+              totalExclMaintenance: stdTotal
+            },
+            currency: u.currency || 'EGP'
+          })
           setUnitForm({
             unit_type: u.unit_type || u.unit_type_name || '',
             unit_code: u.code || '',
@@ -186,7 +186,7 @@ export default function CreateDeal() {
 
     // Sync from calculator snapshot if available
     try {
-      const getSnap = window.__uptown_calc_getSnapshot
+      const snapnap = window.__uptown_calc_getSnapshot
       if (typeof getSnap === 'function') {
         const snap = getSnap()
         const ui = snap?.unitInfo || {}
@@ -228,11 +228,10 @@ export default function CreateDeal() {
   }, [reviewFields])
 
   async function buildPayloadFromSnapshot() {
-    const snapFn = window.__uptown_calc_getSnapshot
-    if (typeof snapFn !== 'function') {
+    const snap = getSnap()
+    if (!snap) {
       throw new Error('Calculator not ready yet. Please try again in a moment.')
     }
-    const snap = snapFn()
     // Build title, amount, unit type from snapshot
     const titleParts = []
     if (snap?.clientInfo?.buyer_name) titleParts.push(snap.clientInfo.buyer_name)
@@ -363,8 +362,7 @@ export default function CreateDeal() {
   }
 
   function applyToForm() {
-    const applyFn = window.__uptown_calc_applyClientInfo
-    if (typeof applyFn !== 'function') {
+    if (!ready) {
       setOcrError('Form not ready to accept data. Please try again.')
       return
     }
@@ -376,7 +374,7 @@ export default function CreateDeal() {
     if (reviewFields.nationalId && !/\D/.test(reviewFields.nationalId)) {
       updates.nationality = 'Egyptian'
     }
-    applyFn(updates)
+    applyClient(updates)
   }
 
   // Trigger server calculation using new backend engine
@@ -388,44 +386,19 @@ export default function CreateDeal() {
       if (!selectedUnit) {
         throw new Error('Please select a unit from the inventory first.')
       }
-      if (!standardPlan) {
-        throw new Error('Standard plan not loaded yet. Please try again in a moment.')
-      }
       const snapFn = window.__uptown_calc_getSnapshot
       if (typeof snapFn !== 'function') {
         throw new Error('Calculator snapshot not ready. Please try again.')
       }
       const snap = snapFn()
-      const proposalInputs = snap?.inputs || {}
-      const proposal = {
-        salesDiscountPercent: Number(proposalInputs.salesDiscountPercent) || 0,
-        dpType: proposalInputs.dpType || 'amount',
-        downPaymentValue: Number(proposalInputs.downPaymentValue) || 0,
-        planDurationYears: Number(proposalInputs.planDurationYears) || Number(standardPlan.plan_duration_years) || 1,
-        installmentFrequency: proposalInputs.installmentFrequency || standardPlan.installment_frequency || 'monthly',
-        additionalHandoverPayment: Number(proposalInputs.additionalHandoverPayment) || 0,
-        handoverYear: Number(proposalInputs.handoverYear) || 0,
-        splitFirstYearPayments: !!proposalInputs.splitFirstYearPayments,
-        firstYearPayments: Array.isArray(snap?.firstYearPayments) ? snap.firstYearPayments : [],
-        subsequentYears: Array.isArray(snap?.subsequentYears) ? snap.subsequentYears : [],
-        // Base date for absolute due dates if available in embedded form
-        baseDate: snap?.contractInfo?.contract_date || snap?.contractInfo?.reservation_form_date || null,
-        maintenancePaymentAmount: Number(snap?.feeSchedule?.maintenancePaymentAmount) || 0,
-        maintenancePaymentMonth: Number(snap?.feeSchedule?.maintenancePaymentMonth) || 0,
-        garagePaymentAmount: Number(snap?.feeSchedule?.garagePaymentAmount) || 0,
-        garagePaymentMonth: Number(snap?.feeSchedule?.garagePaymentMonth) || 0
-      }
-      const body = { unit: selectedUnit, standardPlan, proposal }
-      const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+      const genBody = buildPlanRequest(snap, Number(selectedUnit.id))
+      const data = await generatePlan(genBody)
+      setCalcResult({
+        schedule: data.schedule || [],
+        totals: data.totals || {},
+        offerPV: Number(data?.meta?.calculatedPV || 0),
+        meta: data.meta || {}
       })
-      const data = await resp.json()
-      if (!resp.ok) {
-        throw new Error(data?.error?.message || 'Calculation failed')
-      }
-      setCalcResult(data.result || null)
     } catch (e) {
       setCalcError(e.message || String(e))
     } finally {
@@ -605,32 +578,15 @@ export default function CreateDeal() {
         </div>
         {calcError ? <p style={{ color: '#e11d48' }}>{calcError}</p> : null}
         {!calcResult ? (
-          <small style={{ color: '#64748b' }}>Click \"Calculate (Server)\" to compute PV and conditions using the backend engine.</small>
+          <small style={{ color: '#64748b' }}>Click \"Calculate (Server)\" to generate a schedule using the backend engine.</small>
         ) : (
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <div style={{ border: '1px dashed #dfe5ee', borderRadius: 10, padding: 10 }}>
-                <strong>Proposed Plan PV:</strong>
-                <div>{Number(calcResult.proposedPlanPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-              </div>
-              <div style={{ border: '1px dashed #dfe5ee', borderRadius: 10, padding: 10 }}>
-                <strong>Standard Plan PV:</strong>
-                <div>{Number(calcResult.standardPlanPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-              </div>
-            </div>
-            <div style={{ marginTop: 8, padding: 8, border: '1px solid #eef2f7', borderRadius: 10 }}>
-              <strong>Decision:</strong> {calcResult.decision || ''}
-              <div>PV Difference: {Number(calcResult.difference || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-            </div>
-            <div style={{ marginTop: 8 }}>
-              <h4 style={{ marginTop: 0 }}>Acceptance Conditions</h4>
-              <ul style={{ margin: 0, paddingLeft: 16 }}>
-                {(calcResult.conditions || []).map((c, idx) => (
-                  <li key={idx}>
-                    <span style={{ fontWeight: 600 }}>{c.label}:</span> {c.pass ? 'Pass' : 'Fail'}
-                  </li>
-                ))}
-              </ul>
+            <div style={{ border: '1px dashed #dfe5ee', borderRadius: 10, padding: 10, marginBottom: 8 }}>
+              <strong>Offer PV:</strong>
+              <div>{Number(calcResult.offerPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              {calcResult.meta?.npvWarning ? (
+                <div style={{ color: '#b45309', marginTop: 6 }}>Warning: NPV below tolerance.</div>
+              ) : null}
             </div>
             <div style={{ marginTop: 8 }}>
               <h4 style={{ marginTop: 0 }}>Payment Schedule</h4>
@@ -646,7 +602,7 @@ export default function CreateDeal() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(calcResult.proposalSchedule || []).map((row, i) => (
+                    {(calcResult.schedule || []).map((row, i) => (
                       <tr key={i}>
                         <td style={td}>{i + 1}</td>
                         <td style={td}>{row.month}</td>
@@ -655,7 +611,7 @@ export default function CreateDeal() {
                         <td style={{ ...td, textAlign: 'right' }}>{Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       </tr>
                     ))}
-                    {(calcResult.proposalSchedule || []).length === 0 && (
+                    {(calcResult.schedule || []).length === 0 && (
                       <tr><td style={td} colSpan={5}>No schedule.</td></tr>
                     )}
                   </tbody>
