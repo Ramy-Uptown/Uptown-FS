@@ -386,6 +386,35 @@ router.post('/:id/submit', authMiddleware, validate(dealSubmitSchema), async (re
       await setAcceptabilityFlags(id, req.body.acceptability, req.user)
     }
 
+    // Auto-evaluate based on calculator snapshot stored in deal.details
+    // If evaluation exists and decision = REJECT, mark needs_override and log immediately.
+    try {
+      const det = deal.details || {}
+      const evalObj = det?.calculator?.generatedPlan?.evaluation || null
+      if (evalObj && evalObj.decision === 'REJECT') {
+        const updOverride = await pool.query(
+          `UPDATE deals
+           SET needs_override=TRUE,
+               override_requested_by=$1,
+               override_requested_at=now(),
+               updated_at=now()
+           WHERE id=$2 RETURNING *`,
+          [req.user.id, id]
+        )
+        const overrideNote = {
+          event: 'override_requested',
+          by: { id: req.user.id, role: req.user.role },
+          reason: 'auto: evaluation REJECT at submission',
+          evaluation: evalObj,
+          at: new Date().toISOString()
+        }
+        await logHistory(id, req.user.id, 'override_requested', JSON.stringify(overrideNote))
+      }
+    } catch (autoErr) {
+      // Do not block submission if evaluation parsing fails
+      console.warn('Auto-override on submit warning:', autoErr?.message || autoErr)
+    }
+
     const upd = await pool.query('UPDATE deals SET status=$1 WHERE id=$2 RETURNING *', ['pending_approval', id])
     const submittedDeal = upd.rows[0]
     const note = {
