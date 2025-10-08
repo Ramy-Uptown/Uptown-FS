@@ -514,6 +514,58 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
         financialDiscountRate: Number.isFinite(stdRate) ? stdRate : 0,
         calculatedPV: totalPrice
       }
+      // Populate manager's target payment after 1 year when available
+      try {
+        if (standardPricingId) {
+          const t = await pool.query(
+            `SELECT target_payment_after_1y FROM standard_pricing WHERE id=$1`,
+            [Number(standardPricingId)]
+          )
+          if (t.rows[0] && t.rows[0].target_payment_after_1y != null) {
+            effectiveStdPlan.targetPaymentAfter1Year = Number(t.rows[0].target_payment_after_1y)
+          }
+        } else if (unitId) {
+          const t2 = await pool.query(
+            `SELECT target_payment_after_1y
+             FROM standard_pricing
+             WHERE status='approved' AND unit_id=$1
+             ORDER BY id DESC
+             LIMIT 1`,
+            [Number(unitId)]
+          )
+          if (t2.rows[0] && t2.rows[0].target_payment_after_1y != null) {
+            effectiveStdPlan.targetPaymentAfter1Year = Number(t2.rows[0].target_payment_after_1y)
+          }
+        }
+      } catch {}
+      // If financial rate is missing from model pricing, attempt to read from legacy standard_pricing for this unit
+      if ((!Number.isFinite(effectiveStdPlan.financialDiscountRate) || effectiveStdPlan.financialDiscountRate === 0) && unitId) {
+        try {
+          const rf = await pool.query(
+            `SELECT std_financial_rate_percent, plan_duration_years, installment_frequency
+             FROM standard_pricing
+             WHERE status='approved' AND unit_id=$1
+             ORDER BY id DESC
+             LIMIT 1`,
+            [Number(unitId)]
+          )
+          const fr = rf.rows[0]
+          if (fr) {
+            const rate = Number(fr.std_financial_rate_percent)
+            if (Number.isFinite(rate) && rate > 0) {
+              effectiveStdPlan.financialDiscountRate = rate
+            }
+            if (row.plan_duration_years == null && fr.plan_duration_years != null && req.body?.inputs?.planDurationYears == null) {
+              if (!isObject(req.body.inputs)) req.body.inputs = {}
+              req.body.inputs.planDurationYears = fr.plan_duration_years
+            }
+            if (!row.installment_frequency && fr.installment_frequency && !req.body?.inputs?.installmentFrequency) {
+              if (!isObject(req.body.inputs)) req.body.inputs = {}
+              req.body.inputs.installmentFrequency = fr.installment_frequency
+            }
+          }
+        } catch {}
+      }
       // Default inputs fields from standard if not provided (when available)
       if (!isObject(req.body.inputs)) req.body.inputs = {}
       if (row.plan_duration_years != null && req.body.inputs.planDurationYears == null) {
@@ -633,6 +685,52 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
         financialDiscountRate: Number(row.std_financial_rate_percent) || 0,
         calculatedPV: Number(row.price) || 0
       }
+      // Populate manager's target payment after 1 year when available
+      try {
+        if (standardPricingId) {
+          const t = await pool.query(
+            `SELECT target_payment_after_1y FROM standard_pricing WHERE id=$1`,
+            [Number(standardPricingId)]
+          )
+          if (t.rows[0] && t.rows[0].target_payment_after_1y != null) {
+            effectiveStdPlan.targetPaymentAfter1Year = Number(t.rows[0].target_payment_after_1y)
+          }
+        } else if (unitId) {
+          const t2 = await pool.query(
+            `SELECT target_payment_after_1y
+             FROM standard_pricing
+             WHERE status='approved' AND unit_id=$1
+             ORDER BY id DESC
+             LIMIT 1`,
+            [Number(unitId)]
+          )
+          if (t2.rows[0] && t2.rows[0].target_payment_after_1y != null) {
+            effectiveStdPlan.targetPaymentAfter1Year = Number(t2.rows[0].target_payment_after_1y)
+          }
+        }
+      } catch {}
+      // If financial rate is missing from model pricing, attempt to read from legacy standard_pricing for this unit
+      if ((!Number.isFinite(effectiveStdPlan.financialDiscountRate) || effectiveStdPlan.financialDiscountRate === 0) && unitId) {
+        try {
+          const rf = await pool.query(
+            `SELECT std_financial_rate_percent, plan_duration_years, installment_frequency
+             FROM standard_pricing
+             WHERE status='approved' AND unit_id=$1
+             ORDER BY id DESC
+             LIMIT 1`,
+            [Number(unitId)]
+          )
+          const fr = rf.rows[0]
+          if (fr) {
+            const rate = Number(fr.std_financial_rate_percent)
+            if (Number.isFinite(rate) && rate > 0) {
+              effectiveStdPlan.financialDiscountRate = rate
+            }
+            if (effInputs.planDurationYears == null && fr.plan_duration_years != null) effInputs.planDurationYears = fr.plan_duration_years
+            if (!effInputs.installmentFrequency && fr.installment_frequency) effInputs.installmentFrequency = fr.installment_frequency
+          }
+        } catch {}
+      }
       if (effInputs.planDurationYears == null && row.plan_duration_years != null) effInputs.planDurationYears = row.plan_duration_years
       if (!effInputs.installmentFrequency && row.installment_frequency) effInputs.installmentFrequency = row.installment_frequency
     } else {
@@ -745,7 +843,158 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
       totalNominal: schedule.reduce((s, e) => s + e.amount, 0)
     }
 
-    return res.json({ ok: true, schedule, totals, meta: { ...result.meta, npvWarning } })
+    // ----- Dynamic acceptance thresholds (TM-approved) -----
+    let thresholds = {
+      firstYearPercentMin: null,
+      firstYearPercentMax: null,
+      secondYearPercentMin: null,
+      secondYearPercentMax: null,
+      thirdYearPercentMin: null,
+      thirdYearPercentMax: null,
+      handoverPercentMin: null,
+      handoverPercentMax: null,
+      pvTolerancePercent: null
+    }
+    try {
+      const tr = await pool.query('SELECT * FROM payment_thresholds ORDER BY id DESC LIMIT 1')
+      if (tr.rows.length) {
+        const row = tr.rows[0]
+        thresholds.firstYearPercentMin = row.first_year_percent_min == null ? null : Number(row.first_year_percent_min)
+        thresholds.firstYearPercentMax = row.first_year_percent_max == null ? null : Number(row.first_year_percent_max)
+        thresholds.secondYearPercentMin = row.second_year_percent_min == null ? null : Number(row.second_year_percent_min)
+        thresholds.secondYearPercentMax = row.second_year_percent_max == null ? null : Number(row.second_year_percent_max)
+        thresholds.thirdYearPercentMin = row.third_year_percent_min == null ? null : Number(row.third_year_percent_min)
+        thresholds.thirdYearPercentMax = row.third_year_percent_max == null ? null : Number(row.third_year_percent_max)
+        thresholds.handoverPercentMin = row.handover_percent_min == null ? null : Number(row.handover_percent_min)
+        thresholds.handoverPercentMax = row.handover_percent_max == null ? null : Number(row.handover_percent_max)
+        thresholds.pvTolerancePercent = row.pv_tolerance_percent == null ? null : Number(row.pv_tolerance_percent)
+      }
+    } catch (e) {
+      // keep defaults
+    }
+    // Fallback sensible defaults if null (mirror ver6.2)
+    if (thresholds.firstYearPercentMin == null) thresholds.firstYearPercentMin = 35
+    if (thresholds.secondYearPercentMin == null) thresholds.secondYearPercentMin = 50
+    if (thresholds.thirdYearPercentMin == null) thresholds.thirdYearPercentMin = 65
+    if (thresholds.handoverPercentMin == null) thresholds.handoverPercentMin = 65
+    if (thresholds.pvTolerancePercent == null) thresholds.pvTolerancePercent = 100
+
+    // ----- Standard PV baseline -----
+    const annualRate = Number(effectiveStdPlan.financialDiscountRate) || 0
+    const monthlyRate = annualRate > 0 ? Math.pow(1 + annualRate / 100, 1 / 12) - 1 : 0
+    let standardPV = Number(effectiveStdPlan.calculatedPV) || 0
+    if (!Number.isFinite(standardPV) || standardPV <= 0) {
+      // Compute PV for equal installments baseline using standard plan duration/frequency
+      const durYears = Number(effInputs.planDurationYears) || 1
+      const freq = effInputs.installmentFrequency || 'monthly'
+      let perYear = 12
+      switch (freq) {
+        case Frequencies.Quarterly: perYear = 4; break
+        case Frequencies.BiAnnually: perYear = 2; break
+        case Frequencies.Annually: perYear = 1; break
+        case Frequencies.Monthly: default: perYear = 12; break
+      }
+      const n = durYears * perYear
+      const per = n > 0 ? (Number(effectiveStdPlan.totalPrice) || 0) / n : 0
+      const months = getPaymentMonths(n, freq, 0)
+      standardPV = months.reduce((pv, m) => pv + (per > 0 ? per / Math.pow(1 + monthlyRate, m) : 0), 0)
+    }
+
+    // ----- Proposed PV from calculation engine -----
+    const proposedPV = Number(result.calculatedPV) || 0
+    const pvTolerancePercent = thresholds.pvTolerancePercent
+    const pvPass = proposedPV >= (standardPV * (pvTolerancePercent / 100) - 1e-9)
+    const pvDifference = standardPV - proposedPV
+
+    // ----- Conditions based on cumulative percentages -----
+    // Use nominal base excluding non-PV extras; include handover in base as per ver6.2 intent
+    const totalNominalForConditions = (Number(result.totalNominalPrice) || 0) + (Number(effInputs.additionalHandoverPayment) || 0)
+
+    // Helper to compute cumulative at month cutoff
+    // Include Garage amounts in acceptance totals, exclude Maintenance only (as per requirements)
+    const sumUpTo = (monthCutoff) => schedule
+      .filter(s => s.label !== 'Maintenance Fee')
+      .reduce((sum, s) => sum + (s.month <= monthCutoff ? (Number(s.amount) || 0) : 0), 0)
+
+    const cutoffY1 = 12
+    const cutoffY2 = 24
+    const cutoffY3 = 36
+    const handoverCutoff = (Number(effInputs.handoverYear) || 0) * 12
+
+    const paidY1 = sumUpTo(cutoffY1)
+    const paidY2 = sumUpTo(cutoffY2)
+    const paidY3 = sumUpTo(cutoffY3)
+    const paidByHandover = handoverCutoff > 0 ? sumUpTo(handoverCutoff) : 0
+
+    const pct = (a, base) => {
+      const b = Number(base) || 0
+      const x = Number(a) || 0
+      return b > 0 ? (x / b) * 100 : (x > 0 ? 100 : 0)
+    }
+
+    const percentY1 = pct(paidY1, totalNominalForConditions)
+    const percentY2 = pct(paidY2, totalNominalForConditions)
+    const percentY3 = pct(paidY3, totalNominalForConditions)
+    const percentHandover = pct(paidByHandover, totalNominalForConditions)
+
+    // Condition 1: Payment After 1 Year ≥ Target (fallback to threshold% of standard price if target not present)
+    const stdTargetY1 = Number(effectiveStdPlan?.targetPaymentAfter1Year) || ((Number(effectiveStdPlan.totalPrice) || 0) * (thresholds.firstYearPercentMin / 100))
+    const cond1Pass = paidY1 >= stdTargetY1 - 1e-9
+
+    const withinRange = (value, min, max) => {
+      if (min != null && Number(value) < Number(min)) return false
+      if (max != null && Number(value) > Number(max)) return false
+      return true
+    }
+
+    const cond2Pass = withinRange(percentHandover, thresholds.handoverPercentMin, thresholds.handoverPercentMax)
+    const cond3Pass = withinRange(percentY1, thresholds.firstYearPercentMin, thresholds.firstYearPercentMax)
+    const cond4Pass = withinRange(percentY2, thresholds.secondYearPercentMin, thresholds.secondYearPercentMax)
+    const cond5Pass = withinRange(percentY3, thresholds.thirdYearPercentMin, thresholds.thirdYearPercentMax)
+
+    const evaluation = {
+      decision: (pvPass && cond1Pass && cond2Pass && cond3Pass && cond4Pass && cond5Pass) ? 'ACCEPT' : 'REJECT',
+      pv: {
+        proposedPV,
+        standardPV,
+        tolerancePercent: pvTolerancePercent,
+        pass: pvPass,
+        difference: pvDifference
+      },
+      conditions: [
+        { key: 'payment_after_y1', label: 'Payment After 1 Year', status: cond1Pass ? 'PASS' : 'FAIL', required: stdTargetY1, actual: paidY1 },
+        { key: 'handover_percent', label: 'Payment by Handover', status: cond2Pass ? 'PASS' : 'FAIL',
+          required: { min: thresholds.handoverPercentMin, max: thresholds.handoverPercentMax },
+          actual: { percent: percentHandover, amount: paidByHandover }, handoverYear: Number(effInputs.handoverYear) || 0
+        },
+        { key: 'cumulative_y1', label: 'Cumulative by End of Year 1', status: cond3Pass ? 'PASS' : 'FAIL',
+          required: { min: thresholds.firstYearPercentMin, max: thresholds.firstYearPercentMax },
+          actual: { percent: percentY1, amount: paidY1 }
+        },
+        { key: 'cumulative_y2', label: 'Cumulative by End of Year 2', status: cond4Pass ? 'PASS' : 'FAIL',
+          required: { min: thresholds.secondYearPercentMin, max: thresholds.secondYearPercentMax },
+          actual: { percent: percentY2, amount: paidY2 }
+        },
+        { key: 'cumulative_y3', label: 'Cumulative by End of Year 3', status: cond5Pass ? 'PASS' : 'FAIL',
+          required: { min: thresholds.thirdYearPercentMin, max: thresholds.thirdYearPercentMax },
+          actual: { percent: percentY3, amount: paidY3 }
+        }
+      ],
+      summary: {
+        totalNominalForConditions,
+        discountPercentApplied: Number(effInputs.salesDiscountPercent) || 0,
+        equalInstallmentAmount: Number(result.equalInstallmentAmount) || 0,
+        numEqualInstallments: Number(result.numEqualInstallments) || 0
+      }
+    }
+
+    return res.json({
+      ok: true,
+      schedule,
+      totals,
+      meta: { ...result.meta, npvWarning, rateUsedPercent: annualRate },
+      evaluation
+    })
   } catch (err) {
     console.error('POST /api/generate-plan error:', err)
     return bad(res, 500, 'Internal error during plan generation')
@@ -785,15 +1034,19 @@ app.post('/api/generate-document', validate(generateDocumentSchema), async (req,
     const TYPE_RULES = {
       pricing_form: {
         allowedRoles: ['property_consultant', 'sales_manager'],
-        defaultTemplate: 'pricing_form.docx'
+        // Map to actual file available in /api/templates
+        defaultTemplate: 'Pricing Form G.docx'
       },
       reservation_form: {
         allowedRoles: ['financial_admin'],
+        // If you add a reservation form template, update this filename accordingly.
+        // For now require explicit templateName if different.
         defaultTemplate: 'reservation_form.docx'
       },
       contract: {
         allowedRoles: ['contract_person'],
-        defaultTemplate: 'contract.docx'
+        // Map to actual file available in /api/templates
+        defaultTemplate: 'Uptown Residence Contract.docx'
       }
     }
 
