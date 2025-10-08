@@ -163,6 +163,9 @@ export default function App(props) {
   }, [])
   const role = authUser?.role
 
+  // Lock certain fields when a unit is selected (use server-approved standard)
+  const rateLocked = Number(unitInfo?.unit_id) > 0
+
   // Dynamic arrays
   const [firstYearPayments, setFirstYearPayments] = useState([])
   const [subsequentYears, setSubsequentYears] = useState([])
@@ -1196,7 +1199,14 @@ export default function App(props) {
             </div>
             <div>
               <label style={styles.label}>Std Financial Rate (%)</label>
-              <input type="number" value={stdPlan.financialDiscountRate} onChange={e => setStdPlan(s => ({ ...s, financialDiscountRate: e.target.value }))} style={styles.input(errors.std_financialDiscountRate)} />
+              <input
+                type="number"
+                value={stdPlan.financialDiscountRate}
+                onChange={e => setStdPlan(s => ({ ...s, financialDiscountRate: e.target.value }))}
+                style={styles.input(errors.std_financialDiscountRate)}
+                disabled={rateLocked}
+                title={rateLocked ? 'Locked to server-approved standard for selected unit' : undefined}
+              />
               {errors.std_financialDiscountRate && <small style={styles.error}>{errors.std_financialDiscountRate}</small>}
             </div>
             <div>
