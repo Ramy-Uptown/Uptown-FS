@@ -1129,13 +1129,7 @@ export default function App(props) {
           </div>
         )}
 
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>API Connectivity</h2>
-          <pre style={{ background: '#f6f8fa', padding: 12, borderRadius: 8, overflow: 'auto', border: '1px solid #eef2f7' }}>
-{JSON.stringify(health, null, 2)}
-          </pre>
-          <p style={{ ...styles.metaText }}><strong>Message from API:</strong> {message}</p>
-        </section>
+        
 
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Inputs</h2>
