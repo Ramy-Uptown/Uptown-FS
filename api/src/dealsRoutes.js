@@ -657,11 +657,13 @@ router.post('/:id/override-reject', authMiddleware, validate(overrideApproveSche
   try {
     const id = Number(req.params.id)
     const role = req.user.role
-    if (!['ceo', 'chairman', 'vice_chairman', 'top_management', 'superadmin'].includes(role)) {
-      return res.status(403).json({ error: { message: 'Top-Management role required to reject override' } })
+    // Allow Sales Manager, Financial Manager and Top-Management to reject (deny) with reasons
+    if (!['sales_manager', 'financial_manager', 'ceo', 'chairman', 'vice_chairman', 'top_management', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Role not permitted to reject override' } })
     }
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+    const deal = q.rows[0]
 
     const notes = typeof req.body?.notes === 'string' ? req.body.notes : null
 

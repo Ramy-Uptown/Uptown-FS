@@ -1513,6 +1513,40 @@ export default function App(props) {
             <small style={styles.metaText}>
               Thresholds are set by the Financial Manager and approved by Top Management. The evaluation above is computed server-side.
             </small>
+
+            {/* Request Override — shown when we are embedded in a deal context and decision is REJECT */}
+            {genResult.evaluation.decision === 'REJECT' && (role === 'sales_manager' || role === 'financial_manager' || role === 'admin' || role === 'superadmin') && (
+              <div style={{ marginTop: 12 }}>
+                {props?.dealId ? (
+                  <button
+                    type="button"
+                    style={styles.btnPrimary}
+                    onClick={async () => {
+                      const reason = window.prompt('Provide a reason for override request (optional):', '')
+                      try {
+                        const resp = await fetchWithAuth(`${API_URL}/api/deals/${props.dealId}/request-override`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ reason: reason || null })
+                        })
+                        const data = await resp.json()
+                        if (!resp.ok) {
+                          alert(data?.error?.message || 'Failed to request override')
+                        } else {
+                          alert('Override requested. Waiting for review.')
+                        }
+                      } catch (err) {
+                        alert(err?.message || 'Failed to request override')
+                      }
+                    }}
+                  >
+                    Request Override
+                  </button>
+                ) : (
+                  <small style={styles.metaText}>Override request is available in Deal view after you save and submit.</small>
+                )}
+              </div>
+            )}
           </section>
         )}
 

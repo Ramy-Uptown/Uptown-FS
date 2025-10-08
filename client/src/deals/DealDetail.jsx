@@ -562,7 +562,7 @@ export default function DealDetail() {
             </div>
           </div>
           <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
-            <CalculatorApp embedded />
+            <CalculatorApp embedded dealId={deal.id} />
           </div>
         </div>
       )}
