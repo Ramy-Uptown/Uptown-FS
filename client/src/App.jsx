@@ -1515,7 +1515,7 @@ export default function App(props) {
             </small>
 
             {/* Request Override — shown when we are embedded in a deal context and decision is REJECT */}
-            {genResult.evaluation.decision === 'REJECT' && (role === 'sales_manager' || role === 'financial_manager' || role === 'admin' || role === 'superadmin') && (
+            {genResult.evaluation.decision === 'REJECT' && (role === 'property_consultant' || role === 'sales_manager' || role === 'financial_manager' || role === 'admin' || role === 'superadmin') && (
               <div style={{ marginTop: 12 }}>
                 {props?.dealId ? (
                   <button

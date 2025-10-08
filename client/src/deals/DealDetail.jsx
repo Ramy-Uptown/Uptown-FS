@@ -601,8 +601,8 @@ export default function DealDetail() {
           </LoadingButton>
         )}
 
-        {/* Request Override button for managers when evaluation is REJECT */}
-        {evaluation?.decision === 'REJECT' && (role === 'sales_manager' || role === 'financial_manager' || role === 'admin' || role === 'superadmin') && (
+        {/* Request Override button for Property Consultant or Managers when evaluation is REJECT */}
+        {evaluation?.decision === 'REJECT' && (role === 'property_consultant' || role === 'sales_manager' || role === 'financial_manager' || role === 'admin' || role === 'superadmin') && (
           <LoadingButton
             onClick={async () => {
               const reason = window.prompt('Provide a reason for override request (optional):', '')
@@ -616,7 +616,7 @@ export default function DealDetail() {
                 if (!resp.ok) {
                   notifyError(data?.error?.message || 'Failed to request override')
                 } else {
-                  notifySuccess('Override requested. Waiting for Top-Management decision.')
+                  notifySuccess('Override requested. Waiting for Sales Manager review.')
                   await load()
                 }
               } catch (err) {

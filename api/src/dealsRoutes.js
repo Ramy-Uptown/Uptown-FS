@@ -576,8 +576,9 @@ router.post('/:id/request-override', authMiddleware, validate(overrideRequestSch
   try {
     const id = Number(req.params.id)
     const role = req.user.role
-    if (!['sales_manager', 'financial_manager', 'admin', 'superadmin'].includes(role)) {
-      return res.status(403).json({ error: { message: 'Sales Manager or Financial Manager role required' } })
+    // Property Consultant can initiate; Sales Manager and Financial Manager can also initiate if needed
+    if (!['property_consultant', 'sales_manager', 'financial_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Property Consultant, Sales Manager or Financial Manager role required' } })
     }
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
@@ -604,6 +605,166 @@ router.post('/:id/request-override', authMiddleware, validate(overrideRequestSch
     return res.json({ ok: true, deal: upd.rows[0] })
   } catch (e) {
     console.error('POST /api/deals/:id/request-override error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Sales Manager approve stage (escalate to FM)
+router.post('/:id/override-sm-approve', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['sales_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Sales Manager role required' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET manager_review_by=$1,
+           manager_review_at=now(),
+           updated_at=now()
+       WHERE id=$2 RETURNING *`,
+      [req.user.id, id]
+    )
+
+    const note = {
+      event: 'override_sm_approved',
+      by: { id: req.user.id, role },
+      notes: typeof req.body?.notes === 'string' ? req.body.notes : null,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_sm_approved', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-sm-approve error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Sales Manager reject stage
+router.post('/:id/override-sm-reject', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['sales_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Sales Manager role required' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes : null
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET needs_override=FALSE,
+           manager_review_by=$1,
+           manager_review_at=now(),
+           override_notes=$2,
+           updated_at=now()
+       WHERE id=$3 RETURNING *`,
+      [req.user.id, notes, id]
+    )
+
+    const note = {
+      event: 'override_sm_rejected',
+      by: { id: req.user.id, role },
+      notes,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_sm_rejected', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-sm-reject error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Financial Manager approve stage (blocks unit)
+router.post('/:id/override-fm-approve', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['financial_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Financial Manager role required' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+    const deal = q.rows[0]
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET fm_review_by=$1,
+           fm_review_at=now(),
+           updated_at=now()
+       WHERE id=$2 RETURNING *`,
+      [req.user.id, id]
+    )
+
+    // Attempt to block unit upon FM approval
+    try {
+      const det = deal.details || {}
+      const unitId = det?.calculator?.unitInfo?.unit_id
+      if (Number.isFinite(Number(unitId)) && Number(unitId) > 0) {
+        await pool.query('UPDATE units SET available=FALSE, updated_at=now() WHERE id=$1', [Number(unitId)])
+      }
+    } catch (blkErr) {
+      console.warn('Unit block warning:', blkErr?.message || blkErr)
+    }
+
+    const note = {
+      event: 'override_fm_approved',
+      by: { id: req.user.id, role },
+      notes: typeof req.body?.notes === 'string' ? req.body.notes : null,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_fm_approved', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-fm-approve error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Financial Manager reject stage
+router.post('/:id/override-fm-reject', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['financial_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Financial Manager role required' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes : null
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET needs_override=FALSE,
+           fm_review_by=$1,
+           fm_review_at=now(),
+           override_notes=$2,
+           updated_at=now()
+       WHERE id=$3 RETURNING *`,
+      [req.user.id, notes, id]
+    )
+
+    const note = {
+      event: 'override_fm_rejected',
+      by: { id: req.user.id, role },
+      notes,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_fm_rejected', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-fm-reject error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
   }
 })
