@@ -4,6 +4,8 @@ import { fetchWithAuth } from './lib/apiClient.js'
 import BrandHeader from './lib/BrandHeader.jsx'
 import { getArabicMonth } from './lib/i18n.js'
 import numberToArabic from './lib/numberToArabic.js'
+import EvaluationPanel from './components/calculator/EvaluationPanel.jsx'
+import PaymentSchedule from './components/calculator/PaymentSchedule.jsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 const LS_KEY = 'uptown_calc_form_state_v2'
@@ -417,7 +419,6 @@ export default function App(props) {
                 unit_type: u.unit_type || s.unit_type,
                 unit_code: u.code || s.unit_code,
                 unit_number: s.unit_number,
-                description: u.description || s.description,
                 unit_id: u.id
               }))
               if (setFeeSchedule) {
@@ -481,7 +482,7 @@ export default function App(props) {
           >
             <option value="">{loadingUnits ? 'Loading…' : (units.length ? 'Select unit…' : 'No units')}</option>
             {units.map(u => (
-              <option key={u.id} value={u.id}>{u.code} — {u.description || ''}</option>
+              <option key={u.id} value={u.id}>{u.code}</option>
             ))}
           </select>
         </div>
@@ -789,11 +790,38 @@ export default function App(props) {
   function buildDocumentBody(documentType) {
     const { valid, payload } = validateForm()
     // Even if not valid, we still send what we have; but generally require valid to ensure server accepts
+    // Build document data map for placeholders
+    const docData = {
+      // Client info
+      buyer_name: clientInfo.buyer_name || '',
+      nationality: clientInfo.nationality || '',
+      id_or_passport: clientInfo.id_or_passport || '',
+      id_issue_date: clientInfo.id_issue_date || '',
+      address: clientInfo.address || '',
+      phone_primary: clientInfo.phone_primary || '',
+      phone_secondary: clientInfo.phone_secondary || '',
+      email: clientInfo.email || '',
+      // Unit info (inventory metadata)
+      unit_type: unitInfo.unit_type || '',
+      unit_code: unitInfo.unit_code || '',
+      unit_number: unitInfo.unit_number || '',
+      floor: unitInfo.floor || '',
+      building_number: unitInfo.building_number || '',
+      block_sector: unitInfo.block_sector || '',
+      zone: unitInfo.zone || '',
+      garden_details: unitInfo.garden_details || '',
+      // Calculator summaries (optional)
+      std_total_price: Number(stdPlan.totalPrice) || 0,
+      std_financial_rate_percent: Number(stdPlan.financialDiscountRate) || 0,
+      std_calculated_pv: Number(stdPlan.calculatedPV) || 0
+    }
+
     const body = {
       documentType,
       language,
       currency,
       ...payload,
+      data: docData
     }
     // Attach generated plan if available so server can reuse without recalculation (optional)
     if (genResult?.schedule?.length) {
@@ -1462,95 +1490,10 @@ export default function App(props) {
         {genResult?.evaluation && (
           <section style={styles.section}>
             <h2 style={styles.sectionTitle}>Acceptance Evaluation</h2>
-            {(() => {
-              const ok = genResult.evaluation.decision === 'ACCEPT'
-              const box = {
-                marginBottom: 12,
-                padding: '10px 12px',
-                borderRadius: 10,
-                border: `1px solid ${ok ? '#10b981' : '#ef4444'}`,
-                background: ok ? '#ecfdf5' : '#fef2f2',
-                color: ok ? '#065f46' : '#7f1d1d',
-                fontWeight: 600
-              }
-              return (
-                <div style={box}>
-                  NPV-based Decision: {genResult.evaluation.decision}
-                </div>
-              )
-            })()}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
-                <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>PV Comparison</h3>
-                <ul style={{ margin: 0, paddingLeft: 16 }}>
-                  <li>Proposed PV: {Number(genResult.evaluation.pv.proposedPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
-                  <li>Standard PV: {Number(genResult.evaluation.pv.standardPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
-                  <li>Difference (Std - Prop): {Number(genResult.evaluation.pv.difference || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
-                  <li>PV Tolerance: {Number(genResult.evaluation.pv.tolerancePercent || 0).toLocaleString()}%</li>
-                  <li>Status: {genResult.evaluation.pv.pass ? 'PASS' : 'FAIL'}</li>
-                </ul>
-              </div>
-              <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
-                <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Conditions</h3>
-                <ul style={{ margin: 0, paddingLeft: 16 }}>
-                  {genResult.evaluation.conditions.map((c, idx) => (
-                    <li key={idx} style={{ marginBottom: 6 }}>
-                      <div><strong>{c.label}</strong> — <span style={{ color: c.status === 'PASS' ? '#065f46' : '#7f1d1d' }}>{c.status}</span></div>
-                      {'required' in c && typeof c.required === 'number' && <div>Required: {Number(c.required).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>}
-                      {'required' in c && typeof c.required === 'object' && (
-                        <div>
-                          Required: {c.required.min != null ? `Min ${Number(c.required.min).toLocaleString()}% ` : ''}{c.required.max != null ? `Max ${Number(c.required.max).toLocaleString()}%` : ''}
-                        </div>
-                      )}
-                      {'actual' in c && typeof c.actual === 'number' && <div>Actual: {Number(c.actual).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>}
-                      {'actual' in c && typeof c.actual === 'object' && (
-                        <div>
-                          Actual: {c.actual.amount != null ? `${Number(c.actual.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : ''}{c.actual.percent != null ? ` (${Number(c.actual.percent).toLocaleString(undefined, { maximumFractionDigits: 2 })}%)` : ''}
-                        </div>
-                      )}
-                      {c.handoverYear != null && <div>Handover Year: {c.handoverYear}</div>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            <EvaluationPanel evaluation={genResult.evaluation} role={role} dealId={props?.dealId} API_URL={API_URL} />
             <small style={styles.metaText}>
               Thresholds are set by the Financial Manager and approved by Top Management. The evaluation above is computed server-side.
             </small>
-
-            {/* Request Override — shown when we are embedded in a deal context and decision is REJECT */}
-            {genResult.evaluation.decision === 'REJECT' && (role === 'property_consultant' || role === 'sales_manager' || role === 'financial_manager' || role === 'admin' || role === 'superadmin') && (
-              <div style={{ marginTop: 12 }}>
-                {props?.dealId ? (
-                  <button
-                    type="button"
-                    style={styles.btnPrimary}
-                    onClick={async () => {
-                      const reason = window.prompt('Provide a reason for override request (optional):', '')
-                      try {
-                        const resp = await fetchWithAuth(`${API_URL}/api/deals/${props.dealId}/request-override`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ reason: reason || null })
-                        })
-                        const data = await resp.json()
-                        if (!resp.ok) {
-                          alert(data?.error?.message || 'Failed to request override')
-                        } else {
-                          alert('Override requested. Waiting for review.')
-                        }
-                      } catch (err) {
-                        alert(err?.message || 'Failed to request override')
-                      }
-                    }}
-                  >
-                    Request Override
-                  </button>
-                ) : (
-                  <small style={styles.metaText}>Override request is available in Deal view after you save and submit.</small>
-                )}
-              </div>
-            )}
           </section>
         )}
 
@@ -1791,10 +1734,7 @@ export default function App(props) {
                 <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
                 <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
               </div>
-              <div>
-                <label style={styles.label}>Unit Description</label>
-                <input dir="auto" style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
-              </div>
+              
               <div>
                 <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
                 <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
@@ -1943,47 +1883,14 @@ export default function App(props) {
           {schedule.length === 0 ? (
             <p style={styles.metaText}>No schedule yet. Fill the form and click "Calculate (Generate Plan)".</p>
           ) : (
-            <div style={styles.tableWrap}>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>#</th>
-                    <th style={styles.th}>Month</th>
-                    <th style={styles.th}>Date</th>
-                    <th style={styles.th}>Label</th>
-                    <th style={{ ...styles.th, textAlign: 'right' }}>Amount</th>
-                    <th style={{ ...styles.th, textAlign: language === 'ar' ? 'right' : 'left' }}>Written Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {schedule.map((row, idx) => (
-                    <tr key={idx}>
-                      <td style={styles.td}>{idx + 1}</td>
-                      <td style={styles.td}>{row.month}</td>
-                      <td style={styles.td}>{row.date || ''}</td>
-                      <td style={styles.td}>{row.label}</td>
-                      <td style={{ ...styles.td, textAlign: 'right' }}>
-                        {Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ ...styles.td, direction: language === 'ar' ? 'rtl' : 'ltr', textAlign: language === 'ar' ? 'right' : 'left' }}>
-                        {language === 'ar' ? numberToArabic(row.amount, 'جنيه مصري', 'قرش') : row.writtenAmount}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {totals && (
-                  <tfoot>
-                    <tr>
-                      <td colSpan="3" style={{ ...styles.tFootCell, textAlign: 'right' }}>Total</td>
-                      <td style={{ ...styles.tFootCell, textAlign: 'right' }}>
-                        {Number(totals.totalNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={styles.tFootCell}></td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
+            <PaymentSchedule
+              schedule={schedule}
+              totals={totals}
+              language={language}
+              onExportCSV={exportScheduleCSV}
+              onExportXLSX={exportScheduleXLSX}
+              onGenerateChecks={generateChecksSheetXLSX}
+            />
           )}
         </section>
       </div>
