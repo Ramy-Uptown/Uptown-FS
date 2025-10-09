@@ -1,6 +1,8 @@
 import React from 'react'
 import LivePreview from './LivePreview.jsx'
 import PlanActions from './PlanActions.jsx'
+import FirstYearPayments from './FirstYearPayments.jsx'
+import SubsequentYears from './SubsequentYears.jsx'
 
 export default function InputsForm({
   styles,
@@ -16,11 +18,24 @@ export default function InputsForm({
   summaries,
   previewError,
   genLoading,
-  onGeneratePlan
+  onGeneratePlan,
+  // arrays and handlers
+  firstYearPayments,
+  addFirstYearPayment,
+  updateFirstYearPayment,
+  removeFirstYearPayment,
+  subsequentYears,
+  addSubsequentYear,
+  updateSubsequentYear,
+  removeSubsequentYear,
+  // preview effect helpers
+  validateForm,
+  buildPayload,
+  setPreview,
+  setPreviewError
 }) {
   const input = (err) => styles.input ? styles.input(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
   const select = (err) => styles.select ? styles.select(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
-  const textarea = (err) => styles.textarea ? styles.textarea(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff', minHeight: 80, resize: 'vertical' }
 
   return (
     <section style={styles.section}>
@@ -42,7 +57,7 @@ export default function InputsForm({
             <option value="SAR">SAR (Saudi Riyals)</option>
             <option value="EUR">EUR (Euros)</option>
             <option value="AED">AED (UAE Dirhams)</option>
-            <option value="KWD">KWD (Kuwaiti Dinars)</option>
+            <option value="KWD">Kuwaiti Dinars</option>
           </select>
         </div>
 
@@ -71,7 +86,6 @@ export default function InputsForm({
           <label style={styles.label}>Std Total Price</label>
           <input type="number" value={stdPlan.totalPrice} onChange={e => setStdPlan(s => ({ ...s, totalPrice: e.target.value }))} style={input(errors.std_totalPrice)} />
           {errors.std_totalPrice && <small style={styles.error}>{errors.std_totalPrice}</small>}
-          {/* Unit total breakdown */}
           <div style={{ marginTop: 6, fontSize: 12, color: '#4b5563', background: '#fbfaf7', border: '1px dashed #ead9bd', borderRadius: 8, padding: 8 }}>
             <div><strong>Unit Breakdown</strong></div>
             <div>Base: {Number(unitPricingBreakdown.base || 0).toLocaleString()}</div>
@@ -145,26 +159,41 @@ export default function InputsForm({
           </label>
         </div>
 
-        {/* First Year Payments Builder */}
         {inputs.splitFirstYearPayments && (
-          <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>First Year Payments</h3>
-              {/* Handlers for add/remove will continue to live in parent; could be passed in future */}
-            </div>
-          </div>
+          <FirstYearPayments
+            styles={styles}
+            language={language}
+            firstYearPayments={firstYearPayments}
+            errors={errors}
+            addFirstYearPayment={addFirstYearPayment}
+            updateFirstYearPayment={updateFirstYearPayment}
+            removeFirstYearPayment={removeFirstYearPayment}
+          />
         )}
 
-        {/* Subsequent Years Builder (summary only here; detailed builder remains in parent for now) */}
-        <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Subsequent Custom Years</h3>
-          {/* Keep the detailed builder in parent for now */}
-        </div>
+        <SubsequentYears
+          styles={styles}
+          subsequentYears={subsequentYears}
+          errors={errors}
+          addSubsequentYear={addSubsequentYear}
+          updateSubsequentYear={updateSubsequentYear}
+          removeSubsequentYear={removeSubsequentYear}
+        />
 
-        {/* Live Preview */}
-        <LivePreview styles={styles} previewError={previewError} summaries={summaries} language={language} />
+        <LivePreview
+          styles={styles}
+          language={language}
+          setPreview={setPreview}
+          setPreviewError={setPreviewError}
+          validateForm={validateForm}
+          buildPayload={buildPayload}
+          mode={mode}
+          stdPlan={stdPlan}
+          inputs={inputs}
+          firstYearPayments={firstYearPayments}
+          subsequentYears={subsequentYears}
+        />
 
-        {/* Actions */}
         <PlanActions styles={styles} genLoading={genLoading} onGenerate={onGeneratePlan} />
       </form>
     </section>

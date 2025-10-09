@@ -9,6 +9,7 @@ import PaymentSchedule from './components/calculator/PaymentSchedule.jsx'
 import ClientInfoForm from './components/calculator/ClientInfoForm.jsx'
 import UnitInfoSection from './components/calculator/UnitInfoSection.jsx'
 import ContractDetailsForm from './components/calculator/ContractDetailsForm.jsx'
+import InputsForm from './components/calculator/InputsForm.jsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 const LS_KEY = 'uptown_calc_form_state_v2'
@@ -665,58 +666,7 @@ export default function App(props) {
     return { valid: Object.keys(e).length === 0, payload }
   }
 
-  // Debounced live preview using the API
-  useEffect(() => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current)
-    debounceTimer.current = setTimeout(async () => {
-      const { valid, payload } = validateForm()
-      if (!valid) {
-        setPreview(null)
-        setPreviewError('Fix validation errors to see preview.')
-        return
-      }
-      try {
-        setPreviewError('')
-        const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-        const data = await resp.json()
-        if (!resp.ok) {
-          setPreview(null)
-          setPreviewError(data?.error?.message || 'Preview error')
-        } else {
-          setPreview(data?.data || null)
-          // surface meta warnings
-          const meta = data?.meta || {}
-          const warn = []
-          if (meta.policyLimit != null) {
-            warn.push(`Policy limit: ${meta.policyLimit}%`)
-          }
-          if (meta.overPolicy) {
-            warn.push('Selected discount exceeds current policy limit. Workflow will route to Top-Management.')
-          }
-          if (meta.authorityLimit != null) {
-            warn.push(`Your authority limit: ${meta.authorityLimit}%`)
-          }
-          if (meta.overAuthority) {
-            warn.push('Selected discount exceeds your authority. It will be escalated in workflow.')
-          }
-          if (warn.length) {
-            setPreviewError(warn.join(' '))
-          } else {
-            setPreviewError('')
-          }
-        }
-      } catch (err) {
-        setPreview(null)
-        setPreviewError('Could not compute preview.')
-      }
-    }, 500)
-    return () => clearTimeout(debounceTimer.current)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, stdPlan, inputs, firstYearPayments, subsequentYears])
+  
 
   async function runGeneratePlan(e) {
     e.preventDefault()
@@ -1200,6 +1150,18 @@ export default function App(props) {
           previewError={previewError}
           genLoading={genLoading}
           onGeneratePlan={runGeneratePlan}
+          firstYearPayments={firstYearPayments}
+          addFirstYearPayment={addFirstYearPayment}
+          updateFirstYearPayment={updateFirstYearPayment}
+          removeFirstYearPayment={removeFirstYearPayment}
+          subsequentYears={subsequentYears}
+          addSubsequentYear={addSubsequentYear}
+          updateSubsequentYear={updateSubsequentYear}
+          removeSubsequentYear={removeSubsequentYear}
+          validateForm={validateForm}
+          buildPayload={buildPayload}
+          setPreview={setPreview}
+          setPreviewError={setPreviewError}
         />
 
         {/* Standard vs Offer PV Comparison */}
