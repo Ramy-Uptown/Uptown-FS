@@ -25,7 +25,7 @@ export default function UnitDetailsTable({ units, loading = false, onCreateOffer
           <tr>
             <th style={th}>ID</th>
             <th style={th}>Code</th>
-            {isExpanded && <th style={th}>Description</th>}
+            
             <th style={th}>Type</th>
             <th style={th}>Model</th>
             <th style={{ ...th, textAlign: 'right' }}>Area (m²)</th>
@@ -55,7 +55,7 @@ export default function UnitDetailsTable({ units, loading = false, onCreateOffer
               <tr key={u.id}>
                 <td style={td}>{u.id}</td>
                 <td style={td}>{u.code}</td>
-                {isExpanded && <td style={td}>{u.description || ''}</td>}
+                
                 <td style={td}>{u.unit_type_name || u.unit_type || ''}</td>
                 <td style={td}>{modelLabel || (u.model_id ? `#${u.model_id}` : '-')}</td>
                 <td style={{ ...td, textAlign: 'right' }}>{u.area ? Number(u.area).toLocaleString() : '-'}</td>

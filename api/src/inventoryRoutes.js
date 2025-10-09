@@ -411,7 +411,6 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
       const ph = `$${placeholderCount++}`
       clauses.push(`(
         LOWER(u.code) LIKE ${ph}
-        OR LOWER(COALESCE(u.description, '')) LIKE ${ph}
         OR LOWER(COALESCE(u.unit_type, '')) LIKE ${ph}
         OR LOWER(COALESCE(ut.name, '')) LIKE ${ph}
       )`)
@@ -439,7 +438,8 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
 
     const r = await pool.query(
       `SELECT
-         u.id, u.code, u.description, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+         u.id, u.code, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+         u.unit_number, u.floor, u.building_number, u.block_sector, u.zone, u.garden_details,
          u.base_price, u.currency, u.model_id, u.area, u.orientation,
          u.has_garden, u.garden_area, u.has_roof, u.roof_area,
          u.maintenance_price, u.garage_price, u.garden_price, u.roof_price, u.storage_price,
@@ -535,7 +535,8 @@ router.get('/units/:id', authMiddleware, requireRole(['admin','superadmin','sale
     const params = [id]
     const r = await pool.query(
       `SELECT
-         u.id, u.code, u.description, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+         u.id, u.code, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+         u.unit_number, u.floor, u.building_number, u.block_sector, u.zone, u.garden_details,
          u.base_price, u.currency, u.model_id, u.area, u.orientation,
          u.has_garden, u.garden_area, u.has_roof, u.roof_area,
          u.maintenance_price, u.garage_price, u.garden_price, u.roof_price, u.storage_price,
