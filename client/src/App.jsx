@@ -1180,237 +1180,27 @@ export default function App(props) {
 
         
 
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Inputs</h2>
-          <form onSubmit={runGeneratePlan} style={{ ...styles.grid2 }}>
-            <div>
-              <label style={styles.label}>Language for Written Amounts</label>
-              <select value={language} onChange={e => setLanguage(e.target.value)} style={styles.select()}>
-                <option value="en">English</option>
-                <option value="ar">Arabic</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={styles.label}>Currency (English only)</label>
-              <select value={currency} onChange={e => setCurrency(e.target.value)} style={styles.select()}>
-                <option value="EGP">EGP (Egyptian Pounds)</option>
-                <option value="USD">USD (US Dollars)</option>
-                <option value="SAR">SAR (Saudi Riyals)</option>
-                <option value="EUR">EUR (Euros)</option>
-                <option value="AED">AED (UAE Dirhams)</option>
-                <option value="KWD">KWD (Kuwaiti Dinars)</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={styles.label}>Mode</label>
-              <select value={mode} onChange={e => setMode(e.target.value)} style={styles.select()}>
-                <option value="evaluateCustomPrice">evaluateCustomPrice</option>
-                <option value="calculateForTargetPV">calculateForTargetPV</option>
-                <option value="customYearlyThenEqual_useStdPrice">customYearlyThenEqual_useStdPrice</option>
-                <option value="customYearlyThenEqual_targetPV">customYearlyThenEqual_targetPV</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={styles.label}>Installment Frequency</label>
-              <select value={inputs.installmentFrequency} onChange={e => setInputs(s => ({ ...s, installmentFrequency: e.target.value }))} style={styles.select(errors.installmentFrequency)}>
-                <option value="monthly">monthly</option>
-                <option value="quarterly">quarterly</option>
-                <option value="bi-annually">bi-annually</option>
-                <option value="annually">annually</option>
-              </select>
-              {errors.installmentFrequency && <small style={styles.error}>{errors.installmentFrequency}</small>}
-            </div>
-
-            <div>
-              <label style={styles.label}>Std Total Price</label>
-              <input type="number" value={stdPlan.totalPrice} onChange={e => setStdPlan(s => ({ ...s, totalPrice: e.target.value }))} style={styles.input(errors.std_totalPrice)} />
-              {errors.std_totalPrice && <small style={styles.error}>{errors.std_totalPrice}</small>}
-              {/* Unit total breakdown */}
-              <div style={{ marginTop: 6, fontSize: 12, color: '#4b5563', background: '#fbfaf7', border: '1px dashed #ead9bd', borderRadius: 8, padding: 8 }}>
-                <div><strong>Unit Breakdown</strong></div>
-                <div>Base: {Number(unitPricingBreakdown.base || 0).toLocaleString()}</div>
-                <div>Garden: {Number(unitPricingBreakdown.garden || 0).toLocaleString()}</div>
-                <div>Roof: {Number(unitPricingBreakdown.roof || 0).toLocaleString()}</div>
-                <div>Storage: {Number(unitPricingBreakdown.storage || 0).toLocaleString()}</div>
-                <div>Garage: {Number(unitPricingBreakdown.garage || 0).toLocaleString()}</div>
-                <div style={{ marginTop: 4 }}><strong>Total (excl. maintenance): {Number(unitPricingBreakdown.totalExclMaintenance || 0).toLocaleString()}</strong></div>
-                <div>Maintenance (scheduled separately): {Number(unitPricingBreakdown.maintenance || 0).toLocaleString()}</div>
-              </div>
-            </div>
-            <div>
-              <label style={styles.label}>Std Financial Rate (%)</label>
-              <input
-                type="number"
-                value={stdPlan.financialDiscountRate}
-                onChange={e => setStdPlan(s => ({ ...s, financialDiscountRate: e.target.value }))}
-                style={styles.input(errors.std_financialDiscountRate)}
-                disabled={rateLocked}
-                title={rateLocked ? 'Locked to server-approved standard for selected unit' : undefined}
-              />
-              {errors.std_financialDiscountRate && <small style={styles.error}>{errors.std_financialDiscountRate}</small>}
-            </div>
-            <div>
-              <label style={styles.label}>Std Calculated PV</label>
-              <input type="number" value={stdPlan.calculatedPV} onChange={e => setStdPlan(s => ({ ...s, calculatedPV: e.target.value }))} style={styles.input(errors.std_calculatedPV)} />
-              {errors.std_calculatedPV && <small style={styles.error}>{errors.std_calculatedPV}</small>}
-            </div>
-
-            <div>
-              <label style={styles.label}>Sales Discount (%)</label>
-              <input type="number" value={inputs.salesDiscountPercent} onChange={e => setInputs(s => ({ ...s, salesDiscountPercent: e.target.value }))} style={styles.input()} />
-              <DiscountHint role={authUser?.role} value={inputs.salesDiscountPercent} />
-            </div>
-
-            <div>
-              <label style={styles.label}>DP Type</label>
-              <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={styles.select(errors.dpType)}>
-                <option value="amount">amount</option>
-                <option value="percentage">percentage</option>
-              </select>
-              {errors.dpType && <small style={styles.error}>{errors.dpType}</small>}
-            </div>
-            <div>
-              <label style={styles.label}>Down Payment Value</label>
-              <input type="number" value={inputs.downPaymentValue} onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))} style={styles.input(errors.downPaymentValue)} />
-              {errors.downPaymentValue && <small style={styles.error}>{errors.downPaymentValue}</small>}
-            </div>
-
-            <div>
-              <label style={styles.label}>Plan Duration (years)</label>
-              <input type="number" value={inputs.planDurationYears} onChange={e => setInputs(s => ({ ...s, planDurationYears: e.target.value }))} style={styles.input(errors.planDurationYears)} />
-              {errors.planDurationYears && <small style={styles.error}>{errors.planDurationYears}</small>}
-            </div>
-
-            <div>
-              <label style={styles.label}>Handover Year</label>
-              <input type="number" value={inputs.handoverYear} onChange={e => setInputs(s => ({ ...s, handoverYear: e.target.value }))} style={styles.input(errors.handoverYear)} />
-              {errors.handoverYear && <small style={styles.error}>{errors.handoverYear}</small>}
-            </div>
-            <div>
-              <label style={styles.label}>Additional Handover Payment</label>
-              <input type="number" value={inputs.additionalHandoverPayment} onChange={e => setInputs(s => ({ ...s, additionalHandoverPayment: e.target.value }))} style={styles.input(errors.additionalHandoverPayment)} />
-              {errors.additionalHandoverPayment && <small style={styles.error}>{errors.additionalHandoverPayment}</small>}
-            </div>
-
-            <div style={styles.blockFull}>
-              <label style={{ ...styles.label, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <input type="checkbox" checked={inputs.splitFirstYearPayments} onChange={e => setInputs(s => ({ ...s, splitFirstYearPayments: e.target.checked }))} />
-                Split First Year Payments?
-              </label>
-            </div>
-
-            {/* First Year Payments Builder */}
-            {inputs.splitFirstYearPayments && (
-              <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>First Year Payments</h3>
-                  <button type="button" onClick={addFirstYearPayment} style={styles.btn}>+ Add Payment</button>
-                </div>
-                {firstYearPayments.length === 0 ? (
-                  <p style={styles.metaText}>No first-year payments defined.</p>
-                ) : (
-                  <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8 }}>
-                    {firstYearPayments.map((p, idx) => {
-                      const errAmt = errors[`fyp_amount_${idx}`]
-                      const errMonth = errors[`fyp_month_${idx}`]
-                      return (
-                        <React.Fragment key={idx}>
-                          <div>
-                            <label style={styles.label}>Amount</label>
-                            <input type="number" value={p.amount} onChange={e => updateFirstYearPayment(idx, 'amount', e.target.value)} style={styles.input(errAmt)} />
-                            {errAmt && <small style={styles.error}>{errAmt}</small>}
-                          </div>
-                          <div>
-                            <label style={styles.label}>Month (1-12)</label>
-                            <input type="number" min="1" max="12" value={p.month} onChange={e => updateFirstYearPayment(idx, 'month', e.target.value)} style={styles.input(errMonth)} />
-                            {language === 'ar' && <small style={{...styles.metaText, fontStyle: 'italic'}}>{getArabicMonth(p.month)}</small>}
-                            {errMonth && <small style={styles.error}>{errMonth}</small>}
-                          </div>
-                          <div>
-                            <label style={styles.label}>Type</label>
-                            <select value={p.type} onChange={e => updateFirstYearPayment(idx, 'type', e.target.value)} style={styles.select()}>
-                              <option value="dp">dp</option>
-                              <option value="regular">regular</option>
-                            </select>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'end' }}>
-                            <button type="button" onClick={() => removeFirstYearPayment(idx)} style={styles.btn}>Remove</button>
-                          </div>
-                        </React.Fragment>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Subsequent Years Builder */}
-            <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Subsequent Custom Years</h3>
-                <button type="button" onClick={addSubsequentYear} style={styles.btn}>+ Add Year</button>
-              </div>
-              {subsequentYears.length === 0 ? (
-                <p style={styles.metaText}>No subsequent custom years defined.</p>
-              ) : (
-                <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
-                  {subsequentYears.map((y, idx) => {
-                    const errTot = errors[`sub_total_${idx}`]
-                    const errFreq = errors[`sub_freq_${idx}`]
-                    return (
-                      <React.Fragment key={idx}>
-                        <div>
-                          <label style={styles.label}>Total Nominal</label>
-                          <input type="number" value={y.totalNominal} onChange={e => updateSubsequentYear(idx, 'totalNominal', e.target.value)} style={styles.input(errTot)} />
-                          {errTot && <small style={styles.error}>{errTot}</small>}
-                        </div>
-                        <div>
-                          <label style={styles.label}>Frequency</label>
-                          <select value={y.frequency} onChange={e => updateSubsequentYear(idx, 'frequency', e.target.value)} style={styles.select(errFreq)}>
-                            <option value="monthly">monthly</option>
-                            <option value="quarterly">quarterly</option>
-                            <option value="bi-annually">bi-annually</option>
-                            <option value="annually">annually</option>
-                          </select>
-                          {errFreq && <small style={styles.error}>{errFreq}</small>}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'end' }}>
-                          <button type="button" onClick={() => removeSubsequentYear(idx)} style={styles.btn}>Remove</button>
-                        </div>
-                      </React.Fragment>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Live Preview */}
-            <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
-              <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Live Preview (Calculation)</h3>
-              {previewError ? <p style={styles.error}>{previewError}</p> : null}
-              {summaries ? (
-                <ul style={{ margin: 0, paddingLeft: 16 }}>
-                  <li>Total Nominal Price: {Number(summaries.totalNominalPrice || 0).toLocaleString()}</li>
-                  <li>Equal Installments: {summaries.numEqualInstallments}</li>
-                  <li>Installment Amount: {Number(summaries.equalInstallmentAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
-                  <li>Calculated PV: {Number(summaries.calculatedPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
-                  <li>Effective Start Years (for installments): {summaries.effectiveStartYears}</li>
-                </ul>
-              ) : (
-                !previewError && <p style={styles.metaText}>Adjust form inputs to see live preview.</p>
-              )}
-            </div>
-
-            <div style={{ ...styles.blockFull, display: 'flex', gap: 10 }}>
-              <button type="submit" disabled={genLoading} style={{ ...styles.btnPrimary, opacity: genLoading ? 0.7 : 1 }}>
-                {genLoading ? 'Calculating...' : 'Calculate (Generate Plan)'}
-              </button>
-            </div>
-          </form>
-        </section>
+        <InputsForm
+          styles={styles}
+          language={language}
+          setLanguage={setLanguage}
+          currency={currency}
+          setCurrency={setCurrency}
+          mode={mode}
+          setMode={setMode}
+          stdPlan={stdPlan}
+          setStdPlan={setStdPlan}
+          inputs={inputs}
+          setInputs={setInputs}
+          errors={errors}
+          unitPricingBreakdown={unitPricingBreakdown}
+          rateLocked={rateLocked}
+          DiscountHint={DiscountHint}
+          summaries={summaries}
+          previewError={previewError}
+          genLoading={genLoading}
+          onGeneratePlan={runGeneratePlan}
+        />
 
         {/* Standard vs Offer PV Comparison */}
         <section style={styles.section}>
