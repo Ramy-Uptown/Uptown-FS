@@ -411,7 +411,6 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
       const ph = `$${placeholderCount++}`
       clauses.push(`(
         LOWER(u.code) LIKE ${ph}
-        OR LOWER(COALESCE(u.description, '')) LIKE ${ph}
         OR LOWER(COALESCE(u.unit_type, '')) LIKE ${ph}
         OR LOWER(COALESCE(ut.name, '')) LIKE ${ph}
       )`)
@@ -439,7 +438,8 @@ router.get('/units', authMiddleware, requireRole(['admin','superadmin','sales_ma
 
     const r = await pool.query(
       `SELECT
-         u.id, u.code, u.description, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+         u.id, u.code, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+         u.unit_number, u.floor, u.building_number, u.block_sector, u.zone, u.garden_details,
          u.base_price, u.currency, u.model_id, u.area, u.orientation,
          u.has_garden, u.garden_area, u.has_roof, u.roof_area,
          u.maintenance_price, u.garage_price, u.garden_price, u.roof_price, u.storage_price,
@@ -535,7 +535,8 @@ router.get('/units/:id', authMiddleware, requireRole(['admin','superadmin','sale
     const params = [id]
     const r = await pool.query(
       `SELECT
-         u.id, u.code, u.description, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+         u.id, u.code, u.unit_type, u.unit_type_id, ut.name AS unit_type_name,
+         u.unit_number, u.floor, u.building_number, u.block_sector, u.zone, u.garden_details,
          u.base_price, u.currency, u.model_id, u.area, u.orientation,
          u.has_garden, u.garden_area, u.has_roof, u.roof_area,
          u.maintenance_price, u.garage_price, u.garden_price, u.roof_price, u.storage_price,
@@ -626,18 +627,30 @@ router.post('/units', authMiddleware, requireRole(['financial_admin']), async (r
     const roofPrice = Number(priceRes.rows[0].roof_price ?? 0) || 0
     const storagePrice = Number(priceRes.rows[0].storage_price ?? 0) || 0
 
+    // Optional inventory metadata populated by Financial Admin
+    const {
+      unit_number,
+      floor,
+      building_number,
+      block_sector,
+      zone,
+      garden_details
+    } = req.body || {}
+
     // Create draft unit already linked to the model, with features and prices propagated
     let unit
     try {
       const r = await pool.query(
         `INSERT INTO units (
-           code, description, unit_type, unit_type_id, base_price, currency, model_id, available, unit_status, created_by,
+           code, unit_type, unit_type_id, base_price, currency, model_id, available, unit_status, created_by,
            area, orientation, has_garden, garden_area, has_roof, roof_area,
-           maintenance_price, garage_price, garden_price, roof_price, storage_price
+           maintenance_price, garage_price, garden_price, roof_price, storage_price,
+           unit_number, floor, building_number, block_sector, zone, garden_details
          )
-         VALUES ($1, NULL, NULL, NULL, $2, 'EGP', $3, TRUE, 'INVENTORY_DRAFT', $4,
+         VALUES ($1, NULL, NULL, $2, 'EGP', $3, TRUE, 'INVENTORY_DRAFT', $4,
                  $5, $6, $7, $8, $9, $10,
-                 $11, $12, $13, $14, $15)
+                 $11, $12, $13, $14, $15,
+                 $16, $17, $18, $19, $20, $21)
          RETURNING *`,
         [
           code.trim(),
@@ -645,7 +658,13 @@ router.post('/units', authMiddleware, requireRole(['financial_admin']), async (r
           modelId,
           req.user.id,
           m.area, m.orientation, m.has_garden, m.garden_area, m.has_roof, m.roof_area,
-          maintPrice, garPrice, gardenPrice, roofPrice, storagePrice
+          maintPrice, garPrice, gardenPrice, roofPrice, storagePrice,
+          unit_number || null,
+          floor || null,
+          building_number || null,
+          block_sector || null,
+          zone || null,
+          garden_details || null
         ]
       )
       unit = r.rows[0]

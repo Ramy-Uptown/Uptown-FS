@@ -4,6 +4,12 @@ import { fetchWithAuth } from './lib/apiClient.js'
 import BrandHeader from './lib/BrandHeader.jsx'
 import { getArabicMonth } from './lib/i18n.js'
 import numberToArabic from './lib/numberToArabic.js'
+import EvaluationPanel from './components/calculator/EvaluationPanel.jsx'
+import PaymentSchedule from './components/calculator/PaymentSchedule.jsx'
+import ClientInfoForm from './components/calculator/ClientInfoForm.jsx'
+import UnitInfoSection from './components/calculator/UnitInfoSection.jsx'
+import ContractDetailsForm from './components/calculator/ContractDetailsForm.jsx'
+import InputsForm from './components/calculator/InputsForm.jsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 const LS_KEY = 'uptown_calc_form_state_v2'
@@ -162,6 +168,9 @@ export default function App(props) {
     } catch {}
   }, [])
   const role = authUser?.role
+
+  // Lock certain fields when a unit is selected (use server-approved standard)
+  const rateLocked = Number(unitInfo?.unit_id) > 0
 
   // Dynamic arrays
   const [firstYearPayments, setFirstYearPayments] = useState([])
@@ -414,7 +423,6 @@ export default function App(props) {
                 unit_type: u.unit_type || s.unit_type,
                 unit_code: u.code || s.unit_code,
                 unit_number: s.unit_number,
-                description: u.description || s.description,
                 unit_id: u.id
               }))
               if (setFeeSchedule) {
@@ -478,7 +486,7 @@ export default function App(props) {
           >
             <option value="">{loadingUnits ? 'Loading…' : (units.length ? 'Select unit…' : 'No units')}</option>
             {units.map(u => (
-              <option key={u.id} value={u.id}>{u.code} — {u.description || ''}</option>
+              <option key={u.id} value={u.id}>{u.code}</option>
             ))}
           </select>
         </div>
@@ -658,58 +666,7 @@ export default function App(props) {
     return { valid: Object.keys(e).length === 0, payload }
   }
 
-  // Debounced live preview using the API
-  useEffect(() => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current)
-    debounceTimer.current = setTimeout(async () => {
-      const { valid, payload } = validateForm()
-      if (!valid) {
-        setPreview(null)
-        setPreviewError('Fix validation errors to see preview.')
-        return
-      }
-      try {
-        setPreviewError('')
-        const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-        const data = await resp.json()
-        if (!resp.ok) {
-          setPreview(null)
-          setPreviewError(data?.error?.message || 'Preview error')
-        } else {
-          setPreview(data?.data || null)
-          // surface meta warnings
-          const meta = data?.meta || {}
-          const warn = []
-          if (meta.policyLimit != null) {
-            warn.push(`Policy limit: ${meta.policyLimit}%`)
-          }
-          if (meta.overPolicy) {
-            warn.push('Selected discount exceeds current policy limit. Workflow will route to Top-Management.')
-          }
-          if (meta.authorityLimit != null) {
-            warn.push(`Your authority limit: ${meta.authorityLimit}%`)
-          }
-          if (meta.overAuthority) {
-            warn.push('Selected discount exceeds your authority. It will be escalated in workflow.')
-          }
-          if (warn.length) {
-            setPreviewError(warn.join(' '))
-          } else {
-            setPreviewError('')
-          }
-        }
-      } catch (err) {
-        setPreview(null)
-        setPreviewError('Could not compute preview.')
-      }
-    }, 500)
-    return () => clearTimeout(debounceTimer.current)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, stdPlan, inputs, firstYearPayments, subsequentYears])
+  
 
   async function runGeneratePlan(e) {
     e.preventDefault()
@@ -786,11 +743,56 @@ export default function App(props) {
   function buildDocumentBody(documentType) {
     const { valid, payload } = validateForm()
     // Even if not valid, we still send what we have; but generally require valid to ensure server accepts
+    // Build document data map for placeholders
+    const docData = {
+      // Client info (English)
+      buyer_name: clientInfo.buyer_name || '',
+      nationality: clientInfo.nationality || '',
+      id_or_passport: clientInfo.id_or_passport || '',
+      id_issue_date: clientInfo.id_issue_date || '',
+      address: clientInfo.address || '',
+      phone_primary: clientInfo.phone_primary || '',
+      phone_secondary: clientInfo.phone_secondary || '',
+      email: clientInfo.email || '',
+      // Client info (Arabic aliases for templates)
+      'اسم المشترى': clientInfo.buyer_name || '',
+      'الجنسية': clientInfo.nationality || '',
+      'رقم قومي/ رقم جواز': clientInfo.id_or_passport || '',
+      'تاريخ الاصدار': clientInfo.id_issue_date || '',
+      'العنوان': clientInfo.address || '',
+      'رقم الهاتف': clientInfo.phone_primary || '',
+      'رقم الهاتف (2)': clientInfo.phone_secondary || '',
+      'البريد الالكتروني': clientInfo.email || '',
+      // Unit info (English)
+      unit_type: unitInfo.unit_type || '',
+      unit_code: unitInfo.unit_code || '',
+      unit_number: unitInfo.unit_number || '',
+      floor: unitInfo.floor || '',
+      building_number: unitInfo.building_number || '',
+      block_sector: unitInfo.block_sector || '',
+      zone: unitInfo.zone || '',
+      garden_details: unitInfo.garden_details || '',
+      // Unit info (Arabic aliases)
+      'نوع الوحدة': unitInfo.unit_type || '',
+      'كود الوحدة': unitInfo.unit_code || '',
+      'وحدة رقم': unitInfo.unit_number || '',
+      'الدور': unitInfo.floor || '',
+      'مبنى رقم': unitInfo.building_number || '',
+      'قطاع': unitInfo.block_sector || '',
+      'مجاورة': unitInfo.zone || '',
+      'مساحة الحديقة': unitInfo.garden_details || '',
+      // Calculator summaries (optional)
+      std_total_price: Number(stdPlan.totalPrice) || 0,
+      std_financial_rate_percent: Number(stdPlan.financialDiscountRate) || 0,
+      std_calculated_pv: Number(stdPlan.calculatedPV) || 0
+    }
+
     const body = {
       documentType,
       language,
       currency,
       ...payload,
+      data: docData
     }
     // Attach generated plan if available so server can reuse without recalculation (optional)
     if (genResult?.schedule?.length) {
@@ -1126,238 +1128,41 @@ export default function App(props) {
           </div>
         )}
 
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>API Connectivity</h2>
-          <pre style={{ background: '#f6f8fa', padding: 12, borderRadius: 8, overflow: 'auto', border: '1px solid #eef2f7' }}>
-{JSON.stringify(health, null, 2)}
-          </pre>
-          <p style={{ ...styles.metaText }}><strong>Message from API:</strong> {message}</p>
-        </section>
+        
 
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Inputs</h2>
-          <form onSubmit={runGeneratePlan} style={{ ...styles.grid2 }}>
-            <div>
-              <label style={styles.label}>Language for Written Amounts</label>
-              <select value={language} onChange={e => setLanguage(e.target.value)} style={styles.select()}>
-                <option value="en">English</option>
-                <option value="ar">Arabic</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={styles.label}>Currency (English only)</label>
-              <select value={currency} onChange={e => setCurrency(e.target.value)} style={styles.select()}>
-                <option value="EGP">EGP (Egyptian Pounds)</option>
-                <option value="USD">USD (US Dollars)</option>
-                <option value="SAR">SAR (Saudi Riyals)</option>
-                <option value="EUR">EUR (Euros)</option>
-                <option value="AED">AED (UAE Dirhams)</option>
-                <option value="KWD">KWD (Kuwaiti Dinars)</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={styles.label}>Mode</label>
-              <select value={mode} onChange={e => setMode(e.target.value)} style={styles.select()}>
-                <option value="evaluateCustomPrice">evaluateCustomPrice</option>
-                <option value="calculateForTargetPV">calculateForTargetPV</option>
-                <option value="customYearlyThenEqual_useStdPrice">customYearlyThenEqual_useStdPrice</option>
-                <option value="customYearlyThenEqual_targetPV">customYearlyThenEqual_targetPV</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={styles.label}>Installment Frequency</label>
-              <select value={inputs.installmentFrequency} onChange={e => setInputs(s => ({ ...s, installmentFrequency: e.target.value }))} style={styles.select(errors.installmentFrequency)}>
-                <option value="monthly">monthly</option>
-                <option value="quarterly">quarterly</option>
-                <option value="bi-annually">bi-annually</option>
-                <option value="annually">annually</option>
-              </select>
-              {errors.installmentFrequency && <small style={styles.error}>{errors.installmentFrequency}</small>}
-            </div>
-
-            <div>
-              <label style={styles.label}>Std Total Price</label>
-              <input type="number" value={stdPlan.totalPrice} onChange={e => setStdPlan(s => ({ ...s, totalPrice: e.target.value }))} style={styles.input(errors.std_totalPrice)} />
-              {errors.std_totalPrice && <small style={styles.error}>{errors.std_totalPrice}</small>}
-              {/* Unit total breakdown */}
-              <div style={{ marginTop: 6, fontSize: 12, color: '#4b5563', background: '#fbfaf7', border: '1px dashed #ead9bd', borderRadius: 8, padding: 8 }}>
-                <div><strong>Unit Breakdown</strong></div>
-                <div>Base: {Number(unitPricingBreakdown.base || 0).toLocaleString()}</div>
-                <div>Garden: {Number(unitPricingBreakdown.garden || 0).toLocaleString()}</div>
-                <div>Roof: {Number(unitPricingBreakdown.roof || 0).toLocaleString()}</div>
-                <div>Storage: {Number(unitPricingBreakdown.storage || 0).toLocaleString()}</div>
-                <div>Garage: {Number(unitPricingBreakdown.garage || 0).toLocaleString()}</div>
-                <div style={{ marginTop: 4 }}><strong>Total (excl. maintenance): {Number(unitPricingBreakdown.totalExclMaintenance || 0).toLocaleString()}</strong></div>
-                <div>Maintenance (scheduled separately): {Number(unitPricingBreakdown.maintenance || 0).toLocaleString()}</div>
-              </div>
-            </div>
-            <div>
-              <label style={styles.label}>Std Financial Rate (%)</label>
-              <input type="number" value={stdPlan.financialDiscountRate} onChange={e => setStdPlan(s => ({ ...s, financialDiscountRate: e.target.value }))} style={styles.input(errors.std_financialDiscountRate)} />
-              {errors.std_financialDiscountRate && <small style={styles.error}>{errors.std_financialDiscountRate}</small>}
-            </div>
-            <div>
-              <label style={styles.label}>Std Calculated PV</label>
-              <input type="number" value={stdPlan.calculatedPV} onChange={e => setStdPlan(s => ({ ...s, calculatedPV: e.target.value }))} style={styles.input(errors.std_calculatedPV)} />
-              {errors.std_calculatedPV && <small style={styles.error}>{errors.std_calculatedPV}</small>}
-            </div>
-
-            <div>
-              <label style={styles.label}>Sales Discount (%)</label>
-              <input type="number" value={inputs.salesDiscountPercent} onChange={e => setInputs(s => ({ ...s, salesDiscountPercent: e.target.value }))} style={styles.input()} />
-              <DiscountHint role={authUser?.role} value={inputs.salesDiscountPercent} />
-            </div>
-
-            <div>
-              <label style={styles.label}>DP Type</label>
-              <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={styles.select(errors.dpType)}>
-                <option value="amount">amount</option>
-                <option value="percentage">percentage</option>
-              </select>
-              {errors.dpType && <small style={styles.error}>{errors.dpType}</small>}
-            </div>
-            <div>
-              <label style={styles.label}>Down Payment Value</label>
-              <input type="number" value={inputs.downPaymentValue} onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))} style={styles.input(errors.downPaymentValue)} />
-              {errors.downPaymentValue && <small style={styles.error}>{errors.downPaymentValue}</small>}
-            </div>
-
-            <div>
-              <label style={styles.label}>Plan Duration (years)</label>
-              <input type="number" value={inputs.planDurationYears} onChange={e => setInputs(s => ({ ...s, planDurationYears: e.target.value }))} style={styles.input(errors.planDurationYears)} />
-              {errors.planDurationYears && <small style={styles.error}>{errors.planDurationYears}</small>}
-            </div>
-
-            <div>
-              <label style={styles.label}>Handover Year</label>
-              <input type="number" value={inputs.handoverYear} onChange={e => setInputs(s => ({ ...s, handoverYear: e.target.value }))} style={styles.input(errors.handoverYear)} />
-              {errors.handoverYear && <small style={styles.error}>{errors.handoverYear}</small>}
-            </div>
-            <div>
-              <label style={styles.label}>Additional Handover Payment</label>
-              <input type="number" value={inputs.additionalHandoverPayment} onChange={e => setInputs(s => ({ ...s, additionalHandoverPayment: e.target.value }))} style={styles.input(errors.additionalHandoverPayment)} />
-              {errors.additionalHandoverPayment && <small style={styles.error}>{errors.additionalHandoverPayment}</small>}
-            </div>
-
-            <div style={styles.blockFull}>
-              <label style={{ ...styles.label, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <input type="checkbox" checked={inputs.splitFirstYearPayments} onChange={e => setInputs(s => ({ ...s, splitFirstYearPayments: e.target.checked }))} />
-                Split First Year Payments?
-              </label>
-            </div>
-
-            {/* First Year Payments Builder */}
-            {inputs.splitFirstYearPayments && (
-              <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>First Year Payments</h3>
-                  <button type="button" onClick={addFirstYearPayment} style={styles.btn}>+ Add Payment</button>
-                </div>
-                {firstYearPayments.length === 0 ? (
-                  <p style={styles.metaText}>No first-year payments defined.</p>
-                ) : (
-                  <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8 }}>
-                    {firstYearPayments.map((p, idx) => {
-                      const errAmt = errors[`fyp_amount_${idx}`]
-                      const errMonth = errors[`fyp_month_${idx}`]
-                      return (
-                        <React.Fragment key={idx}>
-                          <div>
-                            <label style={styles.label}>Amount</label>
-                            <input type="number" value={p.amount} onChange={e => updateFirstYearPayment(idx, 'amount', e.target.value)} style={styles.input(errAmt)} />
-                            {errAmt && <small style={styles.error}>{errAmt}</small>}
-                          </div>
-                          <div>
-                            <label style={styles.label}>Month (1-12)</label>
-                            <input type="number" min="1" max="12" value={p.month} onChange={e => updateFirstYearPayment(idx, 'month', e.target.value)} style={styles.input(errMonth)} />
-                            {language === 'ar' && <small style={{...styles.metaText, fontStyle: 'italic'}}>{getArabicMonth(p.month)}</small>}
-                            {errMonth && <small style={styles.error}>{errMonth}</small>}
-                          </div>
-                          <div>
-                            <label style={styles.label}>Type</label>
-                            <select value={p.type} onChange={e => updateFirstYearPayment(idx, 'type', e.target.value)} style={styles.select()}>
-                              <option value="dp">dp</option>
-                              <option value="regular">regular</option>
-                            </select>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'end' }}>
-                            <button type="button" onClick={() => removeFirstYearPayment(idx)} style={styles.btn}>Remove</button>
-                          </div>
-                        </React.Fragment>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Subsequent Years Builder */}
-            <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Subsequent Custom Years</h3>
-                <button type="button" onClick={addSubsequentYear} style={styles.btn}>+ Add Year</button>
-              </div>
-              {subsequentYears.length === 0 ? (
-                <p style={styles.metaText}>No subsequent custom years defined.</p>
-              ) : (
-                <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
-                  {subsequentYears.map((y, idx) => {
-                    const errTot = errors[`sub_total_${idx}`]
-                    const errFreq = errors[`sub_freq_${idx}`]
-                    return (
-                      <React.Fragment key={idx}>
-                        <div>
-                          <label style={styles.label}>Total Nominal</label>
-                          <input type="number" value={y.totalNominal} onChange={e => updateSubsequentYear(idx, 'totalNominal', e.target.value)} style={styles.input(errTot)} />
-                          {errTot && <small style={styles.error}>{errTot}</small>}
-                        </div>
-                        <div>
-                          <label style={styles.label}>Frequency</label>
-                          <select value={y.frequency} onChange={e => updateSubsequentYear(idx, 'frequency', e.target.value)} style={styles.select(errFreq)}>
-                            <option value="monthly">monthly</option>
-                            <option value="quarterly">quarterly</option>
-                            <option value="bi-annually">bi-annually</option>
-                            <option value="annually">annually</option>
-                          </select>
-                          {errFreq && <small style={styles.error}>{errFreq}</small>}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'end' }}>
-                          <button type="button" onClick={() => removeSubsequentYear(idx)} style={styles.btn}>Remove</button>
-                        </div>
-                      </React.Fragment>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Live Preview */}
-            <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
-              <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Live Preview (Calculation)</h3>
-              {previewError ? <p style={styles.error}>{previewError}</p> : null}
-              {summaries ? (
-                <ul style={{ margin: 0, paddingLeft: 16 }}>
-                  <li>Total Nominal Price: {Number(summaries.totalNominalPrice || 0).toLocaleString()}</li>
-                  <li>Equal Installments: {summaries.numEqualInstallments}</li>
-                  <li>Installment Amount: {Number(summaries.equalInstallmentAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
-                  <li>Calculated PV: {Number(summaries.calculatedPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
-                  <li>Effective Start Years (for installments): {summaries.effectiveStartYears}</li>
-                </ul>
-              ) : (
-                !previewError && <p style={styles.metaText}>Adjust form inputs to see live preview.</p>
-              )}
-            </div>
-
-            <div style={{ ...styles.blockFull, display: 'flex', gap: 10 }}>
-              <button type="submit" disabled={genLoading} style={{ ...styles.btnPrimary, opacity: genLoading ? 0.7 : 1 }}>
-                {genLoading ? 'Calculating...' : 'Calculate (Generate Plan)'}
-              </button>
-            </div>
-          </form>
-        </section>
+        <InputsForm
+          styles={styles}
+          language={language}
+          setLanguage={setLanguage}
+          currency={currency}
+          setCurrency={setCurrency}
+          mode={mode}
+          setMode={setMode}
+          stdPlan={stdPlan}
+          setStdPlan={setStdPlan}
+          inputs={inputs}
+          setInputs={setInputs}
+          errors={errors}
+          unitPricingBreakdown={unitPricingBreakdown}
+          rateLocked={rateLocked}
+          DiscountHint={DiscountHint}
+          summaries={summaries}
+          previewError={previewError}
+          genLoading={genLoading}
+          onGeneratePlan={runGeneratePlan}
+          firstYearPayments={firstYearPayments}
+          addFirstYearPayment={addFirstYearPayment}
+          updateFirstYearPayment={updateFirstYearPayment}
+          removeFirstYearPayment={removeFirstYearPayment}
+          subsequentYears={subsequentYears}
+          addSubsequentYear={addSubsequentYear}
+          updateSubsequentYear={updateSubsequentYear}
+          removeSubsequentYear={removeSubsequentYear}
+          validateForm={validateForm}
+          buildPayload={buildPayload}
+          setPreview={setPreview}
+          setPreviewError={setPreviewError}
+        />
 
         {/* Standard vs Offer PV Comparison */}
         <section style={styles.section}>
@@ -1458,95 +1263,10 @@ export default function App(props) {
         {genResult?.evaluation && (
           <section style={styles.section}>
             <h2 style={styles.sectionTitle}>Acceptance Evaluation</h2>
-            {(() => {
-              const ok = genResult.evaluation.decision === 'ACCEPT'
-              const box = {
-                marginBottom: 12,
-                padding: '10px 12px',
-                borderRadius: 10,
-                border: `1px solid ${ok ? '#10b981' : '#ef4444'}`,
-                background: ok ? '#ecfdf5' : '#fef2f2',
-                color: ok ? '#065f46' : '#7f1d1d',
-                fontWeight: 600
-              }
-              return (
-                <div style={box}>
-                  NPV-based Decision: {genResult.evaluation.decision}
-                </div>
-              )
-            })()}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
-                <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>PV Comparison</h3>
-                <ul style={{ margin: 0, paddingLeft: 16 }}>
-                  <li>Proposed PV: {Number(genResult.evaluation.pv.proposedPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
-                  <li>Standard PV: {Number(genResult.evaluation.pv.standardPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
-                  <li>Difference (Std - Prop): {Number(genResult.evaluation.pv.difference || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
-                  <li>PV Tolerance: {Number(genResult.evaluation.pv.tolerancePercent || 0).toLocaleString()}%</li>
-                  <li>Status: {genResult.evaluation.pv.pass ? 'PASS' : 'FAIL'}</li>
-                </ul>
-              </div>
-              <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
-                <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Conditions</h3>
-                <ul style={{ margin: 0, paddingLeft: 16 }}>
-                  {genResult.evaluation.conditions.map((c, idx) => (
-                    <li key={idx} style={{ marginBottom: 6 }}>
-                      <div><strong>{c.label}</strong> — <span style={{ color: c.status === 'PASS' ? '#065f46' : '#7f1d1d' }}>{c.status}</span></div>
-                      {'required' in c && typeof c.required === 'number' && <div>Required: {Number(c.required).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>}
-                      {'required' in c && typeof c.required === 'object' && (
-                        <div>
-                          Required: {c.required.min != null ? `Min ${Number(c.required.min).toLocaleString()}% ` : ''}{c.required.max != null ? `Max ${Number(c.required.max).toLocaleString()}%` : ''}
-                        </div>
-                      )}
-                      {'actual' in c && typeof c.actual === 'number' && <div>Actual: {Number(c.actual).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>}
-                      {'actual' in c && typeof c.actual === 'object' && (
-                        <div>
-                          Actual: {c.actual.amount != null ? `${Number(c.actual.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : ''}{c.actual.percent != null ? ` (${Number(c.actual.percent).toLocaleString(undefined, { maximumFractionDigits: 2 })}%)` : ''}
-                        </div>
-                      )}
-                      {c.handoverYear != null && <div>Handover Year: {c.handoverYear}</div>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            <EvaluationPanel evaluation={genResult.evaluation} role={role} dealId={props?.dealId} API_URL={API_URL} />
             <small style={styles.metaText}>
               Thresholds are set by the Financial Manager and approved by Top Management. The evaluation above is computed server-side.
             </small>
-
-            {/* Request Override — shown when we are embedded in a deal context and decision is REJECT */}
-            {genResult.evaluation.decision === 'REJECT' && (role === 'property_consultant' || role === 'sales_manager' || role === 'financial_manager' || role === 'admin' || role === 'superadmin') && (
-              <div style={{ marginTop: 12 }}>
-                {props?.dealId ? (
-                  <button
-                    type="button"
-                    style={styles.btnPrimary}
-                    onClick={async () => {
-                      const reason = window.prompt('Provide a reason for override request (optional):', '')
-                      try {
-                        const resp = await fetchWithAuth(`${API_URL}/api/deals/${props.dealId}/request-override`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ reason: reason || null })
-                        })
-                        const data = await resp.json()
-                        if (!resp.ok) {
-                          alert(data?.error?.message || 'Failed to request override')
-                        } else {
-                          alert('Override requested. Waiting for review.')
-                        }
-                      } catch (err) {
-                        alert(err?.message || 'Failed to request override')
-                      }
-                    }}
-                  >
-                    Request Override
-                  </button>
-                ) : (
-                  <small style={styles.metaText}>Override request is available in Deal view after you save and submit.</small>
-                )}
-              </div>
-            )}
           </section>
         )}
 
@@ -1681,197 +1401,31 @@ export default function App(props) {
         </section>
 
         {/* Data Entry UI — New Sections */}
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Client Information</h2>
-          {role === 'property_consultant' ? (
-            <div style={styles.grid2}>
-              <div>
-                <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
-                <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
-              </div>
-            </div>
-          ) : (
-            <div style={styles.grid2}>
-              <div>
-                <label style={styles.label}>Buyer Name (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Nationality (<span style={styles.arInline}>[[الجنسية]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={clientInfo.nationality} onChange={e => setClientInfo(s => ({ ...s, nationality: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>National ID / Passport No. (<span style={styles.arInline}>[[رقم قومي/ رقم جواز]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={clientInfo.id_or_passport} onChange={e => setClientInfo(s => ({ ...s, id_or_passport: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>ID/Passport Issue Date (<span style={styles.arInline}>[[تاريخ الاصدار]]</span>)</label>
-                <input type="date" style={styles.input()} value={clientInfo.id_issue_date} onChange={e => setClientInfo(s => ({ ...s, id_issue_date: e.target.value }))} />
-              </div>
-              <div style={styles.blockFull}>
-                <label style={styles.label}>Address (<span style={styles.arInline}>[[العنوان]]</span>)</label>
-                <textarea dir="auto" style={styles.textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Primary Phone No. (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
-                <input style={styles.input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Secondary Phone No. (<span style={styles.arInline}>[[رقم الهاتف (2)]]</span>)</label>
-                <input style={styles.input()} value={clientInfo.phone_secondary} onChange={e => setClientInfo(s => ({ ...s, phone_secondary: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Email Address (<span style={styles.arInline}>[[البريد الالكتروني]]</span>)</label>
-                <input type="email" style={styles.input()} value={clientInfo.email} onChange={e => setClientInfo(s => ({ ...s, email: e.target.value }))} />
-              </div>
-            </div>
-          )}
-        </section>
+        <ClientInfoForm role={role} clientInfo={clientInfo} setClientInfo={setClientInfo} styles={styles} />
 
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Unit & Project Information</h2>
-          {role === 'property_consultant' ? (
-            <div style={styles.grid2}>
-              <div>
-                <label style={styles.label}>Unit Type</label>
-                <TypeAndUnitPicker
-                  unitInfo={unitInfo}
-                  setUnitInfo={setUnitInfo}
-                  setStdPlan={setStdPlan}
-                  setInputs={setInputs}
-                  setCurrency={setCurrency}
-                  setFeeSchedule={setFeeSchedule}
-                />
-                <small style={styles.metaText}>
-                  Choose a type to view available inventory. Selecting a unit will set price and details automatically.
-                </small>
-              </div>
-              <div>
-                <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
-              </div>
-              <div>
-                <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
-                <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
-              </div>
-            </div>
-          ) : (
-            <div style={styles.grid2}>
-              <div>
-                <label style={styles.label}>Unit Type</label>
-                <TypeAndUnitPicker
-                  unitInfo={unitInfo}
-                  setUnitInfo={setUnitInfo}
-                  setStdPlan={setStdPlan}
-                  setInputs={setInputs}
-                  setCurrency={setCurrency}
-                  setFeeSchedule={setFeeSchedule}
-                />
-                <small style={styles.metaText}>
-                  Choose a type to view available inventory. Selecting a unit will set price and details automatically.
-                </small>
-              </div>
-              <div>
-                <label style={styles.label}>Unit Type (<span style={styles.arInline}>[[نوع الوحدة]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={unitInfo.unit_type} onChange={e => setUnitInfo(s => ({ ...s, unit_type: e.target.value }))} placeholder='مثال: "شقة سكنية بالروف"' />
-              </div>
-              <div>
-                <label style={styles.label}>Unit Code (<span style={styles.arInline}>[[كود الوحدة]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={unitInfo.unit_code} onChange={e => setUnitInfo(s => ({ ...s, unit_code: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Unit Description</label>
-                <input dir="auto" style={styles.input()} value={unitInfo.description || ''} onChange={e => setUnitInfo(s => ({ ...s, description: e.target.value }))} placeholder="e.g., 3BR Apartment with roof" />
-              </div>
-              <div>
-                <label style={styles.label}>Unit Number (<span style={styles.arInline}>[[وحدة رقم]]</span>)</label>
-                <input style={styles.input()} value={unitInfo.unit_number} onChange={e => setUnitInfo(s => ({ ...s, unit_number: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Floor (<span style={styles.arInline}>[[الدور]]</span>)</label>
-                <input style={styles.input()} value={unitInfo.floor} onChange={e => setUnitInfo(s => ({ ...s, floor: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Building Number (<span style={styles.arInline}>[[مبنى رقم]]</span>)</label>
-                <input style={styles.input()} value={unitInfo.building_number} onChange={e => setUnitInfo(s => ({ ...s, building_number: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Block / Sector (<span style={styles.arInline}>[[قطاع]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={unitInfo.block_sector} onChange={e => setUnitInfo(s => ({ ...s, block_sector: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Zone / Neighborhood (<span style={styles.arInline}>[[مجاورة]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={unitInfo.zone} onChange={e => setUnitInfo(s => ({ ...s, zone: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Garden Details (<span style={styles.arInline}>[[مساحة الحديقة]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={unitInfo.garden_details} onChange={e => setUnitInfo(s => ({ ...s, garden_details: e.target.value }))} placeholder='مثال: "و حديقة بمساحة ٥٠ م٢"' />
-              </div>
-            </div>
-          )}
-        </section>
+        <UnitInfoSection
+          role={role}
+          styles={styles}
+          mode={mode}
+          inputs={inputs}
+          unitInfo={unitInfo}
+          setUnitInfo={setUnitInfo}
+          setStdPlan={setStdPlan}
+          setInputs={setInputs}
+          setCurrency={setCurrency}
+          setFeeSchedule={setFeeSchedule}
+          setUnitPricingBreakdown={setUnitPricingBreakdown}
+        />
 
         {(role === 'financial_admin' || role === 'financial_manager' || role === 'contract_manager' || role === 'contract_person') && (
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Contract & Financial Details</h2>
-            <div style={styles.grid2}>
-              <div>
-                <label style={styles.label}>Reservation Form Date (<span style={styles.arInline}>[[تاريخ استمارة الحجز]]</span>)</label>
-                <input type="date" style={styles.input()} value={contractInfo.reservation_form_date} onChange={e => setContractInfo(s => ({ ...s, reservation_form_date: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Contract Date (<span style={styles.arInline}>[[تاريخ العقد]]</span>)</label>
-                <input type="date" style={styles.input()} value={contractInfo.contract_date} onChange={e => setContractInfo(s => ({ ...s, contract_date: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Reservation Payment Amount (<span style={styles.arInline}>[[قيمة دفعة الحجز]]</span>)</label>
-                <input type="number" style={styles.input()} value={contractInfo.reservation_payment_amount} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_amount: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Reservation Payment Date (<span style={styles.arInline}>[[تاريخ سداد دفعة الحجز]]</span>)</label>
-                <input type="date" style={styles.input()} value={contractInfo.reservation_payment_date} onChange={e => setContractInfo(s => ({ ...s, reservation_payment_date: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Maintenance Fee (<span style={styles.arInline}>[[مصاريف الصيانة بالأرقام]]</span>)</label>
-                <input type="number" style={styles.input()} value={contractInfo.maintenance_fee} onChange={e => setContractInfo(s => ({ ...s, maintenance_fee: e.target.value }))} />
-              </div>
-              <div>
-                <label style={styles.label}>Delivery Period (<span style={styles.arInline}>[[مدة التسليم]]</span>)</label>
-                <input dir="auto" style={styles.input()} value={contractInfo.delivery_period} onChange={e => setContractInfo(s => ({ ...s, delivery_period: e.target.value }))} placeholder='مثال: "ثلاث سنوات ميلادية"' />
-              </div>
-            </div>
-
-            <div style={{ marginTop: 12, borderTop: '1px dashed #ead9bd', paddingTop: 12 }}>
-              <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Additional Fees Schedule (not included in PV)</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-                <div>
-                  <label style={styles.label}>Maintenance Amount</label>
-                  <input type="number" style={styles.input()} value={feeSchedule.maintenancePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentAmount: e.target.value }))} placeholder="e.g. 150000" />
-                </div>
-                <div>
-                  <label style={styles.label}>Maintenance Due Month (from contract date)</label>
-                  <input type="number" min="0" style={styles.input()} value={feeSchedule.maintenancePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentMonth: e.target.value }))} placeholder="e.g. 0 for at contract" />
-                </div>
-                <div>
-                  <label style={styles.label}>Garage Amount</label>
-                  <input type="number" style={styles.input()} value={feeSchedule.garagePaymentAmount} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentAmount: e.target.value }))} placeholder="e.g. 200000" />
-                </div>
-                <div>
-                  <label style={styles.label}>Garage Due Month (from contract date)</label>
-                  <input type="number" min="0" style={styles.input()} value={feeSchedule.garagePaymentMonth} onChange={e => setFeeSchedule(s => ({ ...s, garagePaymentMonth: e.target.value }))} placeholder="e.g. 12" />
-                </div>
-              </div>
-              <small style={styles.metaText}>These fees will be appended to the generated schedule with dates based on the contract date (or reservation form date if contract date is empty). They are not part of PV calculation.</small>
-            </div>
-          </section>
+          <ContractDetailsForm
+            role={role}
+            contractInfo={contractInfo}
+            setContractInfo={setContractInfo}
+            feeSchedule={feeSchedule}
+            setFeeSchedule={setFeeSchedule}
+            styles={styles}
+          />
         )}
 
         {(role === 'contract_manager' || role === 'contract_person') && (
@@ -1939,47 +1493,14 @@ export default function App(props) {
           {schedule.length === 0 ? (
             <p style={styles.metaText}>No schedule yet. Fill the form and click "Calculate (Generate Plan)".</p>
           ) : (
-            <div style={styles.tableWrap}>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>#</th>
-                    <th style={styles.th}>Month</th>
-                    <th style={styles.th}>Date</th>
-                    <th style={styles.th}>Label</th>
-                    <th style={{ ...styles.th, textAlign: 'right' }}>Amount</th>
-                    <th style={{ ...styles.th, textAlign: language === 'ar' ? 'right' : 'left' }}>Written Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {schedule.map((row, idx) => (
-                    <tr key={idx}>
-                      <td style={styles.td}>{idx + 1}</td>
-                      <td style={styles.td}>{row.month}</td>
-                      <td style={styles.td}>{row.date || ''}</td>
-                      <td style={styles.td}>{row.label}</td>
-                      <td style={{ ...styles.td, textAlign: 'right' }}>
-                        {Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ ...styles.td, direction: language === 'ar' ? 'rtl' : 'ltr', textAlign: language === 'ar' ? 'right' : 'left' }}>
-                        {language === 'ar' ? numberToArabic(row.amount, 'جنيه مصري', 'قرش') : row.writtenAmount}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {totals && (
-                  <tfoot>
-                    <tr>
-                      <td colSpan="3" style={{ ...styles.tFootCell, textAlign: 'right' }}>Total</td>
-                      <td style={{ ...styles.tFootCell, textAlign: 'right' }}>
-                        {Number(totals.totalNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={styles.tFootCell}></td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
+            <PaymentSchedule
+              schedule={schedule}
+              totals={totals}
+              language={language}
+              onExportCSV={exportScheduleCSV}
+              onExportXLSX={exportScheduleXLSX}
+              onGenerateChecks={generateChecksSheetXLSX}
+            />
           )}
         </section>
       </div>

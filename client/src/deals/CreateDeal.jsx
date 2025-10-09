@@ -27,7 +27,6 @@ export default function CreateDeal() {
   const [unitForm, setUnitForm] = useState({
     unit_type: '',
     unit_code: '',
-    description: '',
     unit_number: '',
     floor: '',
     building_number: '',
@@ -98,25 +97,24 @@ export default function CreateDeal() {
         // Prefill embedded calculator via exposed bridge and sync local UI
         try {
           applyPrefill({
-            unitInfo: {
-              unit_type: u.unit_type || u.unit_type_name || '',
-              unit_code: u.code || '',
-              description: u.description || '',
-              unit_number: u.unit_number || '',
-              floor: u.floor || '',
-              building_number: u.building_number || '',
-              block_sector: u.block_sector || '',
-              zone: u.zone || '',
-              garden_details: u.garden_details || '',
-              area: u.area || '',
-              orientation: u.orientation || '',
-              has_garden: u.has_garden || false,
-              garden_area: u.garden_area || '',
-              has_roof: u.has_roof || false,
-              roof_area: u.roof_area || '',
-              garage_area: u.garage_area || '',
-              unit_id: u.id
-            },
+                unitInfo: {
+                  unit_type: u.unit_type || u.unit_type_name || '',
+                  unit_code: u.code || '',
+                  unit_number: u.unit_number || '',
+                  floor: u.floor || '',
+                  building_number: u.building_number || '',
+                  block_sector: u.block_sector || '',
+                  zone: u.zone || '',
+                  garden_details: u.garden_details || '',
+                  area: u.area || '',
+                  orientation: u.orientation || '',
+                  has_garden: u.has_garden || false,
+                  garden_area: u.garden_area || '',
+                  has_roof: u.has_roof || false,
+                  roof_area: u.roof_area || '',
+                  garage_area: u.garage_area || '',
+                  unit_id: u.id
+                },
             stdPlan: {
               totalPrice: stdTotal,
               base_price: stdBase,
@@ -138,7 +136,6 @@ export default function CreateDeal() {
           setUnitForm({
             unit_type: u.unit_type || u.unit_type_name || '',
             unit_code: u.code || '',
-            description: u.description || '',
             unit_number: u.unit_number || '',
             floor: u.floor || '',
             building_number: u.building_number || '',
@@ -512,15 +509,7 @@ export default function CreateDeal() {
               style={inputStyle}
             />
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Description</label>
-            <input
-              value={unitForm.description}
-              onChange={e => applyUnitUpdates({ description: e.target.value })}
-              style={inputStyle}
-              placeholder='3BR Apartment with roof'
-            />
-          </div>
+          
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Floor</label>
             <input
