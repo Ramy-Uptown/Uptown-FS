@@ -261,10 +261,32 @@ export default function UnitModels() {
         </div>
 
         <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 10, marginBottom: 10, background: '#fff' }}>
-          <span style={metaText}>
-            Note: All create/update/delete requests require approval from Top Management before they take effect.
-            You can track status under <a href="/admin/unit-model-changes">Unit Model Changes</a>.
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <span style={metaText}>
+              Note: All create/update/delete requests require approval from Top Management before they take effect.
+              You can track status under <a href="/admin/unit-model-changes">Unit Model Changes</a>.
+            </span>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <LoadingButton
+                type="button"
+                onClick={() => { window.location.href = '/admin/unit-model-changes?status=pending_approval' }}
+              >
+                View Pending Requests
+              </LoadingButton>
+              <LoadingButton
+                type="button"
+                onClick={() => { window.location.href = '/admin/unit-model-changes?status=rejected' }}
+              >
+                View Rejected Requests
+              </LoadingButton>
+              <LoadingButton
+                type="button"
+                onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+              >
+                New Model Change Request
+              </LoadingButton>
+            </div>
+          </div>
         </div>
 
         <form onSubmit={save} style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>

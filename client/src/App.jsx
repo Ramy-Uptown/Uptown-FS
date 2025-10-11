@@ -170,7 +170,8 @@ export default function App(props) {
   const role = authUser?.role
 
   // Lock certain fields when a unit is selected (use server-approved standard)
-  const rateLocked = Number(unitInfo?.unit_id) > 0
+// Declared here, assigned after unitInfo is initialized to avoid TDZ.
+let rateLocked = false
 
   // Dynamic arrays
   const [firstYearPayments, setFirstYearPayments] = useState([])
@@ -198,6 +199,8 @@ export default function App(props) {
     zone: '',
     garden_details: ''
   })
+  // Now that unitInfo is initialized, compute rateLocked
+  rateLocked = Number(unitInfo?.unit_id) > 0
   const [unitPricingBreakdown, setUnitPricingBreakdown] = useState({
     base: 0,
     garden: 0,
