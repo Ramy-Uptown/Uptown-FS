@@ -215,8 +215,8 @@ router.delete('/unit-models/changes/:id', authMiddleware, requireRole(['financia
     const cur = await pool.query('SELECT id, status, requested_by FROM unit_model_changes WHERE id=$1', [id])
     if (cur.rows.length === 0) return bad(res, 404, 'Change not found')
     const ch = cur.rows[0]
-    if (ch.status !== 'pending_approval') return bad(res, 400, 'Only pending requests can be cancelled')
-    if (ch.requested_by !== req.user.id) return bad(res, 403, 'You can only cancel your own requests')
+    if (!['pending_approval', 'rejected'].includes(ch.status)) return bad(res, 400, 'Only pending or rejected requests can be deleted')
+    if (ch.requested_by !== req.user.id) return bad(res, 403, 'You can only delete your own requests')
     await pool.query('DELETE FROM unit_model_changes WHERE id=$1', [id])
     return ok(res, { deleted_id: id })
   } catch (e) {
@@ -282,16 +282,16 @@ router.patch('/unit-models/changes/:id/approve', authMiddleware, requireRole(['c
           }
           if (['has_garden','has_roof'].includes(k)) v = !!v
           updatedPreview[k] = v
-          fields.push(`${k}=$${placeholderCount++}`)
+          fields.push(`${k}=${placeholderCount++}`)
           params.push(v)
         }
       }
       if (fields.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'No fields to update') }
 
-      fields.push(`updated_by=$${placeholderCount++}`)
+      fields.push(`updated_by=${placeholderCount++}`)
       params.push(req.user.id)
       
-      const idPlaceholder = `$${placeholderCount++}`
+      const idPlaceholder = `${placeholderCount++}`
       params.push(ch.model_id)
       
       const r = await client.query(`UPDATE unit_models SET ${fields.join(', ')}, updated_at=now() WHERE id=${idPlaceholder} RETURNING *`, params)
@@ -332,6 +332,44 @@ router.patch('/unit-models/changes/:id/approve', authMiddleware, requireRole(['c
   }
 })
 
+// FM: modify a rejected change request and resubmit for approval
+router.patch('/unit-models/changes/:id/modify', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const id = num(req.params.id)
+    const { payload } = req.body || {}
+    if (!id) return bad(res, 400, 'Invalid id')
+
+    const cur = await pool.query('SELECT id, status, requested_by, action FROM unit_model_changes WHERE id=$1', [id])
+    if (cur.rows.length === 0) return bad(res, 404, 'Change not found')
+    const ch = cur.rows[0]
+    if (ch.status !== 'rejected') return bad(res, 400, 'Only rejected requests can be modified')
+    if (ch.requested_by !== req.user.id) return bad(res, 403, 'You can only modify your own requests')
+
+    // For delete actions there is nothing to modify; allow resubmission without payload
+    const newPayload = (ch.action === 'delete') ? {} : (payload && typeof payload === 'object' ? payload : null)
+    if (ch.action !== 'delete' && !newPayload) {
+      return bad(res, 400, 'payload object is required for modifying this request')
+    }
+
+    const r = await pool.query(
+      `UPDATE unit_model_changes
+       SET payload = COALESCE($1::jsonb, payload),
+           status='pending_approval',
+           approved_by=NULL,
+           reason=NULL,
+           updated_at=now()
+       WHERE id=$2
+       RETURNING *`,
+      [newPayload ? JSON.stringify(newPayload) : null, id]
+    )
+
+    return ok(res, { change: r.rows[0] })
+  } catch (e) {
+    console.error('PATCH /api/inventory/unit-models/changes/:id/modify error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
 // Reject change (Top Management only)
 router.patch('/unit-models/changes/:id/reject', authMiddleware, requireRole(['ceo','chairman','vice_chairman']), async (req, res) => {
   try {
@@ -343,6 +381,17 @@ router.patch('/unit-models/changes/:id/reject', authMiddleware, requireRole(['ce
       [req.user.id, reason || null, id]
     )
     if (r.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+
+    // Notify the requesting Financial Manager about the rejection with the reason
+    const requestedBy = r.rows[0].requested_by
+    if (requestedBy) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+         VALUES ($1, 'unit_model_change_rejected', 'unit_model_changes', $2, $3)`,
+        [requestedBy, r.rows[0].id, String(reason || 'Your unit model request was rejected.')]
+      )
+    }
+
     return ok(res, { change: r.rows[0] })
   } catch (e) {
     console.error('PATCH /api/inventory/unit-models/changes/:id/reject error:', e)
