@@ -52,6 +52,18 @@ export default function UnitModelChanges() {
     }
   }
 
+  // Initialize status from URL (?status=rejected|pending_approval|approved)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const s = params.get('status')
+      if (s && ['pending_approval', 'approved', 'rejected'].includes(s)) {
+        setStatus(s)
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => { load() }, [status])
 
   async function approveChange(id) {
