@@ -78,6 +78,7 @@ const styles = {
     resize: 'vertical'
   }),
   metaText: { color: '#6b7280', fontSize: 12, marginTop: 4 },
+  arInline: { color: '#6b7280', fontSize: 12, fontStyle: 'italic' },
   btn: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -170,7 +171,7 @@ export default function App(props) {
   const role = authUser?.role
 
   // Lock certain fields when a unit is selected (use server-approved standard)
-  const rateLocked = Number(unitInfo?.unit_id) > 0
+  // Moved below unitInfo initialization
 
   // Dynamic arrays
   const [firstYearPayments, setFirstYearPayments] = useState([])
@@ -198,6 +199,7 @@ export default function App(props) {
     zone: '',
     garden_details: ''
   })
+  const rateLocked = Number(unitInfo?.unit_id) > 0
   const [unitPricingBreakdown, setUnitPricingBreakdown] = useState({
     base: 0,
     garden: 0,
