@@ -22,6 +22,7 @@ export default function UnitModelChanges() {
   const [error, setError] = useState('')
   const [rejectReason, setRejectReason] = useState({})
   const [rowLoading, setRowLoading] = useState({})
+  const [editPayload, setEditPayload] = useState({}) // JSON text editor for rejected rows
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const role = me?.role
   const isTop = role === 'ceo' || role === 'chairman' || role === 'vice_chairman'
@@ -34,6 +35,14 @@ export default function UnitModelChanges() {
       const data = await resp.json()
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load changes')
       setChanges(data.changes || [])
+      // Initialize editors for rejected rows
+      if (status === 'rejected') {
+        const init = {}
+        for (const ch of (data.changes || [])) {
+          init[ch.id] = JSON.stringify(ch.payload || {}, null, 2)
+        }
+        setEditPayload(init)
+      }
     } catch (e) {
       const msg = e.message || String(e)
       setError(msg)
@@ -42,6 +51,18 @@ export default function UnitModelChanges() {
       setLoading(false)
     }
   }
+
+  // Initialize status from URL (?status=rejected|pending_approval|approved)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const s = params.get('status')
+      if (s && ['pending_approval', 'approved', 'rejected'].includes(s)) {
+        setStatus(s)
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => { load() }, [status])
 
@@ -97,6 +118,62 @@ export default function UnitModelChanges() {
       await load()
     } catch (e) {
       notifyError(e, 'Cancel failed')
+    } finally {
+      setRowLoading(s => ({ ...s, [id]: false }))
+    }
+  }
+
+  async function deleteRejected(id, requestedBy) {
+    if (!isFM) return
+    if (requestedBy !== me?.id) { notifyError('You can only delete your own requests.'); return }
+    if (!window.confirm('Delete this rejected request? This cannot be undone.')) return
+    try {
+      setRowLoading(s => ({ ...s, [id]: true }))
+      const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/changes/${id}`, { method: 'DELETE' })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Delete failed')
+      notifySuccess('Rejected request deleted')
+      await load()
+    } catch (e) {
+      notifyError(e, 'Delete failed')
+    } finally {
+      setRowLoading(s => ({ ...s, [id]: false }))
+    }
+  }
+
+  async function modifyRejected(id, action, requestedBy) {
+    if (!isFM) return
+    if (requestedBy !== me?.id) { notifyError('You can only modify your own requests.'); return }
+    let body = {}
+    if (action !== 'delete') {
+      const text = editPayload[id] || ''
+      let parsed = null
+      try {
+        parsed = text.trim() ? JSON.parse(text) : {}
+      } catch (e) {
+        notifyError('Payload must be valid JSON.')
+        return
+      }
+      if (!parsed || typeof parsed !== 'object') {
+        notifyError('Payload must be a JSON object.')
+        return
+      }
+      body.payload = parsed
+    }
+    try {
+      setRowLoading(s => ({ ...s, [id]: true }))
+      const resp = await fetchWithAuth(`${API_URL}/api/inventory/unit-models/changes/${id}/modify`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Modify failed')
+      notifySuccess('Request updated and resubmitted for approval')
+      await load()
+      setStatus('pending_approval')
+    } catch (e) {
+      notifyError(e, 'Modify failed')
     } finally {
       setRowLoading(s => ({ ...s, [id]: false }))
     }
@@ -163,7 +240,7 @@ export default function UnitModelChanges() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roof</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roof Area</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Garage Area</th>
-                {status === 'pending_approval' && (isTop || isFM) ? (
+                {(status === 'pending_approval' && (isTop || isFM)) || (status === 'rejected' && isFM) ? (
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 ) : null}
               </tr>
@@ -171,7 +248,7 @@ export default function UnitModelChanges() {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading && Array.from({ length: 8 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: status === 'pending_approval' && (isTop || isFM) ? 18 : 17 }).map((__, j) => (
+                  {Array.from({ length: ((status === 'pending_approval' && (isTop || isFM)) || (status === 'rejected' && isFM)) ? 18 : 17 }).map((__, j) => (
                     <td key={j} className="px-4 py-3"><div className="h-3 bg-gray-200 rounded w-2/3"/></td>
                   ))}
                 </tr>
@@ -179,6 +256,7 @@ export default function UnitModelChanges() {
               {!loading && changes.map(ch => {
                 const p = ch.payload || {}
                 const canCancel = status === 'pending_approval' && isFM && (ch.requested_by === me?.id)
+                const canEditRejected = status === 'rejected' && isFM && (ch.requested_by === me?.id)
                 return (
                 <tr key={ch.id}>
                   <td className="px-4 py-3">{ch.id}</td>
@@ -200,11 +278,11 @@ export default function UnitModelChanges() {
                   <td className="px-4 py-3">{p.roof_area != null ? Number(p.roof_area).toLocaleString() : '—'}</td>
                   <td className="px-4 py-3">{p.garage_area != null ? Number(p.garage_area).toLocaleString() : '—'}</td>
 
-                  {status === 'pending_approval' && (isTop || canCancel) ? (
+                  {((status === 'pending_approval' && (isTop || canCancel)) || canEditRejected) ? (
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {isTop ? (
-                          <>
+                      <div className="flex flex-col gap-2">
+                        {isTop && status === 'pending_approval' ? (
+                          <div className="flex items-center gap-2">
                             <LoadingButton
                               onClick={() => approveChange(ch.id)}
                               loading={rowLoading[ch.id]}
@@ -225,9 +303,9 @@ export default function UnitModelChanges() {
                             >
                               Reject
                             </LoadingButton>
-                          </>
+                          </div>
                         ) : null}
-                        {canCancel ? (
+                        {canCancel && status === 'pending_approval' ? (
                           <LoadingButton
                             onClick={() => cancelChange(ch.id, ch.requested_by)}
                             loading={rowLoading[ch.id]}
@@ -235,6 +313,37 @@ export default function UnitModelChanges() {
                             Cancel Request
                           </LoadingButton>
                         ) : null}
+                        {canEditRejected && (
+                          <div className="flex flex-col gap-2">
+                            {ch.action !== 'delete' ? (
+                              <textarea
+                                rows={6}
+                                className="w-full p-2 border rounded-md font-mono text-xs"
+                                value={editPayload[ch.id] || ''}
+                                onChange={e => setEditPayload(s => ({ ...s, [ch.id]: e.target.value }))}
+                                placeholder='Edit payload JSON here, e.g. {"model_name": "New Name", "area": 150}'
+                              />
+                            ) : (
+                              <div className="text-gray-500 text-sm">Delete requests have no editable payload.</div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <LoadingButton
+                                onClick={() => modifyRejected(ch.id, ch.action, ch.requested_by)}
+                                loading={rowLoading[ch.id]}
+                                style={{ border: '1px solid #2563eb', color: '#2563eb' }}
+                              >
+                                Resubmit
+                              </LoadingButton>
+                              <LoadingButton
+                                onClick={() => deleteRejected(ch.id, ch.requested_by)}
+                                loading={rowLoading[ch.id]}
+                                style={{ border: '1px solid #6b7280', color: '#6b7280' }}
+                              >
+                                Delete
+                              </LoadingButton>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </td>
                   ) : null}
@@ -242,7 +351,7 @@ export default function UnitModelChanges() {
               )})}
               {changes.length === 0 && !loading && (
                 <tr>
-                  <td className="px-4 py-3" colSpan={status === 'pending_approval' && (isTop || isFM) ? 18 : 17}>
+                  <td className="px-4 py-3" colSpan={((status === 'pending_approval' && (isTop || isFM)) || (status === 'rejected' && isFM)) ? 18 : 17}>
                     No changes.
                   </td>
                 </tr>
@@ -255,7 +364,7 @@ export default function UnitModelChanges() {
           {isTop ? (
             <>Only CEO, Chairman, or Vice Chairman can approve or reject changes.</>
           ) : isFM ? (
-            <>You may cancel your own pending requests. Approval is by Top Management.</>
+            <>You may cancel your own pending requests. You can modify or delete your rejected requests. Approval is by Top Management.</>
           ) : (
             <>Read-only view.</>
           )}

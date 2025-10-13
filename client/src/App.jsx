@@ -171,7 +171,7 @@ export default function App(props) {
   const role = authUser?.role
 
   // Lock certain fields when a unit is selected (use server-approved standard)
-  // Moved below unitInfo initialization
+const rateLocked = Number(unitInfo?.unit_id) > 0
 
   // Dynamic arrays
   const [firstYearPayments, setFirstYearPayments] = useState([])

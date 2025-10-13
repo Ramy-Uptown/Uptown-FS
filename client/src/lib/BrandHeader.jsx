@@ -137,6 +137,7 @@ export default function BrandHeader({ title, onLogout }) {
           ...baseWithCalc,
           queuesLink,
           { label: 'Inventory Drafts', href: '/admin/inventory-drafts' },
+          { label: 'Inventory Changes', href: '/admin/inventory-changes' },
           { label: 'Rejected Requests', href: '/admin/rejected-pricings' },
           { label: 'Finance Team', href: '/admin/finance-team' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
@@ -148,6 +149,7 @@ export default function BrandHeader({ title, onLogout }) {
         return [
           ...baseWithCalc,
           { label: 'Inventory', href: '/admin/inventory' },
+          { label: 'My Inventory Requests', href: '/admin/inventory-change-history' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'My Proposals', href: '/deals/my-proposals' }
         ]

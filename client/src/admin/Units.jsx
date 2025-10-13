@@ -6,6 +6,7 @@ import LoadingButton from '../components/LoadingButton.jsx'
 import SkeletonRow from '../components/SkeletonRow.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
 import ConfirmModal from '../components/ConfirmModal.jsx'
+import UnitDetailsDrawer from '../components/UnitDetailsDrawer.jsx'
 
 export default function Units() {
   const [units, setUnits] = useState([])
@@ -31,8 +32,23 @@ export default function Units() {
   const role = JSON.parse(localStorage.getItem('auth_user') || '{}')?.role
 
   // form state
-  const [form, setForm] = useState({ code: '', description: '', unit_type: '', base_price: '', currency: 'EGP', model_id: '' })
+  const [form, setForm] = useState({
+    code: '',
+    description: '',
+    unit_type: '',
+    base_price: '',
+    currency: 'EGP',
+    model_id: '',
+    // Optional inventory metadata (FA can send these on create)
+    unit_number: '',
+    floor: '',
+    building_number: '',
+    block_sector: '',
+    zone: '',
+    garden_details: ''
+  })
   const [editingId, setEditingId] = useState(0)
+  const [editingStatus, setEditingStatus] = useState('')
   const [saving, setSaving] = useState(false)
 
   // Removed inline link-request state: link requests are disabled; units are created already linked to a model
@@ -82,7 +98,20 @@ export default function Units() {
   useEffect(() => { load(page) }, [page])
 
   function resetForm() {
-    setForm({ code: '', description: '', unit_type: '', base_price: '', currency: 'EGP', model_id: '' })
+    setForm({
+      code: '',
+      description: '',
+      unit_type: '',
+      base_price: '',
+      currency: 'EGP',
+      model_id: '',
+      unit_number: '',
+      floor: '',
+      building_number: '',
+      block_sector: '',
+      zone: '',
+      garden_details: ''
+    })
     setEditingId(0)
   }
 
@@ -94,21 +123,72 @@ export default function Units() {
       let createdOrEditedId = editingId
 
       if (role === 'financial_admin') {
-        // FA: require model selection and create unit already linked to model (draft)
-        if (!form.model_id) {
-          throw new Error('Please select a unit model to link. It is required.')
+        // FA: draft creation, draft update, or change-request for approved units
+        if (editingId) {
+          if (editingStatus && editingStatus !== 'INVENTORY_DRAFT') {
+            // Request change for approved unit
+            const payload = {
+              code: String(form.code || '').trim(),
+              unit_number: form.unit_number || null,
+              floor: form.floor || null,
+              building_number: form.building_number || null,
+              block_sector: form.block_sector || null,
+              zone: form.zone || null
+            }
+            resp = await fetchWithAuth(`${API_URL}/api/inventory/units/${editingId}/change-request`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'update', payload })
+            })
+            const data = await resp.json()
+            if (!resp.ok) throw new Error(data?.error?.message || 'Request failed')
+            notifySuccess('Edit request submitted to Financial Manager.')
+          } else {
+            // Update allowed fields on draft
+            const body = {
+              code: String(form.code || '').trim(),
+              unit_number: form.unit_number || null,
+              floor: form.floor || null,
+              building_number: form.building_number || null,
+              block_sector: form.block_sector || null,
+              zone: form.zone || null
+            }
+            resp = await fetchWithAuth(`${API_URL}/api/inventory/units/${editingId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            })
+            const data = await resp.json()
+            if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
+            createdOrEditedId = editingId
+            notifySuccess('Draft updated')
+          }
+        } else {
+          // Create draft linked to a model (required)
+          if (!form.model_id) {
+            throw new Error('Please select a unit model to link. It is required.')
+          }
+          const faBody = {
+            code: String(form.code || '').trim(),
+            model_id: Number(form.model_id),
+            // include optional inventory metadata if provided
+            unit_number: form.unit_number || undefined,
+            floor: form.floor || undefined,
+            building_number: form.building_number || undefined,
+            block_sector: form.block_sector || undefined,
+            zone: form.zone || undefined
+          }
+          if (!faBody.code) throw new Error('Code is required')
+          resp = await fetchWithAuth(`${API_URL}/api/inventory/units`, { // Use inventory route
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(faBody)
+          })
+          const data = await resp.json()
+          if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
+          createdOrEditedId = data?.unit?.id
+          notifySuccess('Unit draft created and linked to model. Awaiting Financial Manager approval.')
         }
-        const faBody = { code: String(form.code || '').trim(), model_id: Number(form.model_id) }
-        if (!faBody.code) throw new Error('Code is required')
-        resp = await fetchWithAuth(`${API_URL}/api/inventory/units`, { // Use inventory route
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(faBody)
-        })
-        const data = await resp.json()
-        if (!resp.ok) throw new Error(data?.error?.message || 'Save failed')
-        createdOrEditedId = data?.unit?.id
-        notifySuccess('Unit draft created and linked to model. Awaiting Financial Manager approval.')
       } else { // Superadmin path
         const body = {
           ...form,
@@ -146,18 +226,27 @@ export default function Units() {
 
   async function edit(u) {
     setEditingId(u.id)
+    setEditingStatus(u.unit_status || '')
     setForm({
       code: u.code || '',
       description: u.description || '',
       unit_type: u.unit_type || '',
       base_price: String(u.base_price ?? ''),
       currency: u.currency || 'EGP',
-      model_id: u.model_id ? String(u.model_id) : ''
+      model_id: u.model_id ? String(u.model_id) : '',
+      unit_number: u.unit_number || '',
+      floor: u.floor || '',
+      building_number: u.building_number || '',
+      block_sector: u.block_sector || '',
+      zone: u.zone || '',
+      garden_details: u.garden_details || ''
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const [confirmDeleteId, setConfirmDeleteId] = useState(0)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsUnit, setDetailsUnit] = useState(null)
 
   async function performDelete(id) {
     // optimistic removal
@@ -237,6 +326,15 @@ export default function Units() {
               </select>
             </>
           )}
+          {role === 'financial_admin' && (
+            <>
+              <input placeholder="Unit Number" value={form.unit_number} onChange={e => setForm(s => ({ ...s, unit_number: e.target.value }))} style={ctrl} />
+              <input placeholder="Floor" value={form.floor} onChange={e => setForm(s => ({ ...s, floor: e.target.value }))} style={ctrl} />
+              <input placeholder="Building Number" value={form.building_number} onChange={e => setForm(s => ({ ...s, building_number: e.target.value }))} style={ctrl} />
+              <input placeholder="Block/Sector" value={form.block_sector} onChange={e => setForm(s => ({ ...s, block_sector: e.target.value }))} style={ctrl} />
+              <input placeholder="Zone" value={form.zone} onChange={e => setForm(s => ({ ...s, zone: e.target.value }))} style={ctrl} />
+            </>
+          )}
           <div>
             <LoadingButton type="submit" loading={saving} variant="primary">{saving ? 'Saving…' : (editingId ? 'Update' : 'Create')}</LoadingButton>
             {editingId ? <LoadingButton type="button" onClick={resetForm} style={btn}>Cancel</LoadingButton> : null}
@@ -294,6 +392,11 @@ export default function Units() {
               <tr>
                 <th style={th}>ID</th>
                 <th style={th}>Code</th>
+                <th style={th}>Unit No.</th>
+                <th style={th}>Floor</th>
+                <th style={th}>Building</th>
+                <th style={th}>Block/Sector</th>
+                <th style={th}>Zone</th>
                 <th style={th}>Unit Model</th>
                 <th style={th}>Area (m²)</th>
                 <th style={th}>Garden</th>
@@ -308,7 +411,7 @@ export default function Units() {
               {loading && (
                 <>
                   {Array.from({ length: pageSize }).map((_, i) => (
-                    <SkeletonRow key={i} widths={['sm','lg','lg','sm','sm','sm','lg','sm','sm','lg']} tdStyle={td} />
+                    <SkeletonRow key={i} widths={['sm','lg','md','sm','sm','md','sm','lg','sm','sm','sm','lg','sm','sm','lg']} tdStyle={td} />
                   ))}
                 </>
               )}
@@ -316,6 +419,11 @@ export default function Units() {
                 <tr key={unit.id}>
                   <td style={td}>{unit.id}</td>
                   <td style={td}>{unit.code}</td>
+                  <td style={td}>{unit.unit_number || '-'}</td>
+                  <td style={td}>{unit.floor || '-'}</td>
+                  <td style={td}>{unit.building_number || '-'}</td>
+                  <td style={td}>{unit.block_sector || '-'}</td>
+                  <td style={td}>{unit.zone || '-'}</td>
                   <td style={td}>
                     {(() => {
                       // Prefer fields returned directly from API
@@ -335,17 +443,56 @@ export default function Units() {
                   <td style={td}>{unit.currency}</td>
                   <td style={td}>{unit.unit_status}</td>
                   <td style={{ ...td, display: 'flex', gap: 8 }}>
-                    <LoadingButton onClick={() => edit(unit)}>Edit</LoadingButton>
-                    <LoadingButton onClick={() => setConfirmDeleteId(unit.id)} loading={deletingIds.has(unit.id)} style={{ ...btn, border: '1px solid #dc262#dc2626' }}>
-                      Delete
-                    </LoadingButton>
+                    <LoadingButton onClick={() => { setDetailsUnit(unit); setDetailsOpen(true) }}>Details</LoadingButton>
+                    {role === 'financial_admin' ? (
+                      <>
+                        {unit.unit_status === 'INVENTORY_DRAFT' ? (
+                          <>
+                            <LoadingButton onClick={() => edit(unit)}>Edit</LoadingButton>
+                            <LoadingButton onClick={() => setConfirmDeleteId(unit.id)} loading={deletingIds.has(unit.id)} style={{ ...btn, border: '1px solid #dc262#dc2626' }}>
+                              Delete
+                            </LoadingButton>
+                          </>
+                        ) : (
+                          <>
+                            <LoadingButton onClick={() => edit(unit)}>Request Edit</LoadingButton>
+                            <LoadingButton
+                              onClick={async () => {
+                                try {
+                                  const resp = await fetchWithAuth(`${API_URL}/api/inventory/units/${unit.id}/change-request`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'delete' })
+                                  })
+                                  const data = await resp.json()
+                                  if (!resp.ok) throw new Error(data?.error?.message || 'Request failed')
+                                  notifySuccess('Delete request submitted to Financial Manager.')
+                                } catch (e) {
+                                  notifyError(e, 'Delete request failed')
+                                }
+                              }}
+                              style={{ ...btn, border: '1px solid #dc262#dc2626' }}
+                            >
+                              Request Delete
+                            </LoadingButton>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <LoadingButton onClick={() => edit(unit)}>Edit</LoadingButton>
+                        <LoadingButton onClick={() => setConfirmDeleteId(unit.id)} loading={deletingIds.has(unit.id)} style={{ ...btn, border: '1px solid #dc262#dc2626' }}>
+                          Delete
+                        </LoadingButton>
+                      </>
+                    )}
                     {/* Link model UI removed: link requests are disabled; use model selection during creation */}
                   </td>
                 </tr>
               ))}
               {units.length === 0 && !loading && (
                 <tr>
-                  <td style={td} colSpan={10}>No units found.</td>
+                  <td style={td} colSpan={15}>No units found.</td>
                 </tr>
               )}
             </tbody>
@@ -374,6 +521,7 @@ export default function Units() {
         onConfirm={() => { const id = confirmDeleteId; setConfirmDeleteId(0); performDelete(id) }}
         onCancel={() => setConfirmDeleteId(0)}
       />
+      <UnitDetailsDrawer unit={detailsUnit} open={detailsOpen} onClose={() => setDetailsOpen(false)} />
     </div>
   )
 }

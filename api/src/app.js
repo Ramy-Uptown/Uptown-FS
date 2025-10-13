@@ -103,13 +103,29 @@ async function getActivePolicyLimitPercent() {
 app.use(helmet())
 
 // Configurable CORS origins via env (comma-separated), default to localhost Vite
+// Also allow GitHub Codespaces subdomains by default so the Vite dev server (port 5173)
+// can call the API (port 3000) across *.app.github.dev.
 const CORS_ORIGINS = process.env.CORS_ORIGINS || 'http://localhost:5173'
 const allowedOrigins = CORS_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true // non-browser tools
+  try {
+    // Exact allow-list
+    if (allowedOrigins.includes(origin)) return true
+    // Local dev
+    if (origin.startsWith('http://localhost:')) return true
+    if (origin.startsWith('http://127.0.0.1:')) return true
+    // GitHub Codespaces (both API and Vite dev server live under *.app.github.dev)
+    const { hostname } = new URL(origin)
+    if (hostname.endsWith('.app.github.dev')) return true
+  } catch { /* ignore parse errors */ }
+  return false
+}
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true) // allow non-browser tools
-    if (allowedOrigins.includes(origin)) return callback(null, true)
-    return callback(new Error('Not allowed by CORS'))
+    const ok = isAllowedOrigin(origin)
+    // Return false rather than throwing to avoid noisy errors on preflight
+    return callback(null, ok)
   },
   credentials: true
 }))

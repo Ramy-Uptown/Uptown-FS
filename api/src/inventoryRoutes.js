@@ -215,8 +215,8 @@ router.delete('/unit-models/changes/:id', authMiddleware, requireRole(['financia
     const cur = await pool.query('SELECT id, status, requested_by FROM unit_model_changes WHERE id=$1', [id])
     if (cur.rows.length === 0) return bad(res, 404, 'Change not found')
     const ch = cur.rows[0]
-    if (ch.status !== 'pending_approval') return bad(res, 400, 'Only pending requests can be cancelled')
-    if (ch.requested_by !== req.user.id) return bad(res, 403, 'You can only cancel your own requests')
+    if (!['pending_approval', 'rejected'].includes(ch.status)) return bad(res, 400, 'Only pending or rejected requests can be deleted')
+    if (ch.requested_by !== req.user.id) return bad(res, 403, 'You can only delete your own requests')
     await pool.query('DELETE FROM unit_model_changes WHERE id=$1', [id])
     return ok(res, { deleted_id: id })
   } catch (e) {
@@ -282,16 +282,16 @@ router.patch('/unit-models/changes/:id/approve', authMiddleware, requireRole(['c
           }
           if (['has_garden','has_roof'].includes(k)) v = !!v
           updatedPreview[k] = v
-          fields.push(`${k}=$${placeholderCount++}`)
+          fields.push(`${k}=${placeholderCount++}`)
           params.push(v)
         }
       }
       if (fields.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'No fields to update') }
 
-      fields.push(`updated_by=$${placeholderCount++}`)
+      fields.push(`updated_by=${placeholderCount++}`)
       params.push(req.user.id)
       
-      const idPlaceholder = `$${placeholderCount++}`
+      const idPlaceholder = `${placeholderCount++}`
       params.push(ch.model_id)
       
       const r = await client.query(`UPDATE unit_models SET ${fields.join(', ')}, updated_at=now() WHERE id=${idPlaceholder} RETURNING *`, params)
@@ -332,6 +332,44 @@ router.patch('/unit-models/changes/:id/approve', authMiddleware, requireRole(['c
   }
 })
 
+// FM: modify a rejected change request and resubmit for approval
+router.patch('/unit-models/changes/:id/modify', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const id = num(req.params.id)
+    const { payload } = req.body || {}
+    if (!id) return bad(res, 400, 'Invalid id')
+
+    const cur = await pool.query('SELECT id, status, requested_by, action FROM unit_model_changes WHERE id=$1', [id])
+    if (cur.rows.length === 0) return bad(res, 404, 'Change not found')
+    const ch = cur.rows[0]
+    if (ch.status !== 'rejected') return bad(res, 400, 'Only rejected requests can be modified')
+    if (ch.requested_by !== req.user.id) return bad(res, 403, 'You can only modify your own requests')
+
+    // For delete actions there is nothing to modify; allow resubmission without payload
+    const newPayload = (ch.action === 'delete') ? {} : (payload && typeof payload === 'object' ? payload : null)
+    if (ch.action !== 'delete' && !newPayload) {
+      return bad(res, 400, 'payload object is required for modifying this request')
+    }
+
+    const r = await pool.query(
+      `UPDATE unit_model_changes
+       SET payload = COALESCE($1::jsonb, payload),
+           status='pending_approval',
+           approved_by=NULL,
+           reason=NULL,
+           updated_at=now()
+       WHERE id=$2
+       RETURNING *`,
+      [newPayload ? JSON.stringify(newPayload) : null, id]
+    )
+
+    return ok(res, { change: r.rows[0] })
+  } catch (e) {
+    console.error('PATCH /api/inventory/unit-models/changes/:id/modify error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
 // Reject change (Top Management only)
 router.patch('/unit-models/changes/:id/reject', authMiddleware, requireRole(['ceo','chairman','vice_chairman']), async (req, res) => {
   try {
@@ -343,6 +381,17 @@ router.patch('/unit-models/changes/:id/reject', authMiddleware, requireRole(['ce
       [req.user.id, reason || null, id]
     )
     if (r.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+
+    // Notify the requesting Financial Manager about the rejection with the reason
+    const requestedBy = r.rows[0].requested_by
+    if (requestedBy) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+         VALUES ($1, 'unit_model_change_rejected', 'unit_model_changes', $2, $3)`,
+        [requestedBy, r.rows[0].id, String(reason || 'Your unit model request was rejected.')]
+      )
+    }
+
     return ok(res, { change: r.rows[0] })
   } catch (e) {
     console.error('PATCH /api/inventory/unit-models/changes/:id/reject error:', e)
@@ -1098,5 +1147,270 @@ router.post('/units/:id/link-request', authMiddleware, requireRole(['financial_a
 
 
 
+
+// --------------------
+// Financial Admin: update a draft unit's metadata (code and inventory metadata only)
+// --------------------
+router.patch('/units/:id', authMiddleware, requireRole(['financial_admin']), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id) || id <= 0) return bad(res, 400, 'Invalid id')
+
+    // Only allow updates while in draft
+    const cur = await pool.query(
+      `SELECT id, unit_status FROM units WHERE id=$1`,
+      [id]
+    )
+    if (cur.rows.length === 0) return bad(res, 404, 'Unit not found')
+    if (cur.rows[0].unit_status !== 'INVENTORY_DRAFT') {
+      return bad(res, 403, 'Only draft units can be edited by Financial Admin')
+    }
+
+    const { code, unit_number, floor, building_number, block_sector, zone } = req.body || {}
+    const fields = []
+    const params = []
+    let c = 1
+
+    if (typeof code === 'string') { fields.push(`code=${c++}`); params.push(code.trim()) }
+    if (unit_number !== undefined) { fields.push(`unit_number=${c++}`); params.push(unit_number || null) }
+    if (floor !== undefined) { fields.push(`floor=${c++}`); params.push(floor || null) }
+    if (building_number !== undefined) { fields.push(`building_number=${c++}`); params.push(building_number || null) }
+    if (block_sector !== undefined) { fields.push(`block_sector=${c++}`); params.push(block_sector || null) }
+    if (zone !== undefined) { fields.push(`zone=${c++}`); params.push(zone || null) }
+
+    if (fields.length === 0) return bad(res, 400, 'No fields to update')
+
+    const idPh = `${c++}`
+    params.push(id)
+
+    const r = await pool.query(
+      `UPDATE units SET ${fields.join(', ')}, updated_at=now() WHERE id=${idPh} RETURNING *`,
+      params
+    )
+
+    return ok(res, { unit: r.rows[0] })
+  } catch (e) {
+    console.error('PATCH /api/inventory/units/:id error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// --------------------
+// Financial Admin: update a draft unit's metadata (code and inventory metadata only)
+// --------------------
+router.patch('/units/:id', authMiddleware, requireRole(['financial_admin']), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id) || id <= 0) return bad(res, 400, 'Invalid id')
+
+    // Only allow updates while in draft
+    const cur = await pool.query(
+      `SELECT id, unit_status FROM units WHERE id=$1`,
+      [id]
+    )
+    if (cur.rows.length === 0) return bad(res, 404, 'Unit not found')
+    if (cur.rows[0].unit_status !== 'INVENTORY_DRAFT') {
+      return bad(res, 403, 'Only draft units can be edited by Financial Admin')
+    }
+
+    const { code, unit_number, floor, building_number, block_sector, zone } = req.body || {}
+    const fields = []
+    const params = []
+    let c = 1
+
+    if (typeof code === 'string') { fields.push(`code=${c++}`); params.push(code.trim()) }
+    if (unit_number !== undefined) { fields.push(`unit_number=${c++}`); params.push(unit_number || null) }
+    if (floor !== undefined) { fields.push(`floor=${c++}`); params.push(floor || null) }
+    if (building_number !== undefined) { fields.push(`building_number=${c++}`); params.push(building_number || null) }
+    if (block_sector !== undefined) { fields.push(`block_sector=${c++}`); params.push(block_sector || null) }
+    if (zone !== undefined) { fields.push(`zone=${c++}`); params.push(zone || null) }
+
+    if (fields.length === 0) return bad(res, 400, 'No fields to update')
+
+    const idPh = `${c++}`
+    params.push(id)
+
+    const r = await pool.query(
+      `UPDATE units SET ${fields.join(', ')}, updated_at=now() WHERE id=${idPh} RETURNING *`,
+      params
+    )
+
+    return ok(res, { unit: r.rows[0] })
+  } catch (e) {
+    console.error('PATCH /api/inventory/units/:id error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// --------------------
+// Financial Admin: request change (edit/delete) for APPROVED units
+// --------------------
+router.post('/units/:id/change-request', authMiddleware, requireRole(['financial_admin']), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id) || id <= 0) return bad(res, 400, 'Invalid id')
+
+    const u0 = await pool.query('SELECT id, unit_status FROM units WHERE id=$1', [id])
+    if (u0.rows.length === 0) return bad(res, 404, 'Unit not found')
+
+    if (u0.rows[0].unit_status === 'INVENTORY_DRAFT') {
+      return bad(res, 400, 'Use the normal Edit on drafts. Change-requests are for approved units.')
+    }
+
+    const { action, payload } = req.body || {}
+    const act = String(action || '').toLowerCase()
+    if (!['update', 'delete'].includes(act)) return bad(res, 400, 'action must be update or delete')
+
+    // Only allow safe fields from FA
+    let safePayload = {}
+    if (act === 'update') {
+      const p = payload && typeof payload === 'object' ? payload : {}
+      const allow = ['code','unit_number','floor','building_number','block_sector','zone']
+      for (const k of allow) {
+        if (Object.prototype.hasOwnProperty.call(p, k)) {
+          safePayload[k] = p[k]
+        }
+      }
+      if (Object.keys(safePayload).length === 0) return bad(res, 400, 'No updatable fields in payload')
+    }
+
+    const ins = await pool.query(
+      `INSERT INTO unit_inventory_changes (unit_id, action, payload, requested_by)
+       VALUES ($1, $2, $3::jsonb, $4)
+       RETURNING *`,
+      [id, act, JSON.stringify(safePayload || {}), req.user.id]
+    )
+
+    // Notify Financial Managers
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+       SELECT u.id, 'unit_inventory_change_request', 'unit_inventory_changes', $1, 'New unit inventory change request awaiting approval.'
+       FROM users u WHERE u.role='financial_manager' AND u.active=TRUE`,
+      [ins.rows[0].id]
+    )
+
+    return ok(res, { change: ins.rows[0] })
+  } catch (e) {
+    console.error('POST /api/inventory/units/:id/change-request error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+// --------------------
+// Financial Manager: list/approve/reject change requests
+// --------------------
+router.get('/units/changes', authMiddleware, requireRole(['financial_manager','financial_admin']), async (req, res) => {
+  try {
+    const { status = 'pending_approval', mine, unit_id } = req.query || {}
+    const role = req.user?.role
+    const isFA = role === 'financial_admin'
+
+    const params = []
+    let where = '1=1'
+
+    // status filter
+    if (String(status) !== 'all') {
+      where += ` AND c.status=${params.length + 1}`
+      params.push(String(status))
+    }
+
+    const unitIdNum = unit_id ? Number(unit_id) : null
+    if (unitIdNum && Number.isFinite(unitIdNum) && unitIdNum > 0) {
+      // Filter by a specific unit
+      where += ` AND c.unit_id=${params.length + 1}`
+      params.push(unitIdNum)
+      // For FA: allow viewing all requests for this unit (audit purpose)
+      // no requester filter applied when unit_id filter is used
+    } else if (isFA) {
+      // Without unit filter: FA can only view their own when mine=1
+      if (String(mine) !== '1') {
+        return bad(res, 403, 'Financial Admin can only view their own change history (use mine=1) or provide unit_id')
+      }
+      where += ` AND c.requested_by=${params.length + 1}`
+      params.push(req.user.id)
+    }
+
+    const r = await pool.query(
+      `SELECT c.*, u.code AS unit_code, u.unit_status, ru.email AS requested_by_email, au.email AS approved_by_email
+       FROM unit_inventory_changes c
+       LEFT JOIN units u ON u.id = c.unit_id
+       LEFT JOIN users ru ON ru.id = c.requested_by
+       LEFT JOIN users au ON au.id = c.approved_by
+       WHERE ${where}
+       ORDER BY c.id DESC`,
+      params
+    )
+    return ok(res, { changes: r.rows })
+  } catch (e) {
+    console.error('GET /api/inventory/units/changes error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+router.patch('/units/changes/:id/approve', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id) || id <= 0) { client.release(); return bad(res, 400, 'Invalid id') }
+
+    await client.query('BEGIN')
+    const cur = await client.query('SELECT * FROM unit_inventory_changes WHERE id=$1 FOR UPDATE', [id])
+    if (cur.rows.length === 0) { await client.query('ROLLBACK'); client.release(); return bad(res, 404, 'Change not found') }
+    const ch = cur.rows[0]
+    if (ch.status !== 'pending_approval') { await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Not pending approval') }
+
+    if (ch.action === 'delete') {
+      await client.query('DELETE FROM units WHERE id=$1', [ch.unit_id])
+    } else if (ch.action === 'update') {
+      const p = ch.payload || {}
+      const allow = ['code','unit_number','floor','building_number','block_sector','zone']
+      const fields = []
+      const params = []
+      let c = 1
+      for (const k of allow) {
+        if (Object.prototype.hasOwnProperty.call(p, k)) {
+          fields.push(`${k}=${c++}`)
+          params.push(p[k] == null ? null : p[k])
+        }
+      }
+      if (fields.length > 0) {
+        const idPh = `${c++}`
+        params.push(ch.unit_id)
+        await client.query(`UPDATE units SET ${fields.join(', ')}, updated_at=now() WHERE id=${idPh}`, params)
+      }
+    } else {
+      await client.query('ROLLBACK'); client.release(); return bad(res, 400, 'Unknown action')
+    }
+
+    const upd = await client.query(
+      `UPDATE unit_inventory_changes SET status='approved', approved_by=$1, updated_at=now() WHERE id=$2 RETURNING *`,
+      [req.user.id, id]
+    )
+    await client.query('COMMIT'); client.release()
+    return ok(res, { change: upd.rows[0] })
+  } catch (e) {
+    try { await client.query('ROLLBACK') } catch {}
+    client.release()
+    console.error('PATCH /api/inventory/units/changes/:id/approve error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
+
+router.patch('/units/changes/:id/reject', authMiddleware, requireRole(['financial_manager']), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const { reason } = req.body || {}
+    if (!Number.isFinite(id) || id <= 0) return bad(res, 400, 'Invalid id')
+    const r = await pool.query(
+      `UPDATE unit_inventory_changes SET status='rejected', approved_by=$1, reason=$2, updated_at=now() WHERE id=$3 AND status='pending_approval' RETURNING *`,
+      [req.user.id, reason || null, id]
+    )
+    if (r.rows.length === 0) return bad(res, 404, 'Not found or not pending')
+    return ok(res, { change: r.rows[0] })
+  } catch (e) {
+    console.error('PATCH /api/inventory/units/changes/:id/reject error:', e)
+    return bad(res, 500, 'Internal error')
+  }
+})
 
 export default router
