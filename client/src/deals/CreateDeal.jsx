@@ -480,79 +480,46 @@ export default function CreateDeal() {
         )}
       </div>
 
-      {/* Unit & Project Information */}
+      {/* Unit Summary (read-only; pulled from Inventory) */}
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
         <h3 style={{ marginTop: 0, marginBottom: 8 }}>Unit & Project Information</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Type</label>
-            <input
-              value={unitForm.unit_type}
-              onChange={e => applyUnitUpdates({ unit_type: e.target.value })}
-              style={inputStyle}
-              placeholder='e.g., Apartment with roof'
-            />
+            <input value={unitForm.unit_type} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Code</label>
-            <input
-              value={unitForm.unit_code}
-              onChange={e => applyUnitUpdates({ unit_code: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.unit_code} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Number</label>
-            <input
-              value={unitForm.unit_number}
-              onChange={e => applyUnitUpdates({ unit_number: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.unit_number} readOnly style={inputStyle} placeholder='—' />
           </div>
-          
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Floor</label>
-            <input
-              value={unitForm.floor}
-              onChange={e => applyUnitUpdates({ floor: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.floor} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Building Number</label>
-            <input
-              value={unitForm.building_number}
-              onChange={e => applyUnitUpdates({ building_number: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.building_number} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Block / Sector</label>
-            <input
-              value={unitForm.block_sector}
-              onChange={e => applyUnitUpdates({ block_sector: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.block_sector} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Zone / Neighborhood</label>
-            <input
-              value={unitForm.zone}
-              onChange={e => applyUnitUpdates({ zone: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.zone} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div style={{ gridColumn: '1 / span 2' }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Garden Details</label>
-            <input
-              value={unitForm.garden_details}
-              onChange={e => applyUnitUpdates({ garden_details: e.target.value })}
-              style={inputStyle}
-              placeholder='e.g., Garden area 50 m²'
-            />
+            <input value={unitForm.garden_details} readOnly style={inputStyle} placeholder='—' />
           </div>
         </div>
-        <small style={{ color: '#64748b' }}>These fields update the calculator below in real-time.</small>
+        <small style={{ color: '#64748b' }}>
+          Unit data is loaded automatically from Inventory and locked here. Use Inventory to choose a unit.
+        </small>
       </div>
 
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
