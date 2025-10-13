@@ -84,7 +84,14 @@ export default function InputsForm({
 
         <div>
           <label style={styles.label}>Std Total Price</label>
-          <input type="number" value={stdPlan.totalPrice} onChange={e => setStdPlan(s => ({ ...s, totalPrice: e.target.value }))} style={input(errors.std_totalPrice)} />
+          <input
+            type="number"
+            value={stdPlan.totalPrice}
+            onChange={e => setStdPlan(s => ({ ...s, totalPrice: e.target.value }))}
+            style={input(errors.std_totalPrice)}
+            disabled={rateLocked}
+            title={rateLocked ? 'Locked to server-approved standard for selected unit' : undefined}
+          />
           {errors.std_totalPrice && <small style={styles.error}>{errors.std_totalPrice}</small>}
           <div style={{ marginTop: 6, fontSize: 12, color: '#4b5563', background: '#fbfaf7', border: '1px dashed #ead9bd', borderRadius: 8, padding: 8 }}>
             <div><strong>Unit Breakdown</strong></div>
@@ -111,7 +118,14 @@ export default function InputsForm({
         </div>
         <div>
           <label style={styles.label}>Std Calculated PV</label>
-          <input type="number" value={stdPlan.calculatedPV} onChange={e => setStdPlan(s => ({ ...s, calculatedPV: e.target.value }))} style={input(errors.std_calculatedPV)} />
+          <input
+            type="number"
+            value={stdPlan.calculatedPV}
+            onChange={e => setStdPlan(s => ({ ...s, calculatedPV: e.target.value }))}
+            style={input(errors.std_calculatedPV)}
+            disabled={rateLocked}
+            title={rateLocked ? 'Locked to server-approved standard for selected unit' : undefined}
+          />
           {errors.std_calculatedPV && <small style={styles.error}>{errors.std_calculatedPV}</small>}
         </div>
 
