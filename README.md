@@ -41,63 +41,91 @@ Configuration
 Security
 - The OCR endpoint is authenticated the same as other /api routes.
 
-Calculation API
-- Endpoint: POST http://localhost:3000/api/calculate
-- Body:
+Calculation and Plan Generation APIs
+
+Preferred endpoint (benchmark-aware):
+- POST http://localhost:3000/api/generate-plan
+- Body (when coming from Inventory/Deals flow):
   {
     "mode": "evaluateCustomPrice" | "calculateForTargetPV" | "customYearlyThenEqual_useStdPrice" | "customYearlyThenEqual_targetPV",
-    "stdPlan": {
-      "totalPrice": 1000000,
-      "financialDiscountRate": 12,       // percent per annum
-      "calculatedPV": 850000             // benchmark PV from standard plan
-    },
+    "unitId": 123,                   // REQUIRED in production flow
     "inputs": {
-      "salesDiscountPercent": 1.5,       // only used in evaluateCustomPrice
-      "dpType": "amount",                // "amount" | "percentage"
+      "salesDiscountPercent": 1.5,
+      "dpType": "amount",            // "amount" | "percentage"
       "downPaymentValue": 100000,
       "planDurationYears": 5,
       "installmentFrequency": "monthly", // "monthly" | "quarterly" | "bi-annually" | "annually"
       "additionalHandoverPayment": 0,
       "handoverYear": 2,
       "splitFirstYearPayments": false,
-      "firstYearPayments": [             // used when splitFirstYearPayments=true
+      "firstYearPayments": [         // used when splitFirstYearPayments=true
         { "amount": 50000, "month": 1, "type": "dp" },
         { "amount": 25000, "month": 6, "type": "regular" }
       ],
       "subsequentYears": [
         { "totalNominal": 120000, "frequency": "quarterly" },  // Year 2
         { "totalNominal": 120000, "frequency": "quarterly" }   // Year 3
-      ]
-    }
+      ],
+      "baseDate": "2025-01-01",      // optional; used to produce absolute due dates
+      "maintenancePaymentAmount": 0, // optional; appended to schedule only
+      "maintenancePaymentMonth": 0,
+      "garagePaymentAmount": 0,
+      "garagePaymentMonth": 0
+    },
+    "language": "en",
+    "currency": "EGP"
   }
 
-- Response:
+Important
+- When unitId is provided, the backend automatically:
+  - Loads the official Approved Standard (benchmark) for that unit (from model’s approved pricing + active standard_plan for rate/duration/frequency).
+  - Ignores any stdPlan sent by the client.
+  - Computes the Standard PV baseline and compares the Proposed Plan PV against it.
+- If unitId is not provided (demo only), you may pass a stdPlan object, but this is not used in production flows.
+
+Response (generate-plan):
   {
     "ok": true,
-    "data": {
-      "totalNominalPrice": number,
-      "downPaymentAmount": number,
-      "numEqualInstallments": number,
-      "equalInstallmentAmount": number,
-      "equalInstallmentMonths": number[],
-      "monthlyRate": number,
-      "calculatedPV": number,
-      "meta": {
-        "effectiveStartYears": number,
-        "splitFirstYearPayments": boolean
-      }
+    "schedule": [{ label, month, amount, date, writtenAmount }],
+    "totals": { count, totalNominal },
+    "meta": { calculatedPV, rateUsedPercent, ... },
+    "evaluation": {
+      "decision": "ACCEPT" | "REJECT",
+      "pv": { proposedPV, standardPV, tolerancePercent, pass, difference },
+      "conditions": [...],
+      "summary": {...}
     }
   }
 
-Example curl
-Evaluate price with sales discount:
-curl -s -X POST http://localhost:3000/api/calculate \
+Also available (meta/preview):
+- POST http://localhost:3000/api/calculate
+  - Same rule: if unitId is provided, stdPlan is ignored and the benchmark is loaded server-side.
+  - Returns a calculation result for previews/meta without the full schedule formatting.
+
+Inventory endpoint (now returns the locked benchmark):
+- GET http://localhost:3000/api/inventory/units/:id
+  - Response includes unit.standardPlan:
+    {
+      "unit": {
+        ...,
+        "approved_standard_pricing": { ...components },
+        "standardPlan": {
+          "totalPrice": number,           // base+garden+roof+storage+garage (excl. maintenance)
+          "financialDiscountRate": number, // from active standard_plan
+          "calculatedPV": number           // Standard PV baseline
+        }
+      }
+    }
+
+Example curls
+
+Generate a plan against the unit’s Approved Standard:
+curl -s -X POST http://localhost:3000/api/generate-plan \
   -H "Content-Type: application/json" \
   -d '{
-    "mode": "evaluateCustomPrice",
-    "stdPlan": { "totalPrice": 1000000, "financialDiscountRate": 12, "calculatedPV": 850000 },
+    "mode": "calculateForTargetPV",
+    "unitId": 101,
     "inputs": {
-      "salesDiscountPercent": 1.5,
       "dpType": "amount",
       "downPaymentValue": 100000,
       "planDurationYears": 5,
@@ -106,16 +134,19 @@ curl -s -X POST http://localhost:3000/api/calculate \
       "additionalHandoverPayment": 0,
       "splitFirstYearPayments": false,
       "subsequentYears": []
-    }
+    },
+    "language": "en",
+    "currency": "EGP"
   }' | jq
 
-Match target PV (standard PV) with structure:
+Preview calculation (meta) with unitId:
 curl -s -X POST http://localhost:3000/api/calculate \
   -H "Content-Type: application/json" \
   -d '{
-    "mode": "calculateForTargetPV",
-    "stdPlan": { "totalPrice": 1000000, "financialDiscountRate": 12, "calculatedPV": 850000 },
+    "mode": "evaluateCustomPrice",
+    "unitId": 101,
     "inputs": {
+      "salesDiscountPercent": 1.5,
       "dpType": "amount",
       "downPaymentValue": 100000,
       "planDurationYears": 5,
