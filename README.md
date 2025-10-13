@@ -156,3 +156,73 @@ Development notes
 - The client reads VITE_API_URL (defaults to http://localhost:3000). docker-compose sets it for you in dev.
 - Stop everything with:
    docker compose down
+
+Phase 9: Consultant Flow — Inventory-Driven Deals, Prefill, and Blocking
+Overview
+- The Property Consultant now starts from Inventory, selects a unit, and lands on the Create Deal page with all unit data already applied to the calculator.
+- The consultant does not re-enter any unit data; it’s pulled from Inventory and locked.
+- Client data comes next (with OCR assist), followed by plan tailoring and evaluation. If acceptable, the consultant can print the offer; if not, they can adjust or request an override via the existing workflow.
+- A new Request Unit Block button submits a block request and routes it to approvals.
+
+What changed
+1) Inventory -> Create Deal flow
+   - Selecting a unit in Inventory navigates to:
+     /deals/create?unit_id=<UNIT_ID>
+   - Create Deal auto-redirects back to /deals/inventory if unit_id is missing.
+
+2) Selected Unit summary card (Create Deal, top)
+   - Shows key unit attributes and a price breakdown:
+     Base, Garden, Roof, Storage, Garage, Maintenance, and Total excl. maintenance.
+   - Provides:
+     - Change Unit link to return to Inventory.
+     - Request Unit Block button.
+
+3) Read-only Unit & Project Information
+   - On Create Deal, unit fields are read-only and sourced from Inventory.
+   - Inside the embedded calculator, the Unit & Project Information section is hidden to avoid duplication.
+
+4) Client data with OCR
+   - The “Scan Egyptian National ID” panel extracts name, national ID, and address via /api/ocr/egypt-id and can apply them into the calculator’s Client Information section.
+
+5) Calculation and evaluation
+   - Generate a plan using /api/generate-plan.
+   - The calculator shows “Standard PV vs Offer PV”, acceptance evaluation, and payment structure metrics vs centrally-managed thresholds.
+   - If acceptable, print the Pricing Form (role based). Otherwise, adjust the plan or use the existing override/escalation.
+
+6) Unit blocking
+   - Consultants can request a unit block directly from Create Deal. The request goes to the approval chain (financial manager approval).
+   - Block expiry is handled by a daily job; approved blocks auto-expire and release the unit.
+
+Relevant endpoints
+- Inventory
+  - GET /api/inventory/types
+  - GET /api/inventory/units
+  - GET /api/inventory/units/:id
+- Calculator
+  - POST /api/calculate
+  - POST /api/generate-plan
+- OCR
+  - POST /api/ocr/egypt-id (multipart form-data: image=<file>)
+- Blocking workflow
+  - POST /api/blocks/request
+    Body: { unitId: number, durationDays: number, reason?: string }
+    Role: property_consultant
+    Response: { ok: true, block: {...} }
+  - PATCH /api/blocks/:id/approve
+    Body: { action: 'approve' | 'reject', reason?: string }
+    Role: financial_manager
+  - PATCH /api/blocks/:id/extend
+    Body: { additionalDays: number, reason?: string }
+    Role: financial_manager
+  - GET /api/blocks/current
+    Role: any authenticated; sales roles see own requests
+
+UI behavior summary
+- Inventory (Deals > Inventory): “Create Offer” on a unit routes to /deals/create?unit_id=<id>.
+- Create Deal:
+  - If unit_id missing: auto-redirect to Inventory.
+  - Top “Selected Unit” card: quick price breakdown, Change Unit, Request Unit Block.
+  - Unit fields below are read-only and mirror Inventory data.
+  - Embedded calculator hides its own Unit section (no duplication).
+  - OCR panel can apply extracted client data to the calculator.
+  - Generate Plan -> evaluate PV and thresholds -> documents (role-based).
