@@ -87,9 +87,8 @@ export default function CreateDeal() {
         const storage = Number(u.storage_price || 0)
         const garage = Number(u.garage_price || 0)
         const maintenance = Number(u.maintenance_price || 0)
-        const total = base + garden + roof + storage + garage
 
-        // Get standard pricing from the model (for proposal baseline) — now from approved_standard_pricing
+        // Approved standard pricing from model (authoritative nominal components)
         const sp = u.approved_standard_pricing || {}
         const stdBase = Number(sp.price || base)
         const stdGarden = Number(sp.garden_price || garden)
@@ -98,6 +97,13 @@ export default function CreateDeal() {
         const stdGarage = Number(sp.garage_price || garage)
         const stdMaintenance = Number(sp.maintenance_price || maintenance)
         const stdTotal = stdBase + stdGarden + stdRoof + stdStorage + stdGarage
+
+        // Approved Standard (Benchmark) attached by API (includes rate and standard PV when computable)
+        const approvedStd = u.standardPlan || {
+          totalPrice: stdTotal,
+          financialDiscountRate: Number(standardPlan?.std_financial_rate_percent) || 0,
+          calculatedPV: stdTotal
+        }
 
         // Prefill embedded calculator via exposed bridge and sync local UI
         try {
@@ -121,11 +127,11 @@ export default function CreateDeal() {
               unit_id: u.id
             },
             stdPlan: {
-              totalPrice: stdTotal,
+              totalPrice: Number(approvedStd.totalPrice) || stdTotal,
               base_price: stdBase,
               maintenance_price: stdMaintenance,
-              financialDiscountRate: Number(standardPlan?.std_financial_rate_percent) || 0,
-              calculatedPV: 0
+              financialDiscountRate: Number(approvedStd.financialDiscountRate) || 0,
+              calculatedPV: Number(approvedStd.calculatedPV) || stdTotal
             },
             unitPricingBreakdown: {
               base: stdBase,

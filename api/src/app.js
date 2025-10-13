@@ -485,9 +485,10 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
     let effectiveStdPlan = null
 
     if (standardPricingId || unitId) {
-      // Load approved standard by id or unit id
-      let row = null
+      // Load approved standard pricing components (nominal) and global standard plan (rate/duration/freq)
+      let priceRow = null
       if (standardPricingId) {
+        // Legacy path: keep for compatibility
         const r = await pool.query(
           `SELECT price, std_financial_rate_percent, plan_duration_years, installment_frequency
            FROM standard_pricing
@@ -496,9 +497,9 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
            LIMIT 1`,
           [Number(standardPricingId)]
         )
-        row = r.rows[0] || null
+        priceRow = r.rows[0] || null
       } else if (unitId) {
-        // Prefer latest approved pricing from unit_model_pricing via the unit's model_id
+        // Preferred: latest approved pricing from model
         const r = await pool.query(
           `SELECT p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price
            FROM units u
@@ -508,92 +509,49 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
            LIMIT 1`,
           [Number(unitId)]
         )
-        row = r.rows[0] || null
-        // If not found, fall back to legacy standard_pricing table if present
-        if (!row) {
-          const r2 = await pool.query(
-            `SELECT price, std_financial_rate_percent, plan_duration_years, installment_frequency
-             FROM standard_pricing
-             WHERE status='approved' AND unit_id=$1
-             ORDER BY id DESC
-             LIMIT 1`,
-            [Number(unitId)]
-          )
-          row = r2.rows[0] || null
-        }
+        priceRow = r.rows[0] || null
       }
-      if (!row) {
+      if (!priceRow) {
         return bad(res, 404, 'Approved standard price not found for the selected unit/model')
       }
-      // Build effective standard plan from available fields
-      const totalPrice = Number(row.price) || 0
-      const stdRate = Number(row.std_financial_rate_percent) || 0
+
+      // Sum total excluding maintenance
+      const totalPrice =
+        (Number(priceRow.price) || 0) +
+        (Number(priceRow.garden_price) || 0) +
+        (Number(priceRow.roof_price) || 0) +
+        (Number(priceRow.storage_price) || 0) +
+        (Number(priceRow.garage_price) || 0)
+
+      // Global standard plan (authoritative for rate/duration/frequency)
+      let stdCfg = null
+      try {
+        const pr = await pool.query(
+          `SELECT std_financial_rate_percent, plan_duration_years, installment_frequency
+           FROM standard_plan
+           WHERE active=TRUE
+           ORDER BY id DESC
+           LIMIT 1`
+        )
+        stdCfg = pr.rows[0] || null
+      } catch {}
+
       effectiveStdPlan = {
         totalPrice,
-        financialDiscountRate: Number.isFinite(stdRate) ? stdRate : 0,
+        financialDiscountRate: stdCfg ? (Number(stdCfg.std_financial_rate_percent) || 0) : (Number(priceRow.std_financial_rate_percent) || 0),
         calculatedPV: totalPrice
       }
-      // Populate manager's target payment after 1 year when available
-      try {
-        if (standardPricingId) {
-          const t = await pool.query(
-            `SELECT target_payment_after_1y FROM standard_pricing WHERE id=$1`,
-            [Number(standardPricingId)]
-          )
-          if (t.rows[0] && t.rows[0].target_payment_after_1y != null) {
-            effectiveStdPlan.targetPaymentAfter1Year = Number(t.rows[0].target_payment_after_1y)
-          }
-        } else if (unitId) {
-          const t2 = await pool.query(
-            `SELECT target_payment_after_1y
-             FROM standard_pricing
-             WHERE status='approved' AND unit_id=$1
-             ORDER BY id DESC
-             LIMIT 1`,
-            [Number(unitId)]
-          )
-          if (t2.rows[0] && t2.rows[0].target_payment_after_1y != null) {
-            effectiveStdPlan.targetPaymentAfter1Year = Number(t2.rows[0].target_payment_after_1y)
-          }
-        }
-      } catch {}
-      // If financial rate is missing from model pricing, attempt to read from legacy standard_pricing for this unit
-      if ((!Number.isFinite(effectiveStdPlan.financialDiscountRate) || effectiveStdPlan.financialDiscountRate === 0) && unitId) {
-        try {
-          const rf = await pool.query(
-            `SELECT std_financial_rate_percent, plan_duration_years, installment_frequency
-             FROM standard_pricing
-             WHERE status='approved' AND unit_id=$1
-             ORDER BY id DESC
-             LIMIT 1`,
-            [Number(unitId)]
-          )
-          const fr = rf.rows[0]
-          if (fr) {
-            const rate = Number(fr.std_financial_rate_percent)
-            if (Number.isFinite(rate) && rate > 0) {
-              effectiveStdPlan.financialDiscountRate = rate
-            }
-            if (row.plan_duration_years == null && fr.plan_duration_years != null && req.body?.inputs?.planDurationYears == null) {
-              if (!isObject(req.body.inputs)) req.body.inputs = {}
-              req.body.inputs.planDurationYears = fr.plan_duration_years
-            }
-            if (!row.installment_frequency && fr.installment_frequency && !req.body?.inputs?.installmentFrequency) {
-              if (!isObject(req.body.inputs)) req.body.inputs = {}
-              req.body.inputs.installmentFrequency = fr.installment_frequency
-            }
-          }
-        } catch {}
-      }
-      // Default inputs fields from standard if not provided (when available)
+
+      // Default inputs fields from standard if not provided
       if (!isObject(req.body.inputs)) req.body.inputs = {}
-      if (row.plan_duration_years != null && req.body.inputs.planDurationYears == null) {
-        req.body.inputs.planDurationYears = row.plan_duration_years
+      if (stdCfg?.plan_duration_years != null && req.body.inputs.planDurationYears == null) {
+        req.body.inputs.planDurationYears = Number(stdCfg.plan_duration_years)
       }
-      if (row.installment_frequency && !req.body.inputs.installmentFrequency) {
-        req.body.inputs.installmentFrequency = row.installment_frequency
+      if (stdCfg?.installment_frequency && !req.body.inputs.installmentFrequency) {
+        req.body.inputs.installmentFrequency = stdCfg.installment_frequency
       }
     } else {
+      // Only accept stdPlan when no unitId/standardPricingId is provided
       if (!isObject(stdPlan)) {
         return bad(res, 400, 'Provide either standardPricingId/unitId or stdPlan object')
       }
@@ -660,6 +618,7 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
     const effInputs = req.body.inputs || inputs || {}
 
     if (standardPricingId || unitId) {
+      // Resolve nominal base from approved pricing and authoritative rate/duration/frequency from global standard_plan
       let row = null
       if (standardPricingId) {
         const r = await pool.query(
@@ -672,7 +631,6 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
         )
         row = r.rows[0] || null
       } else if (unitId) {
-        // Prefer latest approved pricing from unit_model_pricing via the unit's model_id
         const r = await pool.query(
           `SELECT p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price
            FROM units u
@@ -683,28 +641,38 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
           [Number(unitId)]
         )
         row = r.rows[0] || null
-        // Fallback to legacy table if present
-        if (!row) {
-          const r2 = await pool.query(
-            `SELECT price, std_financial_rate_percent, plan_duration_years, installment_frequency
-             FROM standard_pricing
-             WHERE status='approved' AND unit_id=$1
-             ORDER BY id DESC
-             LIMIT 1`,
-            [Number(unitId)]
-          )
-          row = r2.rows[0] || null
-        }
       }
       if (!row) {
         return bad(res, 404, 'Approved standard price not found for the selected unit/model')
       }
+
+      const totalPrice =
+        (Number(row.price) || 0) +
+        (Number(row.garden_price) || 0) +
+        (Number(row.roof_price) || 0) +
+        (Number(row.storage_price) || 0) +
+        (Number(row.garage_price) || 0)
+
+      // Fetch global standard plan (active)
+      let stdCfg = null
+      try {
+        const pr = await pool.query(
+          `SELECT std_financial_rate_percent, plan_duration_years, installment_frequency
+           FROM standard_plan
+           WHERE active=TRUE
+           ORDER BY id DESC
+           LIMIT 1`
+        )
+        stdCfg = pr.rows[0] || null
+      } catch {}
+
       effectiveStdPlan = {
-        totalPrice: Number(row.price) || 0,
-        financialDiscountRate: Number(row.std_financial_rate_percent) || 0,
-        calculatedPV: Number(row.price) || 0
+        totalPrice,
+        financialDiscountRate: stdCfg ? (Number(stdCfg.std_financial_rate_percent) || 0) : (Number(row.std_financial_rate_percent) || 0),
+        calculatedPV: totalPrice
       }
-      // Populate manager's target payment after 1 year when available
+
+      // Target Payment After 1 Year (optional, legacy)
       try {
         if (standardPricingId) {
           const t = await pool.query(
@@ -728,31 +696,12 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
           }
         }
       } catch {}
-      // If financial rate is missing from model pricing, attempt to read from legacy standard_pricing for this unit
-      if ((!Number.isFinite(effectiveStdPlan.financialDiscountRate) || effectiveStdPlan.financialDiscountRate === 0) && unitId) {
-        try {
-          const rf = await pool.query(
-            `SELECT std_financial_rate_percent, plan_duration_years, installment_frequency
-             FROM standard_pricing
-             WHERE status='approved' AND unit_id=$1
-             ORDER BY id DESC
-             LIMIT 1`,
-            [Number(unitId)]
-          )
-          const fr = rf.rows[0]
-          if (fr) {
-            const rate = Number(fr.std_financial_rate_percent)
-            if (Number.isFinite(rate) && rate > 0) {
-              effectiveStdPlan.financialDiscountRate = rate
-            }
-            if (effInputs.planDurationYears == null && fr.plan_duration_years != null) effInputs.planDurationYears = fr.plan_duration_years
-            if (!effInputs.installmentFrequency && fr.installment_frequency) effInputs.installmentFrequency = fr.installment_frequency
-          }
-        } catch {}
-      }
-      if (effInputs.planDurationYears == null && row.plan_duration_years != null) effInputs.planDurationYears = row.plan_duration_years
-      if (!effInputs.installmentFrequency && row.installment_frequency) effInputs.installmentFrequency = row.installment_frequency
+
+      // Default inputs from stdCfg when not provided
+      if (stdCfg && effInputs.planDurationYears == null) effInputs.planDurationYears = Number(stdCfg.plan_duration_years) || 1
+      if (stdCfg && !effInputs.installmentFrequency) effInputs.installmentFrequency = stdCfg.installment_frequency || 'monthly'
     } else {
+      // Only accept stdPlan when unitId/standardPricingId not supplied
       if (!isObject(stdPlan) || !isObject(effInputs)) {
         return bad(res, 400, 'Provide either standardPricingId/unitId or stdPlan with inputs')
       }
@@ -903,9 +852,21 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
     const monthlyRate = annualRate > 0 ? Math.pow(1 + annualRate / 100, 1 / 12) - 1 : 0
     let standardPV = Number(effectiveStdPlan.calculatedPV) || 0
     if (!Number.isFinite(standardPV) || standardPV <= 0) {
-      // Compute PV for equal installments baseline using standard plan duration/frequency
-      const durYears = Number(effInputs.planDurationYears) || 1
-      const freq = effInputs.installmentFrequency || 'monthly'
+      // Prefer authoritative duration/frequency from global standard_plan when available
+      let stdCfg = null
+      try {
+        const pr = await pool.query(
+          `SELECT plan_duration_years, installment_frequency
+           FROM standard_plan
+           WHERE active=TRUE
+           ORDER BY id DESC
+           LIMIT 1`
+        )
+        stdCfg = pr.rows[0] || null
+      } catch {}
+
+      const durYears = Number(stdCfg?.plan_duration_years ?? effInputs.planDurationYears) || 1
+      const freq = (stdCfg?.installment_frequency || effInputs.installmentFrequency || 'monthly')
       let perYear = 12
       switch (freq) {
         case Frequencies.Quarterly: perYear = 4; break
