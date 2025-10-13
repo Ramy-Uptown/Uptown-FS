@@ -217,8 +217,26 @@ What changed
 
 5) Calculation and evaluation
    - Generate a plan using /api/generate-plan.
-   - The calculator shows “Standard PV vs Offer PV”, acceptance evaluation, and payment structure metrics vs centrally-managed thresholds.
-   - If acceptable, print the Pricing Form (role based). Otherwise, adjust the plan or use the existing override/escalation.
+- The calculator shows “Standard PV vs Offer PV”, acceptance evaluation, and payment structure metrics vs centrally-managed thresholds.
+- If acceptable, print the Pricing Form (role based). Otherwise, adjust the plan or use the existing override/escalation.
+
+Benchmark vs Proposal (Create Deal)
+- Source of truth:
+  - Approved Standard (Benchmark) is derived from the unit’s model approved pricing (excluding maintenance) and the active global standard_plan (rate/duration/frequency).
+  - It is loaded automatically by the backend and returned under unit.standardPlan.
+- Locked benchmark in UI:
+  - On /deals/create?unit_id=<UNIT_ID>, the Selected Unit is loaded from Inventory and Approved Standard values (totalPrice, financialDiscountRate, calculatedPV) are applied and locked (read-only) in the embedded calculator.
+  - Consultants cannot change the Approved Standard. It is the fixed baseline to compare against.
+- Proposed Plan only:
+  - The form fields (discount, down payment, duration, frequency, handover, first-year split, subsequent years, and optional fees) represent the Proposed Plan.
+- Generate Plan behavior:
+  - The client sends unitId + Proposed Plan inputs to POST /api/generate-plan.
+  - The backend ignores any stdPlan when unitId is present, looks up the unit’s Approved Standard, computes the Standard PV baseline, and compares Proposed PV vs Standard PV.
+- Comparison and acceptance:
+  - “Standard PV vs Offer PV” panel shows the locked benchmark vs the generated offer.
+  - Acceptance decision and conditions are computed server-side using Top-Management-approved thresholds.
+- Error handling:
+  - If the unit lacks approved pricing or there is no active standard_plan, “Create Deal” will not allow plan generation and will show a clear error message.
 
 6) Unit blocking
    - Consultants can request a unit block directly from Create Deal. The request goes to the approval chain (financial manager approval).
