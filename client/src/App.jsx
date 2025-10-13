@@ -1404,19 +1404,21 @@ export default function App(props) {
         {/* Data Entry UI — New Sections */}
         <ClientInfoForm role={role} clientInfo={clientInfo} setClientInfo={setClientInfo} styles={styles} />
 
-        <UnitInfoSection
-          role={role}
-          styles={styles}
-          mode={mode}
-          inputs={inputs}
-          unitInfo={unitInfo}
-          setUnitInfo={setUnitInfo}
-          setStdPlan={setStdPlan}
-          setInputs={setInputs}
-          setCurrency={setCurrency}
-          setFeeSchedule={setFeeSchedule}
-          setUnitPricingBreakdown={setUnitPricingBreakdown}
-        />
+        {!embedded && (
+          <UnitInfoSection
+            role={role}
+            styles={styles}
+            mode={mode}
+            inputs={inputs}
+            unitInfo={unitInfo}
+            setUnitInfo={setUnitInfo}
+            setStdPlan={setStdPlan}
+            setInputs={setInputs}
+            setCurrency={setCurrency}
+            setFeeSchedule={setFeeSchedule}
+            setUnitPricingBreakdown={setUnitPricingBreakdown}
+          />
+        )}
 
         {(role === 'financial_admin' || role === 'financial_manager' || role === 'contract_manager' || role === 'contract_person') && (
           <ContractDetailsForm

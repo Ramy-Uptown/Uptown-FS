@@ -58,11 +58,16 @@ export default function CreateDeal() {
     })()
   }, [])
 
-  // On mount: if unit_id is provided, fetch unit and prefill calculator
+  // On mount: ensure unit_id provided; if not, redirect to Inventory.
+  // If unit_id is present, fetch unit and prefill calculator.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const unitId = Number(params.get('unit_id'))
-    if (!Number.isFinite(unitId) || unitId <= 0) return
+    if (!Number.isFinite(unitId) || unitId <= 0) {
+      // No unit selected -> go to Inventory to pick one
+      navigate('/deals/inventory', { replace: true })
+      return
+    }
     ;(async () => {
       try {
         setLoading(true)
@@ -97,24 +102,24 @@ export default function CreateDeal() {
         // Prefill embedded calculator via exposed bridge and sync local UI
         try {
           applyPrefill({
-                unitInfo: {
-                  unit_type: u.unit_type || u.unit_type_name || '',
-                  unit_code: u.code || '',
-                  unit_number: u.unit_number || '',
-                  floor: u.floor || '',
-                  building_number: u.building_number || '',
-                  block_sector: u.block_sector || '',
-                  zone: u.zone || '',
-                  garden_details: u.garden_details || '',
-                  area: u.area || '',
-                  orientation: u.orientation || '',
-                  has_garden: u.has_garden || false,
-                  garden_area: u.garden_area || '',
-                  has_roof: u.has_roof || false,
-                  roof_area: u.roof_area || '',
-                  garage_area: u.garage_area || '',
-                  unit_id: u.id
-                },
+            unitInfo: {
+              unit_type: u.unit_type || u.unit_type_name || '',
+              unit_code: u.code || '',
+              unit_number: u.unit_number || '',
+              floor: u.floor || '',
+              building_number: u.building_number || '',
+              block_sector: u.block_sector || '',
+              zone: u.zone || '',
+              garden_details: u.garden_details || '',
+              area: u.area || '',
+              orientation: u.orientation || '',
+              has_garden: u.has_garden || false,
+              garden_area: u.garden_area || '',
+              has_roof: u.has_roof || false,
+              roof_area: u.roof_area || '',
+              garage_area: u.garage_area || '',
+              unit_id: u.id
+            },
             stdPlan: {
               totalPrice: stdTotal,
               base_price: stdBase,
@@ -287,6 +292,30 @@ export default function CreateDeal() {
     }
   }
 
+  // Request a block on the selected unit (goes to approval chain)
+  async function requestUnitBlock() {
+    try {
+      if (!selectedUnit?.id) {
+        setError('Select a unit from Inventory first.')
+        return
+      }
+      const durationStr = window.prompt('Block duration in days (default 7):', '7')
+      if (durationStr === null) return
+      const durationDays = Number(durationStr) || 7
+      const reason = window.prompt('Reason for block (optional):', '') || ''
+      const resp = await fetchWithAuth(`${API_URL}/api/blocks/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitId: Number(selectedUnit.id), durationDays, reason })
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to request unit block')
+      alert('Block request submitted for approval.')
+    } catch (e) {
+      setError(e.message || String(e))
+    }
+  }
+
   async function saveAndSubmit() {
     try {
       setError('')
@@ -417,6 +446,56 @@ export default function CreateDeal() {
       {restoredDraftMsg && <p style={{ color: '#64748b', fontSize: 12 }}>{restoredDraftMsg}</p>}
       {loading && !error && <p style={{ color: '#64748b', fontSize: 14 }}>Loading unit data...</p>}
 
+      {/* Selected Unit Summary */}
+      {selectedUnit && (
+        <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12, background: '#fff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Selected Unit</h3>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => navigate('/deals/inventory')} style={btnPlain}>Change Unit</button>
+              <button onClick={requestUnitBlock} style={btnPrimary}>Request Unit Block</button>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <div><strong>Code:</strong> {selectedUnit.code || '-'}</div>
+            <div><strong>Type:</strong> {selectedUnit.unit_type || selectedUnit.unit_type_name || '-'}</div>
+            <div><strong>Number:</strong> {selectedUnit.unit_number || '-'}</div>
+            <div><strong>Floor:</strong> {selectedUnit.floor || '-'}</div>
+            <div><strong>Building:</strong> {selectedUnit.building_number || '-'}</div>
+            <div><strong>Zone:</strong> {selectedUnit.zone || '-'}</div>
+          </div>
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #eef2f7' }}>
+            <h4 style={{ margin: 0, fontSize: 14, color: '#374151' }}>Price Breakdown (excl. maintenance)</h4>
+            {(() => {
+              const u = selectedUnit || {}
+              const sp = u.approved_standard_pricing || {}
+              const num = v => Number(v || 0)
+              const base = num(sp.price || u.base_price)
+              const garden = num(sp.garden_price || u.garden_price)
+              const roof = num(sp.roof_price || u.roof_price)
+              const storage = num(sp.storage_price || u.storage_price)
+              const garage = num(sp.garage_price || u.garage_price)
+              const maintenance = num(sp.maintenance_price || u.maintenance_price)
+              const total = base + garden + roof + storage + garage
+              const curr = u.currency || 'EGP'
+              const fmt = (x) => Number(x || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginTop: 6 }}>
+                  <div><small>Base</small><div>{fmt(base)} {curr}</div></div>
+                  <div><small>Garden</small><div>{fmt(garden)} {curr}</div></div>
+                  <div><small>Roof</small><div>{fmt(roof)} {curr}</div></div>
+                  <div><small>Storage</small><div>{fmt(storage)} {curr}</div></div>
+                  <div><small>Garage</small><div>{fmt(garage)} {curr}</div></div>
+                  <div><small>Maintenance</small><div>{fmt(maintenance)} {curr}</div></div>
+                  <div style={{ gridColumn: '1 / span 6', marginTop: 6, padding: 8, border: '1px dashed #dfe5ee', borderRadius: 8, background: '#fbfdff' }}>
+                    <strong>Total excl. maintenance:</strong> {fmt(total)} {curr}
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* Egyptian ID OCR Module */}
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
@@ -480,79 +559,46 @@ export default function CreateDeal() {
         )}
       </div>
 
-      {/* Unit & Project Information */}
+      {/* Unit Summary (read-only; pulled from Inventory) */}
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
         <h3 style={{ marginTop: 0, marginBottom: 8 }}>Unit & Project Information</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Type</label>
-            <input
-              value={unitForm.unit_type}
-              onChange={e => applyUnitUpdates({ unit_type: e.target.value })}
-              style={inputStyle}
-              placeholder='e.g., Apartment with roof'
-            />
+            <input value={unitForm.unit_type} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Code</label>
-            <input
-              value={unitForm.unit_code}
-              onChange={e => applyUnitUpdates({ unit_code: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.unit_code} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Number</label>
-            <input
-              value={unitForm.unit_number}
-              onChange={e => applyUnitUpdates({ unit_number: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.unit_number} readOnly style={inputStyle} placeholder='—' />
           </div>
-          
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Floor</label>
-            <input
-              value={unitForm.floor}
-              onChange={e => applyUnitUpdates({ floor: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.floor} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Building Number</label>
-            <input
-              value={unitForm.building_number}
-              onChange={e => applyUnitUpdates({ building_number: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.building_number} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Block / Sector</label>
-            <input
-              value={unitForm.block_sector}
-              onChange={e => applyUnitUpdates({ block_sector: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.block_sector} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Zone / Neighborhood</label>
-            <input
-              value={unitForm.zone}
-              onChange={e => applyUnitUpdates({ zone: e.target.value })}
-              style={inputStyle}
-            />
+            <input value={unitForm.zone} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div style={{ gridColumn: '1 / span 2' }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Garden Details</label>
-            <input
-              value={unitForm.garden_details}
-              onChange={e => applyUnitUpdates({ garden_details: e.target.value })}
-              style={inputStyle}
-              placeholder='e.g., Garden area 50 m²'
-            />
+            <input value={unitForm.garden_details} readOnly style={inputStyle} placeholder='—' />
           </div>
         </div>
-        <small style={{ color: '#64748b' }}>These fields update the calculator below in real-time.</small>
+        <small style={{ color: '#64748b' }}>
+          Unit data is loaded automatically from Inventory and locked here. Use Inventory to choose a unit.
+        </small>
       </div>
 
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
@@ -620,3 +666,4 @@ const inputStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid 
 const textareaStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff', minHeight: 70, resize: 'vertical' }
 const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #A97E34', background: '#A97E34', color: '#fff', fontWeight: 600, cursor: 'pointer' }
 const btnPrimaryAlt = { padding: '10px 14px', borderRadius: 10, border: '1px solid #8B672C', background: '#8B672C', color: '#fff', fontWeight: 600, cursor: 'pointer' }
+const btnPlain = { padding: '10px 14px', borderRadius: 10, border: '1px solid #d1d9e6', background: '#fff', color: '#111827', fontWeight: 600, cursor: 'pointer' }
