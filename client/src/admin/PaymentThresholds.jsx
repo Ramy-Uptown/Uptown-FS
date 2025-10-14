@@ -22,6 +22,8 @@ export default function PaymentThresholds() {
     firstYearPercentMax: '',
     secondYearPercentMin: '',
     secondYearPercentMax: '',
+    thirdYearPercentMin: '',
+    thirdYearPercentMax: '',
     handoverPercentMin: '',
     handoverPercentMax: ''
   })
@@ -47,6 +49,8 @@ export default function PaymentThresholds() {
       firstYearPercentMax: data.thresholds.firstYearPercentMax ?? '',
       secondYearPercentMin: data.thresholds.secondYearPercentMin ?? '',
       secondYearPercentMax: data.thresholds.secondYearPercentMax ?? '',
+      thirdYearPercentMin: data.thresholds.thirdYearPercentMin ?? '',
+      thirdYearPercentMax: data.thresholds.thirdYearPercentMax ?? '',
       handoverPercentMin: data.thresholds.handoverPercentMin ?? '',
       handoverPercentMax: data.thresholds.handoverPercentMax ?? ''
     })
@@ -272,6 +276,14 @@ export default function PaymentThresholds() {
                 <input type="number" step="0.01" value={thresholds.secondYearPercentMax} onChange={onChange('secondYearPercentMax')} style={{...inputStyle, background: role === 'financial_manager' ? '#fff' : '#f8fafc', color: role === 'financial_manager' ? '#111827' : '#94a3b8'}} disabled={role !== 'financial_manager'} />
               </div>
               <div>
+                <label>Third Year Min (%)</label>
+                <input type="number" step="0.01" value={thresholds.thirdYearPercentMin} onChange={onChange('thirdYearPercentMin')} style={{...inputStyle, background: role === 'financial_manager' ? '#fff' : '#f8fafc', color: role === 'financial_manager' ? '#111827' : '#94a3b8'}} disabled={role !== 'financial_manager'} />
+              </div>
+              <div>
+                <label>Third Year Max (%)</label>
+                <input type="number" step="0.01" value={thresholds.thirdYearPercentMax} onChange={onChange('thirdYearPercentMax')} style={{...inputStyle, background: role === 'financial_manager' ? '#fff' : '#f8fafc', color: role === 'financial_manager' ? '#111827' : '#94a3b8'}} disabled={role !== 'financial_manager'} />
+              </div>
+              <div>
                 <label>Handover Min (%)</label>
                 <input type="number" step="0.01" value={thresholds.handoverPercentMin} onChange={onChange('handoverPercentMin')} style={{...inputStyle, background: role === 'financial_manager' ? '#fff' : '#f8fafc', color: role === 'financial_manager' ? '#111827' : '#94a3b8'}} disabled={role !== 'financial_manager'} />
               </div>
@@ -331,6 +343,7 @@ export default function PaymentThresholds() {
                         <td style={td}>
                           FY: {p.thresholds.firstYearPercentMin ?? '-'}–{p.thresholds.firstYearPercentMax ?? '-'}%,
                           SY: {p.thresholds.secondYearPercentMin ?? '-'}–{p.thresholds.secondYearPercentMax ?? '-'}%,
+                          TY: {p.thresholds.thirdYearPercentMin ?? '-'}–{p.thresholds.thirdYearPercentMax ?? '-'}%,
                           HO: {p.thresholds.handoverPercentMin ?? '-'}–{p.thresholds.handoverPercentMax ?? '-'}%
                         </td>
                         {isTopMgmt && (
@@ -375,6 +388,7 @@ export default function PaymentThresholds() {
                         <td style={td}>
                           FY: {(h.thresholds?.firstYearPercentMin ?? h.firstYearPercentMin) ?? '-'}–{(h.thresholds?.firstYearPercentMax ?? h.firstYearPercentMax) ?? '-'}%,
                           SY: {(h.thresholds?.secondYearPercentMin ?? h.secondYearPercentMin) ?? '-'}–{(h.thresholds?.secondYearPercentMax ?? h.secondYearPercentMax) ?? '-'}%,
+                          TY: {(h.thresholds?.thirdYearPercentMin ?? h.thirdYearPercentMin) ?? '-'}–{(h.thresholds?.thirdYearPercentMax ?? h.thirdYearPercentMax) ?? '-'}%,
                           HO: {(h.thresholds?.handoverPercentMin ?? h.handoverPercentMin) ?? '-'}–{(h.thresholds?.handoverPercentMax ?? h.handoverPercentMax) ?? '-'}%
                         </td>
                       </tr>
