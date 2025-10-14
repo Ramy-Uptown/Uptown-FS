@@ -116,6 +116,25 @@ export default function InventoryList() {
       </div>
 
       {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+      {!loading && units.length === 0 ? (
+        <div style={{ padding: 16, border: '1px dashed #e5e7eb', borderRadius: 10, background: '#fafafa', color: '#475569', marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>No units found</div>
+          {(role === 'property_consultant' || role === 'sales_manager') ? (
+            <div style={{ fontSize: 14, lineHeight: 1.5 }}>
+              Inventory appears here only after:
+              <ul style={{ marginTop: 6, marginBottom: 0, paddingLeft: 18 }}>
+                <li>Financial Admin creates a unit as a draft and links it to a Unit Model that already has approved standard pricing.</li>
+                <li>Financial Manager approves the draft in Admin → Inventory Drafts, which marks the unit AVAILABLE.</li>
+              </ul>
+              If you already added inventory in Admin, ask a Financial Manager to approve it so it becomes visible to sales.
+            </div>
+          ) : (
+            <div style={{ fontSize: 14 }}>
+              Try adjusting filters above. If you just created draft units, approve them in Admin → Inventory Drafts so they become AVAILABLE.
+            </div>
+          )}
+        </div>
+      ) : null}
       {layout === 'table' ? (
         <UnitDetailsTable
           units={units}

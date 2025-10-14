@@ -111,6 +111,7 @@ Health checks:
 - Added .devcontainer/devcontainer.json with forwardPorts and postStartCommand.
 - Vite HMR configured for Codespaces (wss + origin).
 - Docker Compose passes Codespaces env vars into client service.
+- Inventory deals page now shows a clear empty-state message for sales roles. It explains that units only appear after: (1) Financial Admin creates drafts linked to a Unit Model with approved standard pricing, and (2) Financial Manager approves the drafts to mark them AVAILABLE. This helps when inventory appears in Admin pages but not under Deals → Inventory.
 
 ---
 
