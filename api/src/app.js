@@ -883,7 +883,10 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
     // ----- Proposed PV from calculation engine -----
     const proposedPV = Number(result.calculatedPV) || 0
     const pvTolerancePercent = thresholds.pvTolerancePercent
-    const pvPass = proposedPV >= (standardPV * (pvTolerancePercent / 100) - 1e-9)
+    // Pass when Proposed PV is less than or equal to the allowed cap (Standard PV * tolerance).
+    // This treats equality as acceptable and allows Standard PV to be larger.
+    const EPS = 1e-2 // 0.01 currency units to absorb float noise
+    const pvPass = proposedPV <= (standardPV * (pvTolerancePercent / 100) + EPS)
     const pvDifference = standardPV - proposedPV
 
     // ----- Conditions based on cumulative percentages -----
