@@ -637,7 +637,64 @@ router.get('/units/:id', authMiddleware, requireRole(['admin','superadmin','sale
     )
 
     if (r.rows.length === 0) return bad(res, 404, 'Unit not found or not available')
-    return ok(res, { unit: r.rows[0] })
+
+    // Build Approved Standard (benchmark) from unit + active global standard plan
+    const unit = r.rows[0]
+    const sp = unit.approved_standard_pricing || {}
+    const toNum = (v) => Number(v || 0)
+    const totalExclMaintenance =
+      toNum(sp.price || unit.base_price) +
+      toNum(sp.garden_price || unit.garden_price) +
+      toNum(sp.roof_price || unit.roof_price) +
+      toNum(sp.storage_price || unit.storage_price) +
+      toNum(sp.garage_price || unit.garage_price)
+
+    // Load latest active global standard plan settings
+    let stdPlanCfg = null
+    try {
+      const pr = await pool.query(
+        `SELECT std_financial_rate_percent, plan_duration_years, installment_frequency
+         FROM standard_plan
+         WHERE active=TRUE
+         ORDER BY id DESC
+         LIMIT 1`
+      )
+      stdPlanCfg = pr.rows[0] || null
+    } catch { /* ignore */ }
+
+    // Compute Standard PV baseline using equal installments if we have a config
+    let calculatedPV = null
+    if (stdPlanCfg) {
+      const annualRate = Number(stdPlanCfg.std_financial_rate_percent) || 0
+      const years = Number(stdPlanCfg.plan_duration_years) || 1
+      const freq = String(stdPlanCfg.installment_frequency || 'monthly').toLowerCase()
+      let perYear = 12
+      if (freq === 'quarterly') perYear = 4
+      else if (freq === 'biannually' || freq === 'bi-annually') perYear = 2
+      else if (freq === 'annually') perYear = 1
+      const n = Math.max(1, years * perYear)
+      const per = totalExclMaintenance / n
+      const monthlyRate = annualRate > 0 ? Math.pow(1 + annualRate / 100, 1 / 12) - 1 : 0
+
+      // Payment months for equal installments starting immediately
+      const months = []
+      for (let i = 1; i <= n; i++) {
+        const step = Math.round((i - 1) * (12 / perYear))
+        months.push(step)
+      }
+      calculatedPV = months.reduce((pv, m) => pv + (per > 0 ? per / Math.pow(1 + monthlyRate, m) : 0), 0)
+    }
+
+    const standardPlan = {
+      totalPrice: totalExclMaintenance,
+      financialDiscountRate: stdPlanCfg ? (Number(stdPlanCfg.std_financial_rate_percent) || 0) : 0,
+      calculatedPV: calculatedPV != null ? calculatedPV : totalExclMaintenance
+    }
+
+    // Attach standardPlan to unit for client consumption
+    unit.standardPlan = standardPlan
+
+    return ok(res, { unit })
   } catch (e) {
     console.error('GET /api/inventory/units/:id error:', e)
     return bad(res, 500, 'Internal error')
