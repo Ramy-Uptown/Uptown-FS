@@ -13,15 +13,9 @@ export default function CreateDeal() {
 
   // Draft auto-save keys
   const DRAFT_UNIT_KEY = 'create_deal_unitForm_v1'
-  const DRAFT_OCR_KEY = 'create_deal_ocr_review_v1'
   const [restoredDraftMsg, setRestoredDraftMsg] = useState('')
 
-  // OCR state
-  const [ocrFile, setOcrFile] = useState(null)
-  const [ocrLoading, setOcrLoading] = useState(false)
-  const [ocrError, setOcrError] = useState('')
-  const [ocrResult, setOcrResult] = useState(null)
-  const [reviewFields, setReviewFields] = useState({ name: '', nationalId: '', address: '' })
+  // OCR moved into Client Information section (ClientIdScanner component)
 
   // Unit & Project Information (local UI state; synced to embedded calculator)
   const [unitForm, setUnitForm] = useState({
@@ -109,7 +103,7 @@ export default function CreateDeal() {
         try {
           applyPrefill({
             unitInfo: {
-              unit_type: u.unit_type || u.unit_type_name || '',
+              unit_type: (u.model_code ? `${u.model_code} — ` : '') + (u.model_name || u.unit_type || u.unit_type_name || ''),
               unit_code: u.code || '',
               unit_number: u.unit_number || '',
               floor: u.floor || '',
@@ -145,7 +139,7 @@ export default function CreateDeal() {
             currency: u.currency || 'EGP'
           })
           setUnitForm({
-            unit_type: u.unit_type || u.unit_type_name || '',
+            unit_type: (u.model_code ? `${u.model_code} — ` : '') + (u.model_name || u.unit_type || u.unit_type_name || ''),
             unit_code: u.code || '',
             unit_number: u.unit_number || '',
             floor: u.floor || '',
@@ -170,7 +164,7 @@ export default function CreateDeal() {
     // Restore drafts from localStorage
     try {
       const unitRaw = localStorage.getItem(DRAFT_UNIT_KEY)
-      const ocrRaw = localStorage.getItem(DRAFT_OCR_KEY)
+      
       let restored = false
       if (unitRaw) {
         const u = JSON.parse(unitRaw)
@@ -179,13 +173,7 @@ export default function CreateDeal() {
           restored = true
         }
       }
-      if (ocrRaw) {
-        const o = JSON.parse(ocrRaw)
-        if (o && typeof o === 'object') {
-          setReviewFields(s => ({ ...s, ...o }))
-          restored = true
-        }
-      }
+      
       if (restored) {
         setRestoredDraftMsg('Draft restored.')
         setTimeout(() => setRestoredDraftMsg(''), 5000)
@@ -229,11 +217,7 @@ export default function CreateDeal() {
     } catch {}
   }, [unitForm])
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(DRAFT_OCR_KEY, JSON.stringify(reviewFields))
-    } catch {}
-  }, [reviewFields])
+  
 
   async function buildPayloadFromSnapshot() {
     const snap = getSnap()
@@ -262,7 +246,7 @@ export default function CreateDeal() {
     const missing = []
     if (!client.buyer_name || !String(client.buyer_name).trim()) missing.push('Client Name')
     if (!client.phone_primary || !String(client.phone_primary).trim()) missing.push('Client Primary Phone')
-    if (!unit.unit_type || !String(unit.unit_type).trim()) missing.push('Unit Type')
+    if (!unit.unit_type || !String(unit.unit_type).trim()) missing.push('Unit Model')
     if (!(unit.unit_code || unit.unit_number)) missing.push('Unit Code or Unit Number')
     return { ok: missing.length === 0, missing }
   }
@@ -464,7 +448,7 @@ export default function CreateDeal() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <div><strong>Code:</strong> {selectedUnit.code || '-'}</div>
-            <div><strong>Type:</strong> {selectedUnit.unit_type || selectedUnit.unit_type_name || '-'}</div>
+            <div><strong>Model:</strong> {selectedUnit.model_code ? `${selectedUnit.model_code} — ${selectedUnit.model_name || ''}`.trim() : (selectedUnit.model_name || selectedUnit.unit_type || selectedUnit.unit_type_name || '-')}</div>
             <div><strong>Number:</strong> {selectedUnit.unit_number || '-'}</div>
             <div><strong>Floor:</strong> {selectedUnit.floor || '-'}</div>
             <div><strong>Building:</strong> {selectedUnit.building_number || '-'}</div>
@@ -503,74 +487,14 @@ export default function CreateDeal() {
         </div>
       )}
 
-      {/* Egyptian ID OCR Module */}
-      <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Scan Egyptian National ID</h3>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={e => setOcrFile(e.target.files?.[0] || null)}
-          />
-          <button onClick={runOCR} disabled={ocrLoading} style={btnPrimary}>
-            {ocrLoading ? 'Processing…' : 'Extract from ID'}
-          </button>
-          {ocrResult?.engine ? (
-            <small style={{ color: '#64748b' }}>
-              Engine: {ocrResult.engine === 'google_vision' ? 'Google Vision (cloud)' : 'Tesseract (local)'}
-            </small>
-          ) : null}
-        </div>
-        {ocrError ? <p style={{ color: '#e11d48' }}>{ocrError}</p> : null}
-
-        {ocrResult && (
-          <div style={{ marginTop: 12 }}>
-            <p style={{ margin: 0, color: '#374151' }}>Review and edit the extracted fields before applying:</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Name</label>
-                <input
-                  value={reviewFields.name}
-                  onChange={e => setReviewFields(s => ({ ...s, name: e.target.value }))}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>National ID</label>
-                <input
-                  value={reviewFields.nationalId}
-                  onChange={e => setReviewFields(s => ({ ...s, nationalId: e.target.value }))}
-                  style={inputStyle}
-                />
-              </div>
-              <div style={{ gridColumn: '1 / span 2' }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Address</label>
-                <textarea
-                  value={reviewFields.address}
-                  onChange={e => setReviewFields(s => ({ ...s, address: e.target.value }))}
-                  style={textareaStyle}
-                />
-              </div>
-            </div>
-            <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-              <button onClick={applyToForm} style={btnPrimaryAlt}>Apply to Form</button>
-              <details>
-                <summary style={{ cursor: 'pointer', color: '#64748b' }}>Show OCR Text</summary>
-                <pre style={{ whiteSpace: 'pre-wrap', background: '#f6f8fa', padding: 8, borderRadius: 8, border: '1px solid #eef2f7' }}>
-{ocrResult?.rawText || ''}
-                </pre>
-              </details>
-            </div>
-          </div>
-        )}
-      </div>
+      
 
       {/* Unit Summary (read-only; pulled from Inventory) */}
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
         <h3 style={{ marginTop: 0, marginBottom: 8 }}>Unit & Project Information</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Type</label>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Model</label>
             <input value={unitForm.unit_type} readOnly style={inputStyle} placeholder='—' />
           </div>
           <div>

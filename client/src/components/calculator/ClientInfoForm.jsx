@@ -1,4 +1,5 @@
 import React from 'react'
+import ClientIdScanner from './ClientIdScanner.jsx'
 
 export default function ClientInfoForm({ role, clientInfo, setClientInfo, styles }) {
   // Shared input props
@@ -38,6 +39,10 @@ export default function ClientInfoForm({ role, clientInfo, setClientInfo, styles
         <label style={styles.label}>ID/Passport Issue Date (<span style={styles.arInline}>[[تاريخ الاصدار]]</span>)</label>
         <input type="date" style={input()} value={clientInfo.id_issue_date} onChange={e => setClientInfo(s => ({ ...s, id_issue_date: e.target.value }))} />
       </div>
+      <div>
+        <label style={styles.label}>Birth Date (<span style={styles.arInline}>[[تاريخ الميلاد]]</span>)</label>
+        <input type="date" style={input()} value={clientInfo.birth_date || ''} onChange={e => setClientInfo(s => ({ ...s, birth_date: e.target.value }))} />
+      </div>
       <div style={styles.blockFull}>
         <label style={styles.label}>Address (<span style={styles.arInline}>[[العنوان]]</span>)</label>
         <textarea dir="auto" style={textarea()} value={clientInfo.address} onChange={e => setClientInfo(s => ({ ...s, address: e.target.value }))} />
@@ -65,6 +70,10 @@ export default function ClientInfoForm({ role, clientInfo, setClientInfo, styles
       ) : (
         <Grid>{ExtendedFields}</Grid>
       )}
+      {/* Inline scanner (OCR) below client fields */}
+      <div style={{ marginTop: 12, padding: 12, border: '1px solid #ead9bd', borderRadius: 10, background: '#fbfaf7' }}>
+        <ClientIdScanner styles={styles} />
+      </div>
     </section>
   )
 }
