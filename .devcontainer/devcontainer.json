@@ -4,13 +4,15 @@
   "portsAttributes": {
     "3001": {
       "label": "API (Express)",
-      "onAutoForward": "notify",
-      "protocol": "http"
+      "onAutoForward": "openBrowser",
+      "protocol": "http",
+      "visibility": "public"
     },
     "5173": {
       "label": "Client (Vite)",
-      "onAutoForward": "notify",
-      "protocol": "http"
+      "onAutoForward": "openBrowser",
+      "protocol": "http",
+      "visibility": "public"
     }
   },
   "customizations": {
@@ -18,8 +20,8 @@
       "settings": {
         "remote.autoForwardPorts": true,
         "remote.portsAttributes": {
-          "3001": { "label": "API (Express)" },
-          "5173": { "label": "Client (Vite)" }
+          "3001": { "label": "API (Express)", "visibility": "public" },
+          "5173": { "label": "Client (Vite)", "visibility": "public" }
         }
       }
     }

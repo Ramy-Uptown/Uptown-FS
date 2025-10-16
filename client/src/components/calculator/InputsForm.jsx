@@ -1,8 +1,9 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import LivePreview from './LivePreview.jsx'
 import PlanActions from './PlanActions.jsx'
 import FirstYearPayments from './FirstYearPayments.jsx'
 import SubsequentYears from './SubsequentYears.jsx'
+import { t, isRTL, applyDocumentDirection } from '../../lib/i18n.js'
 
 export default function InputsForm({
   styles,
@@ -39,20 +40,25 @@ export default function InputsForm({
   const select = (err) => styles.select ? styles.select(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
   const todayStr = new Date().toISOString().slice(0, 10)
 
+  // Apply document direction whenever language changes
+  useEffect(() => {
+    applyDocumentDirection(language)
+  }, [language])
+
   return (
-    <section style={styles.section}>
-      <h2 style={styles.sectionTitle}>Inputs</h2>
+    <section style={{ ...styles.section }} dir={isRTL(language) ? 'rtl' : 'ltr'}>
+      <h2 style={{ ...styles.sectionTitle, textAlign: isRTL(language) ? 'right' : 'left' }}>{t('inputs', language)}</h2>
       <form onSubmit={(e) => { e.preventDefault(); onGeneratePlan(e) }} style={{ ...styles.grid2 }}>
         <div>
-          <label style={styles.label}>Language for Written Amounts</label>
+          <label style={styles.label}>{t('language_for_written_amounts', language)}</label>
           <select value={language} onChange={e => setLanguage(e.target.value)} style={select()}>
-            <option value="en">English</option>
-            <option value="ar">Arabic</option>
+            <option value="en">{t('english', language)}</option>
+            <option value="ar">{t('arabic', language)}</option>
           </select>
         </div>
 
         <div>
-          <label style={styles.label}>Currency (English only)</label>
+          <label style={styles.label}>{t('currency', language)}</label>
           <select value={currency} onChange={e => setCurrency(e.target.value)} style={select()}>
             <option value="EGP">EGP (Egyptian Pounds)</option>
             <option value="USD">USD (US Dollars)</option>
@@ -64,7 +70,7 @@ export default function InputsForm({
         </div>
 
         <div>
-          <label style={styles.label}>Offer Date<span style={{ color: '#ef4444' }}> *</span></label>
+          <label style={styles.label}>{t('offer_date', language)}<span style={{ color: '#ef4444' }}> *</span></label>
           <input
             type="date"
             value={inputs.offerDate || todayStr}
@@ -76,7 +82,7 @@ export default function InputsForm({
         </div>
 
         <div>
-          <label style={styles.label}>First Payment Date<span style={{ color: '#ef4444' }}> *</span></label>
+          <label style={styles.label}>{t('first_payment_date', language)}<span style={{ color: '#ef4444' }}> *</span></label>
           <input
             type="date"
             value={inputs.firstPaymentDate || inputs.offerDate || todayStr}
@@ -88,7 +94,7 @@ export default function InputsForm({
         </div>
 
         <div>
-          <label style={styles.label}>Mode</label>
+          <label style={styles.label}>{t('mode', language)}</label>
           <select value={mode} onChange={e => setMode(e.target.value)} style={select()}>
             <option value="evaluateCustomPrice">evaluateCustomPrice</option>
             <option value="calculateForTargetPV">calculateForTargetPV</option>
@@ -98,18 +104,18 @@ export default function InputsForm({
         </div>
 
         <div>
-          <label style={styles.label}>Installment Frequency</label>
+          <label style={styles.label}>{t('installment_frequency', language)}</label>
           <select value={inputs.installmentFrequency} onChange={e => setInputs(s => ({ ...s, installmentFrequency: e.target.value }))} style={select(errors.installmentFrequency)}>
-            <option value="monthly">monthly</option>
-            <option value="quarterly">quarterly</option>
-            <option value="bi-annually">bi-annually</option>
-            <option value="annually">annually</option>
+            <option value="monthly">{t('monthly', language)}</option>
+            <option value="quarterly">{t('quarterly', language)}</option>
+            <option value="bi-annually">{t('bi_annually', language)}</option>
+            <option value="annually">{t('annually', language)}</option>
           </select>
           {errors.installmentFrequency && <small style={styles.error}>{errors.installmentFrequency}</small>}
         </div>
 
         <div>
-          <label style={styles.label}>Std Total Price</label>
+          <label style={styles.label}>{t('std_total_price', language)}</label>
           <input
             type="number"
             value={stdPlan.totalPrice}
@@ -120,19 +126,19 @@ export default function InputsForm({
           />
           {errors.std_totalPrice && <small style={styles.error}>{errors.std_totalPrice}</small>}
           <div style={{ marginTop: 6, fontSize: 12, color: '#4b5563', background: '#fbfaf7', border: '1px dashed #ead9bd', borderRadius: 8, padding: 8 }}>
-            <div><strong>Unit Breakdown</strong></div>
-            <div>Base: {Number(unitPricingBreakdown.base || 0).toLocaleString()}</div>
-            <div>Garden: {Number(unitPricingBreakdown.garden || 0).toLocaleString()}</div>
-            <div>Roof: {Number(unitPricingBreakdown.roof || 0).toLocaleString()}</div>
-            <div>Storage: {Number(unitPricingBreakdown.storage || 0).toLocaleString()}</div>
-            <div>Garage: {Number(unitPricingBreakdown.garage || 0).toLocaleString()}</div>
-            <div style={{ marginTop: 4 }}><strong>Total (excl. maintenance): {Number(unitPricingBreakdown.totalExclMaintenance || 0).toLocaleString()}</strong></div>
-            <div>Maintenance (scheduled separately): {Number(unitPricingBreakdown.maintenance || 0).toLocaleString()}</div>
+            <div><strong>{t('unit_breakdown', language)}</strong></div>
+            <div>{t('base', language)}: {Number(unitPricingBreakdown.base || 0).toLocaleString()}</div>
+            <div>{t('garden', language)}: {Number(unitPricingBreakdown.garden || 0).toLocaleString()}</div>
+            <div>{t('roof', language)}: {Number(unitPricingBreakdown.roof || 0).toLocaleString()}</div>
+            <div>{t('storage', language)}: {Number(unitPricingBreakdown.storage || 0).toLocaleString()}</div>
+            <div>{t('garage', language)}: {Number(unitPricingBreakdown.garage || 0).toLocaleString()}</div>
+            <div style={{ marginTop: 4 }}><strong>{t('total_excl_maint', language)}: {Number(unitPricingBreakdown.totalExclMaintenance || 0).toLocaleString()}</strong></div>
+            <div>{t('maintenance', language)}: {Number(unitPricingBreakdown.maintenance || 0).toLocaleString()}</div>
           </div>
         </div>
         {role !== 'property_consultant' && (
           <div>
-            <label style={styles.label}>Std Financial Rate (%)</label>
+            <label style={styles.label}>{t('std_financial_rate', language)}</label>
             <input
               type="number"
               value={stdPlan.financialDiscountRate}
@@ -145,7 +151,7 @@ export default function InputsForm({
           </div>
         )}
         <div>
-          <label style={styles.label}>Std Calculated PV</label>
+          <label style={styles.label}>{t('std_calculated_pv', language)}</label>
           <input
             type="number"
             value={stdPlan.calculatedPV}
@@ -158,21 +164,21 @@ export default function InputsForm({
         </div>
 
         <div>
-          <label style={styles.label}>Sales Discount (%)</label>
+          <label style={styles.label}>{t('sales_discount', language)}</label>
           <input type="number" value={inputs.salesDiscountPercent} onChange={e => setInputs(s => ({ ...s, salesDiscountPercent: e.target.value }))} style={input()} />
           {DiscountHint && <DiscountHint role={undefined} value={inputs.salesDiscountPercent} />}
         </div>
 
         <div>
-          <label style={styles.label}>DP Type</label>
+          <label style={styles.label}>{t('dp_type', language)}</label>
           <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={select(errors.dpType)}>
-            <option value="amount">amount</option>
-            <option value="percentage">percentage</option>
+            <option value="amount">{t('amount', language)}</option>
+            <option value="percentage">{t('percentage', language)}</option>
           </select>
           {errors.dpType && <small style={styles.error}>{errors.dpType}</small>}
         </div>
         <div>
-          <label style={styles.label}>Down Payment Value</label>
+          <label style={styles.label}>{t('down_payment_value', language)}</label>
           {inputs.dpType === 'percentage' ? (
             <div style={{ position: 'relative' }}>
               <input
@@ -202,18 +208,18 @@ export default function InputsForm({
         </div>
 
         <div>
-          <label style={styles.label}>Plan Duration (years)</label>
+          <label style={styles.label}>{t('plan_duration_years', language)}</label>
           <input type="number" value={inputs.planDurationYears} onChange={e => setInputs(s => ({ ...s, planDurationYears: e.target.value }))} style={input(errors.planDurationYears)} />
           {errors.planDurationYears && <small style={styles.error}>{errors.planDurationYears}</small>}
         </div>
 
         <div>
-          <label style={styles.label}>Handover Year</label>
+          <label style={styles.label}>{t('handover_year', language)}</label>
           <input type="number" value={inputs.handoverYear} onChange={e => setInputs(s => ({ ...s, handoverYear: e.target.value }))} style={input(errors.handoverYear)} />
           {errors.handoverYear && <small style={styles.error}>{errors.handoverYear}</small>}
         </div>
         <div>
-          <label style={styles.label}>Additional Handover Payment</label>
+          <label style={styles.label}>{t('additional_handover_payment', language)}</label>
           <input type="number" value={inputs.additionalHandoverPayment} onChange={e => setInputs(s => ({ ...s, additionalHandoverPayment: e.target.value }))} style={input(errors.additionalHandoverPayment)} />
           {errors.additionalHandoverPayment && <small style={styles.error}>{errors.additionalHandoverPayment}</small>}
         </div>
@@ -221,7 +227,7 @@ export default function InputsForm({
         <div style={styles.blockFull}>
           <label style={{ ...styles.label, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <input type="checkbox" checked={inputs.splitFirstYearPayments} onChange={e => setInputs(s => ({ ...s, splitFirstYearPayments: e.target.checked }))} />
-            Split First Year Payments?
+            {t('split_first_year', language)}
           </label>
         </div>
 
