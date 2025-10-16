@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { fetchWithAuth } from './lib/apiClient.js'
 import BrandHeader from './lib/BrandHeader.jsx'
-import { getArabicMonth } from './lib/i18n.js'
+import { getArabicMonth, t, isRTL, applyDocumentDirection } from './lib/i18n.js'
 import numberToArabic from './lib/numberToArabic.js'
 import EvaluationPanel from './components/calculator/EvaluationPanel.jsx'
 import PaymentSchedule from './components/calculator/PaymentSchedule.jsx'
@@ -160,6 +160,11 @@ export default function App(props) {
     offerDate: new Date().toISOString().slice(0, 10),
     firstPaymentDate: new Date().toISOString().slice(0, 10)
   })
+
+  // Apply document dir/lang whenever language changes
+  useEffect(() => {
+    applyDocumentDirection(language)
+  }, [language])
 
   // Current user (for role-based UI and hints)
   const [authUser, setAuthUser] = useState(null)
@@ -1202,10 +1207,11 @@ export default function App(props) {
 
         {/* Evaluation from server (PV-based decision + five conditions) */}
         {genResult?.evaluation && (
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Acceptance Evaluation</h2>
+          <section style={styles.section} dir={isRTL(language) ? 'rtl' : 'ltr'}>
+            <h2 style={{ ...styles.sectionTitle, textAlign: isRTL(language) ? 'right' : 'left' }}>{t('acceptance_evaluation', language)}</h2>
             <EvaluationPanel evaluation={genResult.evaluation} role={role} dealId={props?.dealId} API_URL={API_URL} />
             <small style={styles.metaText}>
+              {/* Keep this note in English for now as it is managerial guidance */}
               Thresholds are set by the Financial Manager and approved by Top Management. The evaluation above is computed server-side.
             </small>
           </section>
@@ -1214,7 +1220,7 @@ export default function App(props) {
         
 
         {/* Data Entry UI — New Sections */}
-        <ClientInfoForm role={role} clientInfo={clientInfo} setClientInfo={setClientInfo} styles={styles} />
+        <ClientInfoForm role={role} clientInfo={clientInfo} setClientInfo={setClientInfo} styles={styles} language={language} />
 
         {!embedded && (
           <UnitInfoSection
@@ -1258,9 +1264,9 @@ export default function App(props) {
         )}
 
         {/* Results Table */}
-        <section style={styles.section}>
+        <section style={styles.section} dir={isRTL(language) ? 'rtl' : 'ltr'}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={styles.sectionTitle}>Payment Schedule</h2>
+            <h2 style={{ ...styles.sectionTitle, textAlign: isRTL(language) ? 'right' : 'left' }}>{t('payment_schedule', language)}</h2>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {/* Pricing Form — Property Consultant only */}
               {authUser?.role === 'property_consultant' && (
@@ -1269,7 +1275,7 @@ export default function App(props) {
                   onClick={() => generateDocument('pricing_form')}
                   style={styles.btnPrimary}
                 >
-                  Generate Pricing Form
+                  {t('generate_pricing_form', language)}
                 </button>
               )}
               {/* Reservation Form — Financial Admin only */}
@@ -1279,7 +1285,7 @@ export default function App(props) {
                   onClick={() => generateDocument('reservation_form')}
                   style={styles.btnPrimary}
                 >
-                  Generate Reservation Form
+                  {t('generate_reservation_form', language)}
                 </button>
               )}
               {/* Contract — Contract Person only */}
@@ -1289,17 +1295,17 @@ export default function App(props) {
                   onClick={() => generateDocument('contract')}
                   style={styles.btnPrimary}
                 >
-                  Generate Contract
+                  {t('generate_contract', language)}
                 </button>
               )}
               <button type="button" onClick={exportScheduleXLSX} disabled={!schedule.length} style={styles.btn}>
-                Export to Excel (.xlsx)
+                {t('export_xlsx', language)}
               </button>
               <button type="button" onClick={generateChecksSheetXLSX} disabled={!schedule.length} style={styles.btn}>
-                Generate Checks Sheet (.xlsx)
+                {t('generate_checks_sheet', language)}
               </button>
               <button type="button" onClick={exportScheduleCSV} disabled={!schedule.length} style={styles.btn}>
-                Export to CSV
+                {t('export_csv', language)}
               </button>
             </div>
           </div>
@@ -1307,11 +1313,11 @@ export default function App(props) {
           {docError ? <p style={styles.error}>{docError}</p> : null}
           {/* Dates summary above schedule for visibility */}
           <div style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 8, background: '#fbfaf7', border: '1px solid #ead9bd', display: 'inline-flex', gap: 16, flexWrap: 'wrap' }}>
-            <div><strong>Offer Date:</strong> {inputs.offerDate || new Date().toISOString().slice(0, 10)}</div>
-            <div><strong>First Payment Date:</strong> {inputs.firstPaymentDate || inputs.offerDate || new Date().toISOString().slice(0, 10)}</div>
+            <div><strong>{t('offer_date_short', language)}</strong> {inputs.offerDate || new Date().toISOString().slice(0, 10)}</div>
+            <div><strong>{t('first_payment_date_short', language)}</strong> {inputs.firstPaymentDate || inputs.offerDate || new Date().toISOString().slice(0, 10)}</div>
           </div>
           {schedule.length === 0 ? (
-            <p style={styles.metaText}>No schedule yet. Fill the form and click "Calculate (Generate Plan)".</p>
+            <p style={styles.metaText}>{t('no_schedule_yet', language)}</p>
           ) : (
             <PaymentSchedule
               schedule={schedule}

@@ -1,19 +1,21 @@
 import React from 'react'
 import { tableWrap as wrapDefault, table as tableDefault, th as thDefault, td as tdDefault } from '../../lib/ui.js'
 import numberToArabic from '../../lib/numberToArabic.js'
+import { t } from '../../lib/i18n.js'
 
 export default function PaymentSchedule({ schedule = [], totals = null, language = 'en', onExportCSV, onExportXLSX, onGenerateChecks }) {
+  const rtl = String(language) === 'ar'
   return (
-    <div style={wrapDefault}>
+    <div style={wrapDefault} dir={rtl ? 'rtl' : 'ltr'}>
       <table style={tableDefault}>
         <thead>
           <tr>
             <th style={thDefault}>#</th>
-            <th style={thDefault}>Month</th>
-            <th style={thDefault}>Date</th>
-            <th style={thDefault}>Label</th>
-            <th style={{ ...thDefault, textAlign: 'right' }}>Amount</th>
-            <th style={{ ...thDefault, textAlign: language === 'ar' ? 'right' : 'left' }}>Written Amount</th>
+            <th style={thDefault}>{t('month', language)}</th>
+            <th style={thDefault}>{t('date', language)}</th>
+            <th style={thDefault}>{t('label', language)}</th>
+            <th style={{ ...thDefault, textAlign: 'right' }}>{t('amount_label', language)}</th>
+            <th style={{ ...thDefault, textAlign: rtl ? 'right' : 'left' }}>{t('written_amount', language)}</th>
           </tr>
         </thead>
         <tbody>
@@ -26,8 +28,8 @@ export default function PaymentSchedule({ schedule = [], totals = null, language
               <td style={{ ...tdDefault, textAlign: 'right' }}>
                 {Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </td>
-              <td style={{ ...tdDefault, direction: language === 'ar' ? 'rtl' : 'ltr', textAlign: language === 'ar' ? 'right' : 'left' }}>
-                {language === 'ar' ? numberToArabic(row.amount, 'جنيه مصري', 'قرش') : row.writtenAmount}
+              <td style={{ ...tdDefault, direction: rtl ? 'rtl' : 'ltr', textAlign: rtl ? 'right' : 'left' }}>
+                {rtl ? numberToArabic(row.amount, 'جنيه مصري', 'قرش') : row.writtenAmount}
               </td>
             </tr>
           ))}
@@ -35,7 +37,7 @@ export default function PaymentSchedule({ schedule = [], totals = null, language
         {totals && (
           <tfoot>
             <tr>
-              <td colSpan="3" style={{ padding: 12, fontWeight: 700, background: '#fbfaf7', textAlign: 'right' }}>Total</td>
+              <td colSpan="3" style={{ padding: 12, fontWeight: 700, background: '#fbfaf7', textAlign: 'right' }}>{t('total', language)}</td>
               <td style={{ padding: 12, fontWeight: 700, background: '#fbfaf7', textAlign: 'right' }}>
                 {Number(totals.totalNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </td>
@@ -44,15 +46,15 @@ export default function PaymentSchedule({ schedule = [], totals = null, language
           </tfoot>
         )}
       </table>
-      <div style={{ display: 'flex', gap: 8, padding: 10 }}>
+      <div style={{ display: 'flex', gap: 8, padding: 10, justifyContent: rtl ? 'flex-end' : 'flex-start' }}>
         <button type="button" onClick={onExportXLSX} disabled={!schedule.length} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }}>
-          Export to Excel (.xlsx)
+          {t('export_xlsx', language)}
         </button>
         <button type="button" onClick={onGenerateChecks} disabled={!schedule.length} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }}>
-          Generate Checks Sheet (.xlsx)
+          {t('generate_checks_sheet', language)}
         </button>
         <button type="button" onClick={onExportCSV} disabled={!schedule.length} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }}>
-          Export to CSV
+          {t('export_csv', language)}
         </button>
       </div>
     </div>
