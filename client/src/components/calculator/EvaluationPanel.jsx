@@ -5,12 +5,22 @@ export default function EvaluationPanel({ evaluation, role, dealId, API_URL }) {
   if (!evaluation) return null
 
   const ok = evaluation.decision === 'ACCEPT'
+
+  // Collect unmet criteria for REJECT banner
+  const failedCriteria = []
+  if (!evaluation?.pv?.pass) failedCriteria.push('PV below standard')
+  if (Array.isArray(evaluation?.conditions)) {
+    for (const c of evaluation.conditions) {
+      if (c?.status && c.status !== 'PASS') failedCriteria.push(c.label)
+    }
+  }
+
   const box = {
     marginBottom: 12,
     padding: '10px 12px',
     borderRadius: 10,
     border: `1px solid ${ok ? '#10b981' : '#ef4444'}`,
-    background: ok ? '#ecfdf5' : '#fef2f2',
+    background: ok ? '#ecfdf5' : '#fee2e2', // stronger red background for reject
     color: ok ? '#065f46' : '#7f1d1d',
     fontWeight: 600
   }
@@ -34,7 +44,19 @@ export default function EvaluationPanel({ evaluation, role, dealId, API_URL }) {
   return (
     <div>
       <div style={box}>
-        NPV-based Decision: {evaluation.decision}
+        <div>NPV-based Decision: {evaluation.decision}</div>
+        {!ok && failedCriteria.length > 0 && (
+          <div style={{ marginTop: 6, fontWeight: 500, fontSize: 13 }}>
+            Unmet criteria: {failedCriteria.join(', ')}
+          </div>
+        )}
+        {!ok && (role === 'property_consultant' || role === 'sales_manager' || role === 'financial_manager' || role === 'admin' || role === 'superadmin') && dealId && (
+          <div style={{ marginTop: 8 }}>
+            <button type="button" style={ui.btnPrimary} onClick={requestOverride}>
+              Request Override
+            </button>
+          </div>
+        )}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
@@ -71,13 +93,6 @@ export default function EvaluationPanel({ evaluation, role, dealId, API_URL }) {
           </ul>
         </div>
       </div>
-      {(evaluation.decision === 'REJECT') && (role === 'property_consultant' || role === 'sales_manager' || role === 'financial_manager' || role === 'admin' || role === 'superadmin') && dealId && (
-        <div style={{ marginTop: 12 }}>
-          <button type="button" style={ui.btnPrimary} onClick={requestOverride}>
-            Request Override
-          </button>
-        </div>
-      )}
     </div>
   )
 }
