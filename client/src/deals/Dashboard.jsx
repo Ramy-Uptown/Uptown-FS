@@ -187,7 +187,7 @@ export default function Dashboard() {
       setMessage('Generating report, please wait...')
       setShow(true)
       const rows = await exportAllMatching()
-      const header = ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Created', 'Updated']
+      const header = ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Offer Date', 'First Payment Date', 'Created', 'Updated']
       const body = rows.map(d => ([
         d.id,
         d.title,
@@ -195,13 +195,15 @@ export default function Dashboard() {
         d.status,
         d.unit_type || '',
         d.created_by_email || '',
+        d?.details?.calculator?.inputs?.offerDate || '',
+        d?.details?.calculator?.inputs?.firstPaymentDate || d?.details?.calculator?.inputs?.offerDate || '',
         d.created_at ? new Date(d.created_at).toISOString() : '',
         d.updated_at ? new Date(d.updated_at).toISOString() : ''
       ]))
       const out = [header, ...body]
       const csv = out.map(r => r.map(cell => {
         const s = String(cell ?? '')
-        return /[\",\n]/.test(s) ? `\"${s.replace(/\"/g, '\"\"')}\"` : s
+        return /[\\\",\\n]/.test(s) ? `\"${s.replace(/\"/g, '\"\"')}\"` : s
       }).join(',')).join('\n')
 
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -226,7 +228,7 @@ export default function Dashboard() {
       setShow(true)
       const rows = await exportAllMatching()
       const aoa = [
-        ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Created', 'Updated'],
+        ['ID', 'Title', 'Amount', 'Status', 'Unit Type', 'Creator', 'Offer Date', 'First Payment Date', 'Created', 'Updated'],
         ...rows.map(d => ([
           d.id,
           d.title,
@@ -234,6 +236,8 @@ export default function Dashboard() {
           d.status,
           d.unit_type || '',
           d.created_by_email || '',
+          d?.details?.calculator?.inputs?.offerDate || '',
+          d?.details?.calculator?.inputs?.firstPaymentDate || d?.details?.calculator?.inputs?.offerDate || '',
           d.created_at ? new Date(d.created_at).toLocaleString() : '',
           d.updated_at ? new Date(d.updated_at).toLocaleString() : ''
         ]))
@@ -246,6 +250,8 @@ export default function Dashboard() {
         { wch: 16 },  // Status
         { wch: 18 },  // Unit Type
         { wch: 28 },  // Creator
+        { wch: 16 },  // Offer Date
+        { wch: 20 },  // First Payment Date
         { wch: 22 },  // Created
         { wch: 22 },  // Updated
       ]
@@ -258,7 +264,9 @@ export default function Dashboard() {
       a.href = url
       const ts = new Date().toISOString().replace(/[:.]/g, '-')
       a.download = `deals_export_${ts}.xlsx`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
       URL.revokeObjectURL(url)
       notifySuccess('Export completed successfully.')
     } catch (e) {
@@ -345,6 +353,8 @@ export default function Dashboard() {
               <th style={th}>Status</th>
               <th style={th}>Unit Type</th>
               <th style={th}>Creator</th>
+              <th style={th}>Offer Date</th>
+              <th style={th}>First Payment Date</th>
               <th style={th}>Created</th>
               <th style={th}>Actions</th>
             </tr>
@@ -353,34 +363,40 @@ export default function Dashboard() {
             {loading && (
               <>
                 {Array.from({ length: pageSize }).map((_, i) => (
-                  <SkeletonRow key={i} widths={['sm','lg','sm','sm','lg','lg','sm','sm']} tdStyle={td} />
+                  <SkeletonRow key={i} widths={['sm','lg','sm','sm','lg','lg','sm','sm','sm','sm']} tdStyle={td} />
                 ))}
               </>
             )}
-            {!loading && deals.map(d => (
-              <tr key={d.id}>
-                <td style={td}>{d.id}</td>
-                <td style={td}>{d.title}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{Number(d.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                <td style={td}>{d.status}</td>
-                <td style={td}>{d.unit_type || '-'}</td>
-                <td style={td}>{d.created_by_email || '-'}</td>
-                <td style={td}>{d.created_at ? new Date(d.created_at).toLocaleString() : ''}</td>
-                <td style={{ ...td, display: 'flex', gap: 8 }}>
-                  <Link to={`/deals/${d.id}`} style={{ textDecoration: 'none', color: '#1f6feb' }}>View</Link>
-                  <LoadingButton
-                    onClick={() => handleDelete(d)}
-                    loading={deletingIds.has(d.id)}
-                    style={{ ...btn, border: '1px solid #dc2626', color: '#dc2626' }}
-                  >
-                    Delete
-                  </LoadingButton>
-                </td>
-              </tr>
-            ))}
+            {!loading && deals.map(d => {
+              const offerDate = d?.details?.calculator?.inputs?.offerDate || '';
+              const firstPaymentDate = d?.details?.calculator?.inputs?.firstPaymentDate || offerDate || '';
+              return (
+                <tr key={d.id}>
+                  <td style={td}>{d.id}</td>
+                  <td style={td}>{d.title}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>{Number(d.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                  <td style={td}>{d.status}</td>
+                  <td style={td}>{d.unit_type || '-'}</td>
+                  <td style={td}>{d.created_by_email || '-'}</td>
+                  <td style={td}>{offerDate}</td>
+                  <td style={td}>{firstPaymentDate}</td>
+                  <td style={td}>{d.created_at ? new Date(d.created_at).toLocaleString() : ''}</td>
+                  <td style={{ ...td, display: 'flex', gap: 8 }}>
+                    <Link to={`/deals/${d.id}`} style={{ textDecoration: 'none', color: '#1f6feb' }}>View</Link>
+                    <LoadingButton
+                      onClick={() => handleDelete(d)}
+                      loading={deletingIds.has(d.id)}
+                      style={{ ...btn, border: '1px solid #dc2626', color: '#dc2626' }}
+                    >
+                      Delete
+                    </LoadingButton>
+                  </td>
+                </tr>
+              )
+            })}
             {deals.length === 0 && !loading && (
               <tr>
-                <td style={td} colSpan={8}>No deals match your criteria.</td>
+                <td style={td} colSpan={10}>No deals match your criteria.</td>
               </tr>
             )}
           </tbody>

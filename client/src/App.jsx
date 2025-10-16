@@ -156,7 +156,9 @@ export default function App(props) {
     installmentFrequency: 'monthly',
     additionalHandoverPayment: 0,
     handoverYear: 2,
-    splitFirstYearPayments: false
+    splitFirstYearPayments: false,
+    offerDate: new Date().toISOString().slice(0, 10),
+    firstPaymentDate: new Date().toISOString().slice(0, 10)
   })
 
   // Current user (for role-based UI and hints)
@@ -629,6 +631,30 @@ export default function App(props) {
   // Client-side inline validation (mirrors server-side constraints)
   function validateForm() {
     const e = {}
+    // Ensure offerDate is present; default to today if missing
+    const todayStr = new Date().toISOString().slice(0, 10)
+    if (!inputs.offerDate) {
+      setInputs(s => ({ ...s, offerDate: todayStr }))
+    } else {
+      // Basic YYYY-MM-DD validation
+      const d = new Date(inputs.offerDate)
+      const iso = isFinite(d.getTime()) ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : ''
+      if (!iso) {
+        e.offerDate = 'Invalid date'
+      }
+    }
+    // Ensure firstPaymentDate is present; default to offerDate or today
+    const baseDefault = inputs.offerDate || todayStr
+    if (!inputs.firstPaymentDate) {
+      setInputs(s => ({ ...s, firstPaymentDate: baseDefault }))
+    } else {
+      const d = new Date(inputs.firstPaymentDate)
+      const iso = isFinite(d.getTime()) ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : ''
+      if (!iso) {
+        e.firstPaymentDate = 'Invalid date'
+      }
+    }
+
     const payload = buildPayload()
     const { stdPlan: sp, inputs: inp } = payload
 
@@ -685,10 +711,10 @@ export default function App(props) {
         ...payload,
         language,
         currency,
-        // base date for absolute due dates on schedule; prefer contract date, fallback to reservation form date
+        // base date for absolute due dates on schedule; require firstPaymentDate (fallback to offerDate or today)
         inputs: {
           ...payload.inputs,
-          baseDate: contractInfo.contract_date || contractInfo.reservation_form_date || null,
+          baseDate: inputs.firstPaymentDate || inputs.offerDate || new Date().toISOString().slice(0, 10),
           maintenancePaymentAmount: Number(feeSchedule.maintenancePaymentAmount) || 0,
           maintenancePaymentMonth: Number(feeSchedule.maintenancePaymentMonth) || 0,
           garagePaymentAmount: Number(feeSchedule.garagePaymentAmount) || 0,
@@ -757,6 +783,9 @@ export default function App(props) {
       phone_primary: clientInfo.phone_primary || '',
       phone_secondary: clientInfo.phone_secondary || '',
       email: clientInfo.email || '',
+      // Dates
+      offer_date: inputs.offerDate || new Date().toISOString().slice(0, 10),
+      first_payment_date: inputs.firstPaymentDate || inputs.offerDate || new Date().toISOString().slice(0, 10),
       // Client info (Arabic aliases for templates)
       'اسم المشترى': clientInfo.buyer_name || '',
       'الجنسية': clientInfo.nationality || '',
@@ -1166,102 +1195,10 @@ export default function App(props) {
           buildPayload={buildPayload}
           setPreview={setPreview}
           setPreviewError={setPreviewError}
+          role={role}
         />
 
-        {/* Standard vs Offer PV Comparison */}
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Standard PV vs Offer PV</h2>
-
-          {/* Overall acceptability (PV + thresholds) */}
-          {(() => {
-            const ok = !!comparison.overallAcceptable
-            const box = {
-              marginBottom: 12,
-              padding: '10px 12px',
-              borderRadius: 10,
-              border: `1px solid ${ok ? '#10b981' : '#ef4444'}`,
-              background: ok ? '#ecfdf5' : '#fef2f2',
-              color: ok ? '#065f46' : '#7f1d1d',
-              fontWeight: 600
-            }
-            return (
-              <div style={box}>
-                {ok ? 'Offer Acceptable' : 'Offer Not Acceptable'} — requires:
-                <span style={{ marginLeft: 8, fontWeight: 500 }}>
-                  PV ≥ Standard, First Year within threshold, Second Year within threshold, Handover within threshold
-                </span>
-              </div>
-            )
-          })()}
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12, background: '#fbfaf7' }}>
-              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Approved Standard</h3>
-              <ul style={{ margin: 0, paddingLeft: 16 }}>
-                <li>Calculated PV (Standard): {Number(comparison.stdPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
-                <li>Financial Discount Rate: {Number(comparison.stdRate || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</li>
-              </ul>
-              <small style={styles.metaText}>
-                Pulled from approved standard pricing for the selected unit/type.
-              </small>
-            </div>
-            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12, background: '#fff' }}>
-              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Current Offer</h3>
-              <ul style={{ margin: 0, paddingLeft: 16 }}>
-                <li>Calculated PV (Offer): {Number(comparison.offerPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
-                <li>Sales Discount Applied: {Number(comparison.discountPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</li>
-              </ul>
-              {(() => {
-                const good = !!comparison.pvPass
-                const badgeStyle = {
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginTop: 8,
-                  padding: '8px 10px',
-                  borderRadius: 8,
-                  border: `1px solid ${good ? '#10b981' : '#ef4444'}`,
-                  background: good ? '#ecfdf5' : '#fef2f2',
-                  color: good ? '#065f46' : '#7f1d1d',
-                  fontWeight: 600
-                }
-                const dotStyle = {
-                  width: 10,
-                  height: 10,
-                  borderRadius: '50%',
-                  background: good ? '#10b981' : '#ef4444',
-                  display: 'inline-block'
-                }
-                return (
-                  <div style={badgeStyle}>
-                    <span style={dotStyle}></span>
-                    <span>{good ? 'Offer PV ≥ Standard PV' : 'Offer PV < Standard PV'}</span>
-                  </div>
-                )
-              })()}
-              <div style={{
-                marginTop: 8,
-                padding: 8,
-                borderRadius: 8,
-                background: '#f6efe3',
-                border: '1px solid #ead9bd'
-              }}>
-                <strong>PV Difference vs Standard:</strong>
-                <div>
-                  Delta PV: {Number(comparison.deltaPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} ({Number(comparison.deltaPercentPV || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%)
-                </div>
-                {genResult?.evaluation?.pv?.tolerancePercent != null && (
-                  <div style={{ marginTop: 6 }}>
-                    Tolerance (TM-approved): {Number(genResult.evaluation.pv.tolerancePercent).toLocaleString()}%
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <small style={styles.metaText}>
-            Generate a plan to update the offer PV. The comparison uses the latest preview/generation results.
-          </small>
-        </section>
+        
 
         {/* Evaluation from server (PV-based decision + five conditions) */}
         {genResult?.evaluation && (
@@ -1274,135 +1211,7 @@ export default function App(props) {
           </section>
         )}
 
-        {/* Payment Structure Metrics vs Thresholds */}
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Payment Structure Metrics</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            {/* First Year */}
-            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
-              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>First Year</h3>
-              <div>Nominal: {Number(comparison.firstYearNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-              <div>Percent of Total: {Number(comparison.firstYearPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
-              {comparison.firstYearPass !== null && (() => {
-                const pass = comparison.firstYearPass
-                const badgeStyle = {
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginTop: 8,
-                  padding: '6px 10px',
-                  borderRadius: 8,
-                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
-                  background: pass ? '#ecfdf5' : '#fef2f2',
-                  color: pass ? '#065f46' : '#7f1d1d',
-                  fontWeight: 600
-                }
-                const dotStyle = {
-                  width: 10,
-                  height: 10,
-                  borderRadius: '50%',
-                  background: pass ? '#10b981' : '#ef4444',
-                  display: 'inline-block'
-                }
-                return (
-                  <div style={badgeStyle}>
-                    <span style={dotStyle}></span>
-                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
-                  </div>
-                )
-              })()}
-              {comparison.thresholds?.firstYearPercentMin != null && (
-                <small style={styles.metaText}>Min: {Number(comparison.thresholds.firstYearPercentMin).toLocaleString()}%</small>
-              )}
-              {comparison.thresholds?.firstYearPercentMax != null && (
-                <small style={styles.metaText}>Max: {Number(comparison.thresholds.firstYearPercentMax).toLocaleString()}%</small>
-              )}
-            </div>
-
-            {/* Second Year */}
-            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
-              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Second Year</h3>
-              <div>Nominal: {Number(comparison.secondYearNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-              <div>Percent of Total: {Number(comparison.secondYearPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
-              {comparison.secondYearPass !== null && (() => {
-                const pass = comparison.secondYearPass
-                const badgeStyle = {
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginTop: 8,
-                  padding: '6px 10px',
-                  borderRadius: 8,
-                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
-                  background: pass ? '#ecfdf5' : '#fef2f2',
-                  color: pass ? '#065f46' : '#7f1d1d',
-                  fontWeight: 600
-                }
-                const dotStyle = {
-                  width: 10,
-                  height: 10,
-                  borderRadius: '50%',
-                  background: pass ? '#10b981' : '#ef4444',
-                  display: 'inline-block'
-                }
-                return (
-                  <div style={badgeStyle}>
-                    <span style={dotStyle}></span>
-                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
-                  </div>
-                )
-              })()}
-              {comparison.thresholds?.secondYearPercentMin != null && (
-                <small style={styles.metaText}>Min: {Number(comparison.thresholds.secondYearPercentMin).toLocaleString()}%</small>
-              )}
-              {comparison.thresholds?.secondYearPercentMax != null && (
-                <small style={styles.metaText}>Max: {Number(comparison.thresholds.secondYearPercentMax).toLocaleString()}%</small>
-              )}
-            </div>
-
-            {/* Handover */}
-            <div style={{ border: '1px dashed #ead9bd', borderRadius: 10, padding: 12 }}>
-              <h3 style={{ marginTop: 0, fontSize: 16, color: '#5b4630' }}>Handover</h3>
-              <div>Nominal: {Number(comparison.handoverNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-              <div>Percent of Total: {Number(comparison.handoverPercent || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}%</div>
-              {comparison.handoverPass !== null && (() => {
-                const pass = comparison.handoverPass
-                const badgeStyle = {
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginTop: 8,
-                  padding: '6px 10px',
-                  borderRadius: 8,
-                  border: `1px solid ${pass ? '#10b981' : '#ef4444'}`,
-                  background: pass ? '#ecfdf5' : '#fef2f2',
-                  color: pass ? '#065f46' : '#7f1d1d',
-                  fontWeight: 600
-                }
-                const dotStyle = {
-                  width: 10,
-                  height: 10,
-                  borderRadius: '50%',
-                  background: pass ? '#10b981' : '#ef4444',
-                  display: 'inline-block'
-                }
-                return (
-                  <div style={badgeStyle}>
-                    <span style={dotStyle}></span>
-                    <span>{pass ? 'Within Threshold' : 'Outside Threshold'}</span>
-                  </div>
-                )
-              })()}
-              {(comparison.thresholds?.handoverPercentMin != null || comparison.thresholds?.handoverPercentMax != null) && (
-                <small style={styles.metaText}>
-                  {comparison.thresholds?.handoverPercentMin != null ? `Min: ${Number(comparison.thresholds.handoverPercentMin).toLocaleString()}%` : ''}
-                  {comparison.thresholds?.handoverPercentMax != null ? `  Max: ${Number(comparison.thresholds.handoverPercentMax).toLocaleString()}%` : ''}
-                </small>
-              )}
-            </div>
-          </div>
-          <small style={styles.metaText}>Thresholds are centrally managed and loaded from the server. Contact an admin to update them.</small>
-        </section>
+        
 
         {/* Data Entry UI — New Sections */}
         <ClientInfoForm role={role} clientInfo={clientInfo} setClientInfo={setClientInfo} styles={styles} />
@@ -1496,6 +1305,11 @@ export default function App(props) {
           </div>
           {genError ? <p style={styles.error}>{genError}</p> : null}
           {docError ? <p style={styles.error}>{docError}</p> : null}
+          {/* Dates summary above schedule for visibility */}
+          <div style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 8, background: '#fbfaf7', border: '1px solid #ead9bd', display: 'inline-flex', gap: 16, flexWrap: 'wrap' }}>
+            <div><strong>Offer Date:</strong> {inputs.offerDate || new Date().toISOString().slice(0, 10)}</div>
+            <div><strong>First Payment Date:</strong> {inputs.firstPaymentDate || inputs.offerDate || new Date().toISOString().slice(0, 10)}</div>
+          </div>
           {schedule.length === 0 ? (
             <p style={styles.metaText}>No schedule yet. Fill the form and click "Calculate (Generate Plan)".</p>
           ) : (

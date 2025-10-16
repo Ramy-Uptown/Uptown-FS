@@ -11,23 +11,7 @@ export default function CreateDeal() {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Draft auto-save keys
-  const DRAFT_UNIT_KEY = 'create_deal_unitForm_v1'
-  const [restoredDraftMsg, setRestoredDraftMsg] = useState('')
-
   // OCR moved into Client Information section (ClientIdScanner component)
-
-  // Unit & Project Information (local UI state; synced to embedded calculator)
-  const [unitForm, setUnitForm] = useState({
-    unit_type: '',
-    unit_code: '',
-    unit_number: '',
-    floor: '',
-    building_number: '',
-    block_sector: '',
-    zone: '',
-    garden_details: ''
-  })
 
   // Server-calculation integration
   const [selectedUnit, setSelectedUnit] = useState(null)
@@ -138,16 +122,6 @@ export default function CreateDeal() {
             },
             currency: u.currency || 'EGP'
           })
-          setUnitForm({
-            unit_type: (u.model_code ? `${u.model_code} — ` : '') + (u.model_name || u.unit_type || u.unit_type_name || ''),
-            unit_code: u.code || '',
-            unit_number: u.unit_number || '',
-            floor: u.floor || '',
-            building_number: u.building_number || '',
-            block_sector: u.block_sector || '',
-            zone: u.zone || '',
-            garden_details: u.garden_details || ''
-          })
         } catch (err) {
           console.error('Error applying unit prefill:', err)
         }
@@ -159,63 +133,9 @@ export default function CreateDeal() {
     })()
   }, [])
 
-  // Restore drafts on mount and initial sync from embedded calculator snapshot (if available)
-  useEffect(() => {
-    // Restore drafts from localStorage
-    try {
-      const unitRaw = localStorage.getItem(DRAFT_UNIT_KEY)
-      
-      let restored = false
-      if (unitRaw) {
-        const u = JSON.parse(unitRaw)
-        if (u && typeof u === 'object') {
-          setUnitForm(s => ({ ...s, ...u }))
-          restored = true
-        }
-      }
-      
-      if (restored) {
-        setRestoredDraftMsg('Draft restored.')
-        setTimeout(() => setRestoredDraftMsg(''), 5000)
-      }
-    } catch {}
+  
 
-    // Sync from calculator snapshot if available
-    try {
-      const snapnap = window.__uptown_calc_getSnapshot
-      if (typeof getSnap === 'function') {
-        const snap = getSnap()
-        const ui = snap?.unitInfo || {}
-        setUnitForm(s => ({
-          ...s,
-          unit_type: ui.unit_type || s.unit_type,
-          unit_code: ui.unit_code || s.unit_code,
-          description: ui.description || s.description,
-          unit_number: ui.unit_number || s.unit_number,
-          floor: ui.floor || s.floor,
-          building_number: ui.building_number || s.building_number,
-          block_sector: ui.block_sector || s.block_sector,
-          zone: ui.zone || s.zone,
-          garden_details: ui.garden_details || s.garden_details
-        }))
-      }
-    } catch {}
-  }, [])
-
-  function applyUnitUpdates(partial) {
-    setUnitForm(s => ({ ...s, ...partial }))
-    const apply = window.__uptown_calc_applyUnitInfo
-    if (typeof apply === 'function') {
-      apply(partial)
-    }
-  }
-
-  // Auto-save unitForm and reviewFields drafts
-  useEffect(() => {
-    try {
-      localStorage.setItem(DRAFT_UNIT_KEY, JSON.stringify(unitForm))
-    } catch {}
-  }, [unitForm])
+  
 
   
 
@@ -271,7 +191,6 @@ export default function CreateDeal() {
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to create deal')
       // Clear local drafts on successful creation
       try {
-        localStorage.removeItem(DRAFT_UNIT_KEY)
         localStorage.removeItem(DRAFT_OCR_KEY)
       } catch {}
       navigate(`/deals/${data.deal.id}`)
@@ -331,7 +250,6 @@ export default function CreateDeal() {
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to create deal')
       // Clear local drafts after creation
       try {
-        localStorage.removeItem(DRAFT_UNIT_KEY)
         localStorage.removeItem(DRAFT_OCR_KEY)
       } catch {}
       // Submit
@@ -433,7 +351,7 @@ export default function CreateDeal() {
         </div>
       </div>
       {error && <p style={{ color: '#e11d48' }}>{error}</p>}
-      {restoredDraftMsg && <p style={{ color: '#64748b', fontSize: 12 }}>{restoredDraftMsg}</p>}
+      
       {loading && !error && <p style={{ color: '#64748b', fontSize: 14 }}>Loading unit data...</p>}
 
       {/* Selected Unit Summary */}
@@ -452,6 +370,7 @@ export default function CreateDeal() {
             <div><strong>Number:</strong> {selectedUnit.unit_number || '-'}</div>
             <div><strong>Floor:</strong> {selectedUnit.floor || '-'}</div>
             <div><strong>Building:</strong> {selectedUnit.building_number || '-'}</div>
+            <div><strong>Block / Sector:</strong> {selectedUnit.block_sector || '-'}</div>
             <div><strong>Zone:</strong> {selectedUnit.zone || '-'}</div>
           </div>
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #eef2f7' }}>
@@ -489,111 +408,19 @@ export default function CreateDeal() {
 
       
 
-      {/* Unit Summary (read-only; pulled from Inventory) */}
-      <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Unit & Project Information</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Model</label>
-            <input value={unitForm.unit_type} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Code</label>
-            <input value={unitForm.unit_code} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Number</label>
-            <input value={unitForm.unit_number} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Floor</label>
-            <input value={unitForm.floor} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Building Number</label>
-            <input value={unitForm.building_number} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Block / Sector</label>
-            <input value={unitForm.block_sector} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Zone / Neighborhood</label>
-            <input value={unitForm.zone} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div style={{ gridColumn: '1 / span 2' }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Garden Details</label>
-            <input value={unitForm.garden_details} readOnly style={inputStyle} placeholder='—' />
-          </div>
-        </div>
-        <small style={{ color: '#64748b' }}>
-          Unit data is loaded automatically from Inventory and locked here. Use Inventory to choose a unit.
-        </small>
-      </div>
+      
 
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
         <CalculatorApp embedded />
       </div>
 
-      {/* Results from server calculation */}
-      <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginTop: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Server Calculation</h3>
-          <button onClick={calculateViaServer} style={btnPrimary}>Calculate (Server)</button>
-        </div>
-        {calcError ? <p style={{ color: '#e11d48' }}>{calcError}</p> : null}
-        {!calcResult ? (
-          <small style={{ color: '#64748b' }}>Click \"Calculate (Server)\" to generate a schedule using the backend engine.</small>
-        ) : (
-          <div>
-            <div style={{ border: '1px dashed #dfe5ee', borderRadius: 10, padding: 10, marginBottom: 8 }}>
-              <strong>Offer PV:</strong>
-              <div>{Number(calcResult.offerPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-              {calcResult.meta?.npvWarning ? (
-                <div style={{ color: '#b45309', marginTop: 6 }}>Warning: NPV below tolerance.</div>
-              ) : null}
-            </div>
-            <div style={{ marginTop: 8 }}>
-              <h4 style={{ marginTop: 0 }}>Payment Schedule</h4>
-              <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <th style={th}>#</th>
-                      <th style={th}>Month</th>
-                      <th style={th}>Date</th>
-                      <th style={th}>Label</th>
-                      <th style={{ ...th, textAlign: 'right' }}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(calcResult.schedule || []).map((row, i) => (
-                      <tr key={i}>
-                        <td style={td}>{i + 1}</td>
-                        <td style={td}>{row.month}</td>
-                        <td style={td}>{row.date || ''}</td>
-                        <td style={td}>{row.label}</td>
-                        <td style={{ ...td, textAlign: 'right' }}>{Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      </tr>
-                    ))}
-                    {(calcResult.schedule || []).length === 0 && (
-                      <tr><td style={td} colSpan={5}>No schedule.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      
     </div>
   )
 }
 
 const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
 const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
-const inputStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
-const textareaStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff', minHeight: 70, resize: 'vertical' }
 const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #A97E34', background: '#A97E34', color: '#fff', fontWeight: 600, cursor: 'pointer' }
 const btnPrimaryAlt = { padding: '10px 14px', borderRadius: 10, border: '1px solid #8B672C', background: '#8B672C', color: '#fff', fontWeight: 600, cursor: 'pointer' }
 const btnPlain = { padding: '10px 14px', borderRadius: 10, border: '1px solid #d1d9e6', background: '#fff', color: '#111827', fontWeight: 600, cursor: 'pointer' }
