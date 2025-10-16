@@ -166,6 +166,60 @@ export default function App(props) {
     applyDocumentDirection(language)
   }, [language])
 
+  // Auto-compute Standard Calculated PV from Standard Total Price, Financial Rate, Duration and Frequency
+  // This ensures modes 2 and 4 (targeting Standard PV) use a correct PV baseline instead of a nominal total.
+  useEffect(() => {
+    const total = Number(stdPlan.totalPrice) || 0
+    const rateAnnual = Number(stdPlan.financialDiscountRate) || 0
+    const years = Number(inputs.planDurationYears) || 0
+    const freq = String(inputs.installmentFrequency || 'monthly')
+
+    if (!(total > 0) || !(years > 0)) return
+
+    // Convert annual percent to monthly effective
+    const monthlyRate = rateAnnual > 0 ? Math.pow(1 + rateAnnual / 100, 1 / 12) - 1 : 0
+
+    // Payments per year
+    let perYear = 12
+    switch (freq) {
+      case 'quarterly': perYear = 4; break
+      case 'bi-annually': perYear = 2; break
+      case 'annually': perYear = 1; break
+      case 'monthly':
+      default: perYear = 12; break
+    }
+    const n = years * perYear
+    if (n <= 0) return
+
+    // Equal installments baseline for the standard plan
+    const perPayment = total / n
+
+    // Month offsets start at 1, spaced by 12/perYear months
+    const months = []
+    const step = Math.round(12 / perYear)
+    for (let i = 0; i < n; i++) {
+      const m = (i === 0) ? step : (months[i - 1] + step)
+      months.push(m)
+    }
+
+    let pv = 0
+    if (monthlyRate <= 0) {
+      pv = perPayment * n
+    } else {
+      for (const m of months) {
+        pv += perPayment / Math.pow(1 + monthlyRate, m)
+      }
+    }
+
+    // Only update if it actually changed (avoid re-renders loops due to float jitter)
+    const nextPV = Number(pv.toFixed(2))
+    const currentPV = Number((Number(stdPlan.calculatedPV) || 0).toFixed(2))
+    if (Number.isFinite(nextPV) && nextPV > 0 && Math.abs(nextPV - currentPV) > 0.01) {
+      setStdPlan(s => ({ ...s, calculatedPV: nextPV }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stdPlan.totalPrice, stdPlan.financialDiscountRate, inputs.planDurationYears, inputs.installmentFrequency])
+
   // Current user (for role-based UI and hints)
   const [authUser, setAuthUser] = useState(null)
   useEffect(() => {

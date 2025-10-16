@@ -137,6 +137,7 @@ Health checks:
 - Down Payment editable in all modes: Consultants can set DP Type and Value in every mode, including PV‑target modes (2 & 4). The solver uses the DP as part of the structure when matching the Standard PV.
 - Header stays LTR: Top navigation/header is always LTR even when Arabic is selected, keeping consultant layout stable.
 - Payment Schedule Arabic polish: “الوصف” column shows Arabic labels for schedule rows and is center‑aligned in Arabic.
+- Calculator PV baseline: Standard Calculated PV is now auto-computed on the client from Standard Total Price, financial rate, duration and frequency. This prevents it from mistakenly matching the nominal price and ensures Modes 2 and 4 solve a new final price against the correct Standard PV baseline. File: client/src/App.jsx.
 
 Future tasks:
 - PDF templates: map offer_date and first_payment_date placeholders in server-side document templates for Pricing Form, Reservation Form, and Contract.
