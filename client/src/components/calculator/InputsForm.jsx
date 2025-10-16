@@ -136,11 +136,11 @@ export default function InputsForm({
               customYearlyThenEqual_targetPV: {
                 en: {
                   name: 'Custom Structure targeting Standard PV',
-                  desc: 'Uses your custom structure (including DP) and solves so that Present Value equals the Standard PV; then evaluates the schedule against acceptance thresholds.'
+                  desc: 'Define split First Year and subsequent years; the remainder is equal installments. Solves so that Present Value equals the Standard PV, then evaluates the schedule against acceptance thresholds.'
                 },
                 ar: {
                   name: 'هيكل مخصص بهدف مطابقة القيمة الحالية القياسية',
-                  desc: 'يستخدم الهيكل المخصص (بما في ذلك الدفعة المقدمة) ويحسب بحيث تساوي القيمة الحالية القيمة القياسية؛ ثم يقيم الجدول مقابل حدود القبول.'
+                  desc: 'حدد تقسيم السنة الأولى والسنوات اللاحقة؛ ويتم توزيع الباقي كأقساط متساوية. يحسب بحيث تساوي القيمة الحالية القيمة القياسية ثم يقيم الجدول مقابل حدود القبول.'
                 }
               }
             }
