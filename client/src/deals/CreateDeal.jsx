@@ -11,23 +11,7 @@ export default function CreateDeal() {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Draft auto-save keys
-  const DRAFT_UNIT_KEY = 'create_deal_unitForm_v1'
-  const [restoredDraftMsg, setRestoredDraftMsg] = useState('')
-
   // OCR moved into Client Information section (ClientIdScanner component)
-
-  // Unit & Project Information (local UI state; synced to embedded calculator)
-  const [unitForm, setUnitForm] = useState({
-    unit_type: '',
-    unit_code: '',
-    unit_number: '',
-    floor: '',
-    building_number: '',
-    block_sector: '',
-    zone: '',
-    garden_details: ''
-  })
 
   // Server-calculation integration
   const [selectedUnit, setSelectedUnit] = useState(null)
@@ -138,16 +122,6 @@ export default function CreateDeal() {
             },
             currency: u.currency || 'EGP'
           })
-          setUnitForm({
-            unit_type: (u.model_code ? `${u.model_code} — ` : '') + (u.model_name || u.unit_type || u.unit_type_name || ''),
-            unit_code: u.code || '',
-            unit_number: u.unit_number || '',
-            floor: u.floor || '',
-            building_number: u.building_number || '',
-            block_sector: u.block_sector || '',
-            zone: u.zone || '',
-            garden_details: u.garden_details || ''
-          })
         } catch (err) {
           console.error('Error applying unit prefill:', err)
         }
@@ -159,63 +133,9 @@ export default function CreateDeal() {
     })()
   }, [])
 
-  // Restore drafts on mount and initial sync from embedded calculator snapshot (if available)
-  useEffect(() => {
-    // Restore drafts from localStorage
-    try {
-      const unitRaw = localStorage.getItem(DRAFT_UNIT_KEY)
-      
-      let restored = false
-      if (unitRaw) {
-        const u = JSON.parse(unitRaw)
-        if (u && typeof u === 'object') {
-          setUnitForm(s => ({ ...s, ...u }))
-          restored = true
-        }
-      }
-      
-      if (restored) {
-        setRestoredDraftMsg('Draft restored.')
-        setTimeout(() => setRestoredDraftMsg(''), 5000)
-      }
-    } catch {}
+  
 
-    // Sync from calculator snapshot if available
-    try {
-      const snapnap = window.__uptown_calc_getSnapshot
-      if (typeof getSnap === 'function') {
-        const snap = getSnap()
-        const ui = snap?.unitInfo || {}
-        setUnitForm(s => ({
-          ...s,
-          unit_type: ui.unit_type || s.unit_type,
-          unit_code: ui.unit_code || s.unit_code,
-          description: ui.description || s.description,
-          unit_number: ui.unit_number || s.unit_number,
-          floor: ui.floor || s.floor,
-          building_number: ui.building_number || s.building_number,
-          block_sector: ui.block_sector || s.block_sector,
-          zone: ui.zone || s.zone,
-          garden_details: ui.garden_details || s.garden_details
-        }))
-      }
-    } catch {}
-  }, [])
-
-  function applyUnitUpdates(partial) {
-    setUnitForm(s => ({ ...s, ...partial }))
-    const apply = window.__uptown_calc_applyUnitInfo
-    if (typeof apply === 'function') {
-      apply(partial)
-    }
-  }
-
-  // Auto-save unitForm and reviewFields drafts
-  useEffect(() => {
-    try {
-      localStorage.setItem(DRAFT_UNIT_KEY, JSON.stringify(unitForm))
-    } catch {}
-  }, [unitForm])
+  
 
   
 
@@ -271,7 +191,6 @@ export default function CreateDeal() {
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to create deal')
       // Clear local drafts on successful creation
       try {
-        localStorage.removeItem(DRAFT_UNIT_KEY)
         localStorage.removeItem(DRAFT_OCR_KEY)
       } catch {}
       navigate(`/deals/${data.deal.id}`)
@@ -331,7 +250,6 @@ export default function CreateDeal() {
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to create deal')
       // Clear local drafts after creation
       try {
-        localStorage.removeItem(DRAFT_UNIT_KEY)
         localStorage.removeItem(DRAFT_OCR_KEY)
       } catch {}
       // Submit
@@ -433,7 +351,7 @@ export default function CreateDeal() {
         </div>
       </div>
       {error && <p style={{ color: '#e11d48' }}>{error}</p>}
-      {restoredDraftMsg && <p style={{ color: '#64748b', fontSize: 12 }}>{restoredDraftMsg}</p>}
+      
       {loading && !error && <p style={{ color: '#64748b', fontSize: 14 }}>Loading unit data...</p>}
 
       {/* Selected Unit Summary */}
@@ -553,8 +471,6 @@ export default function CreateDeal() {
 
 const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
 const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
-const inputStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
-const textareaStyle = { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff', minHeight: 70, resize: 'vertical' }
 const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #A97E34', background: '#A97E34', color: '#fff', fontWeight: 600, cursor: 'pointer' }
 const btnPrimaryAlt = { padding: '10px 14px', borderRadius: 10, border: '1px solid #8B672C', background: '#8B672C', color: '#fff', fontWeight: 600, cursor: 'pointer' }
 const btnPlain = { padding: '10px 14px', borderRadius: 10, border: '1px solid #d1d9e6', background: '#fff', color: '#111827', fontWeight: 600, cursor: 'pointer' }
