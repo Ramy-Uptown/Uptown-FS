@@ -592,14 +592,6 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
     const policyLimit = await getActivePolicyLimitPercent()
     const overPolicy = disc > policyLimit
 
-    // In PV-target modes, if DP is unknown we ignore it (treat as 0 amount)
-    if (mode === CalculationModes.CalculateForTargetPV || mode === CalculationModes.CustomYearlyThenEqual_TargetPV) {
-      if (!effInputs.splitFirstYearPayments) {
-        effInputs.dpType = 'amount'
-        effInputs.downPaymentValue = 0
-      }
-    }
-
     const result = calculateByMode(mode, effectiveStdPlan, effInputs)
     return res.json({ ok: true, data: result, meta: { policyLimit, overPolicy, authorityLimit, overAuthority } })
   } catch (err) {
