@@ -2,27 +2,14 @@ import React from 'react'
 import ClientIdScanner from './ClientIdScanner.jsx'
 import { t, isRTL } from '../../lib/i18n.js'
 
-export default function ClientInfoForm({ role, clientInfo, setClientInfo, styles, language = 'en' }) {
+function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language = 'en' }) {
   // Shared input props
   const input = (err) => styles.input ? styles.input(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
   const textarea = (err) => styles.textarea ? styles.textarea(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff', minHeight: 70, resize: 'vertical' }
 
   const Grid = ({ children }) => <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>{children}</div>
 
-  const BasicFields = (
-    <>
-      <div>
-        <label style={styles.label}>{t('buyer_name', language)} (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
-        <input dir="auto" style={input()} value={clientInfo.buyer_name} onChange={e => setClientInfo(s => ({ ...s, buyer_name: e.target.value }))} />
-      </div>
-      <div>
-        <label style={styles.label}>{t('primary_phone', language)} (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
-        <input style={input()} value={clientInfo.phone_primary} onChange={e => setClientInfo(s => ({ ...s, phone_primary: e.target.value }))} />
-      </div>
-    </>
-  )
-
-  const ExtendedFields = (
+  const Fields = (
     <>
       <div>
         <label style={styles.label}>{t('buyer_name', language)} (<span style={styles.arInline}>[[اسم المشترى]]</span>)</label>
@@ -66,11 +53,7 @@ export default function ClientInfoForm({ role, clientInfo, setClientInfo, styles
   return (
     <section style={{ ...styles.section }} dir={isRTL(language) ? 'rtl' : 'ltr'}>
       <h2 style={{ ...styles.sectionTitle, textAlign: isRTL(language) ? 'right' : 'left' }}>{t('client_information', language)}</h2>
-      {role === 'property_consultant' ? (
-        <Grid>{BasicFields}</Grid>
-      ) : (
-        <Grid>{ExtendedFields}</Grid>
-      )}
+      <Grid>{Fields}</Grid>
       {/* Inline scanner (OCR) below client fields */}
       <div style={{ marginTop: 12, padding: 12, border: '1px solid #ead9bd', borderRadius: 10, background: '#fbfaf7' }}>
         <ClientIdScanner styles={styles} />
@@ -78,3 +61,5 @@ export default function ClientInfoForm({ role, clientInfo, setClientInfo, styles
     </section>
   )
 }
+
+export default React.memo(ClientInfoFormInner)
