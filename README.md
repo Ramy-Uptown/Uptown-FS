@@ -134,9 +134,12 @@ Health checks:
 
 - Mode explanations panel: Added clear names and short descriptions for all four calculator modes in the UI (English/Arabic) to guide consultants when choosing a mode.
 - Mode 4 clarified: “Custom Structure targeting Standard PV” now clearly states it lets you define split First Year and subsequent years, puts the remainder as equal installments (like Mode 3), but solves to match the Standard PV (like Mode 2). UI text only; engine was already correct.
-- Down Payment editable in all modes: Consultants can set DP Type and Value in every mode, including PV‑target modes (2 & 4). The solver uses the DP as part of the structure when matching the Standard PV.
+- Down Payment rule for target-PV modes: In Modes 2 and 4 (Target PV), DP is treated as a fixed amount (not percentage) to avoid circular dependency as the final nominal price is solved from PV. UI enforces amount-only and backend coerces percentage to amount. Files: api/services/calculationService.js, client/src/components/calculator/InputsForm.jsx, client/src/App.jsx.
+- Std Calculated PV read-only: The “Std Calculated PV” field in the calculator is now read-only and auto-derived from Standard Total Price, rate, duration and frequency. File: client/src/components/calculator/InputsForm.jsx.
+- Financial Manager — Standard Pricing log: Added “Calculated PV” (equal-installments PV of the standard nominal excluding maintenance, using the active Standard Plan rate/duration/frequency) and “Annual Financial Rate (%)” columns to the listing for clarity. File: client/src/admin/StandardPricing.jsx.
 - Header stays LTR: Top navigation/header is always LTR even when Arabic is selected, keeping consultant layout stable.
 - Payment Schedule Arabic polish: “الوصف” column shows Arabic labels for schedule rows and is center‑aligned in Arabic.
+- Calculator PV baseline: Standard Calculated PV is now auto-computed on the client from Standard Total Price, financial rate, duration and frequency. This prevents it from mistakenly matching the nominal price and ensures Modes 2 and 4 solve a new final price against the correct Standard PV baseline. File: client/src/App.jsx.
 
 Future tasks:
 - PDF templates: map offer_date and first_payment_date placeholders in server-side document templates for Pricing Form, Reservation Form, and Contract.
