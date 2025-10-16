@@ -132,6 +132,12 @@ Health checks:
 - Client Information UX: Always show full client fields (name, nationality, ID/passport, issue date, birth date, address, primary phone, secondary phone, email). Stabilized input focus while typing by memoizing the form and removing role-based field switching that caused unmount/remount. OCR scanner remains available in the same section.
 - Codespaces ports: Forwarded ports 3001 (API) and 5173 (client) now default to visibility: public and open in the browser automatically on forward. To apply, rebuild the container (F1 → “Codespaces: Rebuild Container”). File: .devcontainer/devcontainer.json.abic/RTL support: Introduced a lightweight i18n system (client/src/lib/i18n.js) with t(), isRTL(), and applyDocumentDirection(). Updated calculator sections (InputsForm, ClientInfoForm, PaymentSchedule, and App.jsx headings/buttons) to render full Arabic labels and right-to-left layout when language = 'ar'. Also switched document <html dir> dynamically so the whole page reads RTL in Arabic.
 
+- Mode explanations panel: Added clear names and short descriptions for all four calculator modes in the UI (English/Arabic) to guide consultants when choosing a mode.
+- Mode 4 clarified: “Custom Structure targeting Standard PV” now clearly states it lets you define split First Year and subsequent years, puts the remainder as equal installments (like Mode 3), but solves to match the Standard PV (like Mode 2). UI text only; engine was already correct.
+- Down Payment editable in all modes: Consultants can set DP Type and Value in every mode, including PV‑target modes (2 & 4). The solver uses the DP as part of the structure when matching the Standard PV.
+- Header stays LTR: Top navigation/header is always LTR even when Arabic is selected, keeping consultant layout stable.
+- Payment Schedule Arabic polish: “الوصف” column shows Arabic labels for schedule rows and is center‑aligned in Arabic.
+
 Future tasks:
 - PDF templates: map offer_date and first_payment_date placeholders in server-side document templates for Pricing Form, Reservation Form, and Contract.
 
