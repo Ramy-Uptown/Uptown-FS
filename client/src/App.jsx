@@ -174,8 +174,13 @@ export default function App(props) {
   }, [mode])
 
   // Auto-compute Standard Calculated PV from Standard Total Price, Financial Rate, Duration and Frequency
-  // This ensures modes 2 and 4 (targeting Standard PV) use a correct PV baseline instead of a nominal total.
+  // IMPORTANT:
+  // - When a unit is selected (server-approved standard), we rely on the server-computed PV and do NOT overwrite it here.
+  // - We mark that state with stdPlan._serverLocked = true.
   useEffect(() => {
+    // Skip client-side recompute when server-provided baseline is locked
+    if (stdPlan && stdPlan._serverLocked) return
+
     const total = Number(stdPlan.totalPrice) || 0
     const rateAnnual = Number(stdPlan.financialDiscountRate) || 0
     const years = Number(inputs.planDurationYears) || 0
@@ -225,7 +230,7 @@ export default function App(props) {
       setStdPlan(s => ({ ...s, calculatedPV: nextPV }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stdPlan.totalPrice, stdPlan.financialDiscountRate, inputs.planDurationYears, inputs.installmentFrequency])
+  }, [stdPlan.totalPrice, stdPlan.financialDiscountRate, inputs.planDurationYears, inputs.installmentFrequency, stdPlan._serverLocked])
 
   // Current user (for role-based UI and hints)
   const [authUser, setAuthUser] = useState(null)
@@ -408,42 +413,59 @@ export default function App(props) {
     return () => { mounted = false }
   }, [])
 
-    // When we have a selected unit_id, prefer server-approved standard via calculate/generate endpoints using unitId
+    // When we have a selected unit_id, retrieve authoritative Standard PV from the server
+    // and lock it to avoid client-side recomputation drifting from Financial Manager logs.
     useEffect(() => {
       const uid = Number(unitInfo.unit_id)
       if (!Number.isFinite(uid) || uid <= 0) return
       let abort = false
       async function loadStdFromServer() {
         try {
-          // Hit calculate endpoint minimally to fetch meta based on approved standard for this unit
-          const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
+          // Use generate-plan because it returns evaluation.pv.standardPV and meta.rateUsedPercent
+          const resp = await fetchWithAuth(`${API_URL}/api/generate-plan`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              mode,
+              mode: mode || 'evaluateCustomPrice',
               unitId: uid,
-              // provide minimal inputs to pass validation
+              language,
+              currency,
               inputs: {
                 salesDiscountPercent: Number(inputs.salesDiscountPercent) || 0,
-                dpType: inputs.dpType || 'percentage',
-                downPaymentValue: Number(inputs.downPaymentValue) || 20,
+                // dpType value is irrelevant for baseline PV; include to satisfy validation
+                dpType: 'amount',
+                downPaymentValue: Number(inputs.downPaymentValue) || 0,
                 planDurationYears: Number(inputs.planDurationYears) || 5,
                 installmentFrequency: inputs.installmentFrequency || 'monthly',
                 additionalHandoverPayment: Number(inputs.additionalHandoverPayment) || 0,
                 handoverYear: Number(inputs.handoverYear) || 2,
                 splitFirstYearPayments: !!inputs.splitFirstYearPayments,
                 firstYearPayments: [],
-                subsequentYears: []
+                subsequentYears: [],
+                baseDate: inputs.firstPaymentDate || inputs.offerDate || new Date().toISOString().slice(0, 10)
               }
             })
           })
-          const data = await resp.json()
-          if (!resp.ok) return
+          const data = await resp.json().catch(() => null)
+          if (!resp.ok || !data) return
           if (abort) return
-          // The server used the unit's approved standard as effectiveStdPlan
-          // Reuse our current stdPlan but ensure it’s aligned by reusing unitPricingBreakdown total
-          // No explicit std values come back, so leave as-is; subsequent generate-plan will use unitId too
-        } catch {}
+          const serverStdPV = Number(data?.evaluation?.pv?.standardPV) || null
+          const rateUsed = Number(data?.meta?.rateUsedPercent)
+          if (serverStdPV && serverStdPV > 0) {
+            setStdPlan(s => ({
+              ...s,
+              calculatedPV: Number(serverStdPV.toFixed(2)),
+              // If API reported the rate used, adopt it
+              financialDiscountRate: Number.isFinite(rateUsed) && rateUsed >= 0 ? rateUsed : s.financialDiscountRate,
+              _serverLocked: true
+            }))
+          } else {
+            // If server didn't return the PV (unexpected), ensure we don't falsely lock
+            setStdPlan(s => ({ ...s, _serverLocked: false }))
+          }
+        } catch {
+          // keep current values
+        }
       }
       loadStdFromServer()
       return () => { abort = true }
