@@ -455,6 +455,11 @@ export default function DealDetail() {
           </div>
 
           <h3>Payment Schedule</h3>
+          {/* Dates summary for visibility */}
+          <div style={{ margin: '6px 0 10px 0', padding: '8px 10px', borderRadius: 8, background: '#fbfaf7', border: '1px solid #ead9bd', display: 'inline-flex', gap: 16, flexWrap: 'wrap' }}>
+            <div><strong>Offer Date:</strong> {(deal?.details?.calculator?.inputs?.offerDate) || new Date().toISOString().slice(0, 10)}</div>
+            <div><strong>First Payment Date:</strong> {(deal?.details?.calculator?.inputs?.firstPaymentDate) || (deal?.details?.calculator?.inputs?.offerDate) || new Date().toISOString().slice(0, 10)}</div>
+          </div>
           {schedule.length === 0 ? (
             <p style={{ color: '#64748b' }}>No saved schedule. Use Edit in Calculator to generate and save one.</p>
           ) : (
