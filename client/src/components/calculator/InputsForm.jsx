@@ -169,43 +169,58 @@ export default function InputsForm({
           {DiscountHint && <DiscountHint role={undefined} value={inputs.salesDiscountPercent} />}
         </div>
 
-        <div>
-          <label style={styles.label}>{t('dp_type', language)}</label>
-          <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={select(errors.dpType)}>
-            <option value="amount">{t('amount', language)}</option>
-            <option value="percentage">{t('percentage', language)}</option>
-          </select>
-          {errors.dpType && <small style={styles.error}>{errors.dpType}</small>}
-        </div>
-        <div>
-          <label style={styles.label}>{t('down_payment_value', language)}</label>
-          {inputs.dpType === 'percentage' ? (
-            <div style={{ position: 'relative' }}>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={inputs.downPaymentValue}
-                onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))}
-                style={{ ...input(errors.downPaymentValue), paddingRight: 36 }}
-                placeholder="e.g., 20"
-              />
-              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontWeight: 600 }}>%</span>
-            </div>
-          ) : (
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={inputs.downPaymentValue}
-              onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))}
-              style={input(errors.downPaymentValue)}
-              placeholder="e.g., 100000"
-            />
-          )}
-          {errors.downPaymentValue && <small style={styles.error}>{errors.downPaymentValue}</small>}
-        </div>
+        {(() => {
+          const pvTargetMode = mode === 'calculateForTargetPV' || mode === 'customYearlyThenEqual_targetPV'
+          return (
+            <>
+              <div>
+                <label style={styles.label}>{t('dp_type', language)}</label>
+                <select
+                  value={pvTargetMode ? 'amount' : inputs.dpType}
+                  onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))}
+                  style={select(errors.dpType)}
+                  disabled={pvTargetMode}
+                  title={pvTargetMode ? 'Ignored in PV-target modes' : undefined}
+                >
+                  <option value="amount">{t('amount', language)}</option>
+                  <option value="percentage">{t('percentage', language)}</option>
+                </select>
+                {errors.dpType && <small style={styles.error}>{errors.dpType}</small>}
+              </div>
+              <div>
+                <label style={styles.label}>{t('down_payment_value', language)}</label>
+                {pvTargetMode ? (
+                  <input type="number" value={0} disabled style={input()} title="Ignored in PV-target modes" />
+                ) : inputs.dpType === 'percentage' ? (
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={inputs.downPaymentValue}
+                      onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))}
+                      style={{ ...input(errors.downPaymentValue), paddingRight: 36 }}
+                      placeholder="e.g., 20"
+                    />
+                    <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontWeight: 600 }}>%</span>
+                  </div>
+                ) : (
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={inputs.downPaymentValue}
+                    onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))}
+                    style={input(errors.downPaymentValue)}
+                    placeholder="e.g., 100000"
+                  />
+                )}
+                {errors.downPaymentValue && <small style={styles.error}>{errors.downPaymentValue}</small>}
+              </div>
+            </>
+          )
+        })()}
 
         <div>
           <label style={styles.label}>{t('plan_duration_years', language)}</label>
