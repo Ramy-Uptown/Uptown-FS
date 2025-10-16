@@ -59,6 +59,7 @@ export default function StandardPricing() {
   const [pricings, setPricings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [stdPlanCfg, setStdPlanCfg] = useState(null);
 
   const user = JSON.parse(localStorage.getItem('auth_user') || '{}');
   const role = user?.role;
@@ -87,10 +88,14 @@ export default function StandardPricing() {
     async function fetchData() {
       try {
         setLoading(true);
-        const reqs = [fetchWithAuth(`${API_URL}/api/pricing/unit-model`)];
-        // Allow both FM and Top-Management to view models (endpoint updated to allow read)
-        reqs.push(fetchWithAuth(`${API_URL}/api/inventory/unit-models`));
-        const [pricingRes, modelsRes] = await Promise.all(reqs);
+        const reqs = [
+          fetchWithAuth(`${API_URL}/api/pricing/unit-model`),
+          // Allow both FM and Top-Management to view models (endpoint updated to allow read)
+          fetchWithAuth(`${API_URL}/api/inventory/unit-models`),
+          // Active global standard plan (for rate/duration/frequency used in PV)
+          fetchWithAuth(`${API_URL}/api/standard-plan/latest`)
+        ];
+        const [pricingRes, modelsRes, stdPlanRes] = await Promise.all(reqs);
         const pricingData = await pricingRes.json();
         if (!pricingRes.ok) throw new Error(pricingData?.error?.message || 'Failed to fetch pricing');
 
@@ -100,6 +105,11 @@ export default function StandardPricing() {
         if (!modelsRes.ok) throw new Error(modelsData?.error?.message || 'Failed to fetch models');
         const items = modelsData.items || modelsData.models || [];
         setModels(items);
+
+        const stdPlanData = await stdPlanRes.json();
+        if (stdPlanRes.ok) {
+          setStdPlanCfg(stdPlanData.standardPlan || null);
+        }
       } catch (e) {
         setError(e.message || 'An error occurred');
         notifyError(e, 'Failed to load standard pricing');
@@ -514,6 +524,8 @@ export default function StandardPricing() {
                 <th style={th}>Storage</th>
                 <th style={th}>Garage</th>
                 <th style={th}>Maintenance</th>
+                <th style={th}>Calculated PV</th>
+                <th style={th}>Annual Financial Rate (%)</th>
                 <th style={th}>Status</th>
                 <th style={th}>Created By</th>
                 <th style={th}>Approved By</th>
@@ -521,85 +533,98 @@ export default function StandardPricing() {
               </tr>
             </thead>
             <tbody>
-              {pricings.map(p => (
-                <tr key={p.id}>
-                  <td style={td}>{p.model_name}</td>
-                  <td style={td}>{p.model_code || ''}</td>
-                  <td style={td}>{Number(p.area || 0).toLocaleString()}</td>
-                  <td style={td}>{Number(p.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{
-                    (() => {
-                      const hasGarden = p.has_garden ?? (p.garden_area != null ? Number(p.garden_area) > 0 : null);
-                      const val = Number(p.garden_price || 0);
-                      if (hasGarden === false) return 'N.A';
-                      return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasGarden === false ? 'N.A' : '0.00');
-                    })()
-                  }</td>
-                  <td style={td}>{
-                    (() => {
-                      const hasRoof = p.has_roof ?? (p.roof_area != null ? Number(p.roof_area) > 0 : null);
-                      const val = Number(p.roof_price || 0);
-                      if (hasRoof === false) return 'N.A';
-                      return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasRoof === false ? 'N.A' : '0.00');
-                    })()
-                  }</td>
-                  <td style={td}>{Number(p.storage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{Number(p.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{Number(p.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{p.status}</td>
-                  <td style={td}>{p.created_by_email || ''}</td>
-                  <td style={td}>{p.approved_by_email || ''}</td>
-                  <td style={td}>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <LoadingButton onClick={() => openPricingHistory(p.id)}>History</LoadingButton>
-                      {(role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval' ? (
-                        <>
-                          <LoadingButton onClick={() => handleApproveStatus(p.id, 'approved')} loading={rowLoading[p.id]} style={btnSuccess}>Approve</LoadingButton>
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                            <input
-                              placeholder="Reason (for rejection)"
-                              value={rejectReasons[p.id] || ''}
-                              onChange={e => setRejectReasons(s => ({ ...s, [p.id]: e.target.value }))}
-                              style={ctrl}
-                            />
-                            <LoadingButton onClick={() => handleApproveStatus(p.id, 'rejected', rejectReasons[p.id])} loading={rowLoading[p.id]} style={btnDanger}>Reject</LoadingButton>
-                          </div>
-                        </>
-                      ) : null}
-                      {(role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id) ? (
-                        <LoadingButton
-                          onClick={async () => {
-                            if (!window.confirm('Cancel this pending pricing request?')) return
-                            try {
-                              const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model/${p.id}`, { method: 'DELETE' })
-                              const data = await res.json()
-                              if (!res.ok) throw new Error(data?.error?.message || 'Cancel failed')
-                              notifySuccess('Request cancelled')
-                              // refresh list
-                              const listRes = await fetchWithAuth(`${API_URL}/api/pricing/unit-model`)
-                              const listData = await listRes.json()
-                              if (listRes.ok) setPricings(listData.pricings || [])
-                            } catch (e) {
-                              const msg = e.message || String(e)
-                              setError(msg)
-                              notifyError(e, 'Cancel failed')
-                            }
-                          }}
-                          style={btn}
-                        >
-                          Cancel Request
-                        </LoadingButton>
-                      ) : null}
-                      {!( (role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval') && !((role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id)) ? (
-                        <span style={metaText}>—</span>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {pricings.map(p => {
+                const totalNominal = Number(p.price || 0)
+                  + (Number(p.garden_price || 0))
+                  + (Number(p.roof_price || 0))
+                  + (Number(p.storage_price || 0))
+                  + (Number(p.garage_price || 0));
+                const planYears = Number(stdPlanCfg?.plan_duration_years) || Number(years) || 5;
+                const planFreq = String(stdPlanCfg?.installment_frequency || frequency || 'monthly');
+                const rate = Number(stdPlanCfg?.std_financial_rate_percent) || Number(annualRate) || 0;
+                const pvRow = calculatePV(totalNominal, 0, planYears, planFreq, rate);
+                return (
+                  <tr key={p.id}>
+                    <td style={td}>{p.model_name}</td>
+                    <td style={td}>{p.model_code || ''}</td>
+                    <td style={td}>{Number(p.area || 0).toLocaleString()}</td>
+                    <td style={td}>{Number(p.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{
+                      (() => {
+                        const hasGarden = p.has_garden ?? (p.garden_area != null ? Number(p.garden_area) > 0 : null);
+                        const val = Number(p.garden_price || 0);
+                        if (hasGarden === false) return 'N.A';
+                        return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasGarden === false ? 'N.A' : '0.00');
+                      })()
+                    }</td>
+                    <td style={td}>{
+                      (() => {
+                        const hasRoof = p.has_roof ?? (p.roof_area != null ? Number(p.roof_area) > 0 : null);
+                        const val = Number(p.roof_price || 0);
+                        if (hasRoof === false) return 'N.A';
+                        return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasRoof === false ? 'N.A' : '0.00');
+                      })()
+                    }</td>
+                    <td style={td}>{Number(p.storage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{Number(p.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{Number(p.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{Number(pvRow || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{Number(rate || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{p.status}</td>
+                    <td style={td}>{p.created_by_email || ''}</td>
+                    <td style={td}>{p.approved_by_email || ''}</td>
+                    <td style={td}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <LoadingButton onClick={() => openPricingHistory(p.id)}>History</LoadingButton>
+                        {(role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval' ? (
+                          <>
+                            <LoadingButton onClick={() => handleApproveStatus(p.id, 'approved')} loading={rowLoading[p.id]} style={btnSuccess}>Approve</LoadingButton>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <input
+                                placeholder="Reason (for rejection)"
+                                value={rejectReasons[p.id] || ''}
+                                onChange={e => setRejectReasons(s => ({ ...s, [p.id]: e.target.value }))}
+                                style={ctrl}
+                              />
+                              <LoadingButton onClick={() => handleApproveStatus(p.id, 'rejected', rejectReasons[p.id])} loading={rowLoading[p.id]} style={btnDanger}>Reject</LoadingButton>
+                            </div>
+                          </>
+                        ) : null}
+                        {(role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id) ? (
+                          <LoadingButton
+                            onClick={async () => {
+                              if (!window.confirm('Cancel this pending pricing request?')) return
+                              try {
+                                const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model/${p.id}`, { method: 'DELETE' })
+                                const data = await res.json()
+                                if (!res.ok) throw new Error(data?.error?.message || 'Cancel failed')
+                                notifySuccess('Request cancelled')
+                                // refresh list
+                                const listRes = await fetchWithAuth(`${API_URL}/api/pricing/unit-model`)
+                                const listData = await listRes.json()
+                                if (listRes.ok) setPricings(listData.pricings || [])
+                              } catch (e) {
+                                const msg = e.message || String(e)
+                                setError(msg)
+                                notifyError(e, 'Cancel failed')
+                              }
+                            }}
+                            style={btn}
+                          >
+                            Cancel Request
+                          </LoadingButton>
+                        ) : null}
+                        {!( (role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval') && !((role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id)) ? (
+                          <span style={metaText}>—</span>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {pricings.length === 0 && (
                 <tr>
-                  <td style={td} colSpan={8}>No unit model pricing entries.</td>
+                  <td style={td} colSpan={15}><span style={metaText}>No unit model pricing entries.</span></td>
                 </tr>
               )}
             </tbody>

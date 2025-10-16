@@ -166,6 +166,13 @@ export default function App(props) {
     applyDocumentDirection(language)
   }, [language])
 
+  // Enforce DP type = amount for target-PV modes to avoid circular dependency
+  useEffect(() => {
+    if (mode === 'calculateForTargetPV' || mode === 'customYearlyThenEqual_targetPV') {
+      setInputs(s => (s.dpType === 'amount' ? s : { ...s, dpType: 'amount' }))
+    }
+  }, [mode])
+
   // Auto-compute Standard Calculated PV from Standard Total Price, Financial Rate, Duration and Frequency
   // This ensures modes 2 and 4 (targeting Standard PV) use a correct PV baseline instead of a nominal total.
   useEffect(() => {

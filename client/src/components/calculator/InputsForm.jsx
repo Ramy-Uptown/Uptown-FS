@@ -207,10 +207,10 @@ export default function InputsForm({
           <input
             type="number"
             value={stdPlan.calculatedPV}
-            onChange={e => setStdPlan(s => ({ ...s, calculatedPV: e.target.value }))}
+            onChange={() => {}}
             style={input(errors.std_calculatedPV)}
-            disabled={rateLocked}
-            title={rateLocked ? 'Locked to server-approved standard for selected unit' : undefined}
+            disabled={true}
+            title={'Read-only. Computed from Standard Total Price, rate, duration and frequency.'}
           />
           {errors.std_calculatedPV && <small style={styles.error}>{errors.std_calculatedPV}</small>}
         </div>
@@ -223,15 +223,25 @@ export default function InputsForm({
 
         <div>
           <label style={styles.label}>{t('dp_type', language)}</label>
-          <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={select(errors.dpType)}>
-            <option value="amount">{t('amount', language)}</option>
-            <option value="percentage">{t('percentage', language)}</option>
-          </select>
+          {['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) ? (
+            <select value="amount" disabled style={select(errors.dpType)}>
+              <option value="amount">{t('amount', language)} (fixed)</option>
+            </select>
+          ) : (
+            <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={select(errors.dpType)}>
+              <option value="amount">{t('amount', language)}</option>
+              <option value="percentage">{t('percentage', language)}</option>
+            </select>
+          )}
           {errors.dpType && <small style={styles.error}>{errors.dpType}</small>}
         </div>
         <div>
-          <label style={styles.label}>{t('down_payment_value', language)}</label>
-          {inputs.dpType === 'percentage' ? (
+          <label style={styles.label}>
+            {['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode)
+              ? `${t('down_payment_value', language)} (amount)`
+              : t('down_payment_value', language)}
+          </label>
+          {inputs.dpType === 'percentage' && !['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) ? (
             <div style={{ position: 'relative' }}>
               <input
                 type="number"
@@ -251,7 +261,7 @@ export default function InputsForm({
               min="0"
               step="0.01"
               value={inputs.downPaymentValue}
-              onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))}
+              onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value, dpType: ['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) ? 'amount' : s.dpType }))}
               style={input(errors.downPaymentValue)}
               placeholder="e.g., 100000"
             />
