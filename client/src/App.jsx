@@ -383,6 +383,31 @@ export default function App(props) {
     return () => t && clearTimeout(t)
   }, [unitQuery])
 
+  // Load global Standard Plan on mount to populate rate/duration/frequency for consultants
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const resp = await fetchWithAuth(`${API_URL}/api/standard-plan/latest`)
+        const data = await resp.json()
+        if (!mounted || !resp.ok) return
+        const sp = data?.standardPlan
+        if (sp) {
+          setStdPlan(s => ({
+            ...s,
+            financialDiscountRate: Number(sp.std_financial_rate_percent) || s.financialDiscountRate
+          }))
+          setInputs(s => ({
+            ...s,
+            planDurationYears: s.planDurationYears || Number(sp.plan_duration_years) || 5,
+            installmentFrequency: s.installmentFrequency || sp.installment_frequency || 'monthly'
+          }))
+        }
+      } catch {}
+    })()
+    return () => { mounted = false }
+  }, [])
+
     // When we have a selected unit_id, prefer server-approved standard via calculate/generate endpoints using unitId
     useEffect(() => {
       const uid = Number(unitInfo.unit_id)
@@ -1093,8 +1118,14 @@ export default function App(props) {
         firstYearNominal += Number(p?.amount) || 0
       }
     } else {
-      // If not split, treat down payment as first-year component for percentage context
-      const dpBase = Number(stdPlan.totalPrice) || totalsNominal || 0
+      // If not split, treat down payment as first-year component for percentage context.
+      // When DP is percentage, base it on the CURRENT OFFER total (preview/genResult) not the standard price.
+      const offerTotal = Number(
+        (preview && preview.totalNominalPrice) ??
+        (genResult && genResult.totals && genResult.totals.totalNominal) ??
+        0
+      ) || 0
+      const dpBase = offerTotal > 0 ? offerTotal : (Number(stdPlan.totalPrice) || 0)
       const actualDP = inputs.dpType === 'percentage'
         ? dpBase * ((Number(inputs.downPaymentValue) || 0) / 100)
         : (Number(inputs.downPaymentValue) || 0)

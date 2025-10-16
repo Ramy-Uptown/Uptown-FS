@@ -314,6 +314,25 @@ export default function InputsForm({
           removeSubsequentYear={removeSubsequentYear}
         />
 
+        {/* Display solved New Price for target-PV modes when preview is available */}
+        {['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) && summaries?.totalNominalPrice != null && (
+          <div style={styles.blockFull}>
+            <label style={styles.label}>{isRTL(language) ? 'السعر الجديد (محسوب)' : 'Solved New Price (from PV target)'}</label>
+            <input
+              type="number"
+              value={Number(summaries.totalNominalPrice || 0).toFixed(2)}
+              readOnly
+              style={input()}
+              title="Derived from matching Standard PV using your current structure"
+            />
+            <small style={styles.metaText}>
+              {isRTL(language)
+                ? 'القيمة محسوبة من مطابقة القيمة الحالية القياسية باستخدام الهيكل المختار.'
+                : 'This is the offer price that matches the Standard PV given your selected structure.'}
+            </small>
+          </div>
+        )}
+
         <LivePreview
           styles={styles}
           language={language}
