@@ -414,57 +414,7 @@ export default function CreateDeal() {
         <CalculatorApp embedded />
       </div>
 
-      {/* Results from server calculation */}
-      <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginTop: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Server Calculation</h3>
-          <button onClick={calculateViaServer} style={btnPrimary}>Calculate (Server)</button>
-        </div>
-        {calcError ? <p style={{ color: '#e11d48' }}>{calcError}</p> : null}
-        {!calcResult ? (
-          <small style={{ color: '#64748b' }}>Click \"Calculate (Server)\" to generate a schedule using the backend engine.</small>
-        ) : (
-          <div>
-            <div style={{ border: '1px dashed #dfe5ee', borderRadius: 10, padding: 10, marginBottom: 8 }}>
-              <strong>Offer PV:</strong>
-              <div>{Number(calcResult.offerPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-              {calcResult.meta?.npvWarning ? (
-                <div style={{ color: '#b45309', marginTop: 6 }}>Warning: NPV below tolerance.</div>
-              ) : null}
-            </div>
-            <div style={{ marginTop: 8 }}>
-              <h4 style={{ marginTop: 0 }}>Payment Schedule</h4>
-              <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <th style={th}>#</th>
-                      <th style={th}>Month</th>
-                      <th style={th}>Date</th>
-                      <th style={th}>Label</th>
-                      <th style={{ ...th, textAlign: 'right' }}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(calcResult.schedule || []).map((row, i) => (
-                      <tr key={i}>
-                        <td style={td}>{i + 1}</td>
-                        <td style={td}>{row.month}</td>
-                        <td style={td}>{row.date || ''}</td>
-                        <td style={td}>{row.label}</td>
-                        <td style={{ ...td, textAlign: 'right' }}>{Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      </tr>
-                    ))}
-                    {(calcResult.schedule || []).length === 0 && (
-                      <tr><td style={td} colSpan={5}>No schedule.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      
     </div>
   )
 }

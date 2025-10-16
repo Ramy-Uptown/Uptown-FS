@@ -1305,6 +1305,11 @@ export default function App(props) {
           </div>
           {genError ? <p style={styles.error}>{genError}</p> : null}
           {docError ? <p style={styles.error}>{docError}</p> : null}
+          {/* Dates summary above schedule for visibility */}
+          <div style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 8, background: '#fbfaf7', border: '1px solid #ead9bd', display: 'inline-flex', gap: 16, flexWrap: 'wrap' }}>
+            <div><strong>Offer Date:</strong> {inputs.offerDate || new Date().toISOString().slice(0, 10)}</div>
+            <div><strong>First Payment Date:</strong> {inputs.firstPaymentDate || inputs.offerDate || new Date().toISOString().slice(0, 10)}</div>
+          </div>
           {schedule.length === 0 ? (
             <p style={styles.metaText}>No schedule yet. Fill the form and click "Calculate (Generate Plan)".</p>
           ) : (
