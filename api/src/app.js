@@ -536,10 +536,38 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
         stdCfg = pr.rows[0] || null
       } catch {}
 
+      // Compute Standard PV baseline from totalPrice using authoritative rate/duration/frequency
+      const effRate = stdCfg ? (Number(stdCfg.std_financial_rate_percent) || 0) : (Number(priceRow.std_financial_rate_percent) || 0)
+      // Prefer plan settings from global standard_plan; otherwise fall back to provided inputs
+      const durYearsCalc = Number(stdCfg?.plan_duration_years ?? (req.body.inputs?.planDurationYears)) || 1
+      const freqCalc = (stdCfg?.installment_frequency || req.body.inputs?.installmentFrequency || 'monthly')
+
+      // Monthly effective rate
+      const monthlyRateCalc = effRate > 0 ? Math.pow(1 + effRate / 100, 1 / 12) - 1 : 0
+
+      // Number of installments for equal baseline
+      let perYearCalc = 12
+      switch (freqCalc) {
+        case Frequencies.Quarterly: perYearCalc = 4; break
+        case Frequencies.BiAnnually: perYearCalc = 2; break
+        case Frequencies.Annually: perYearCalc = 1; break
+        case Frequencies.Monthly:
+        default: perYearCalc = 12; break
+      }
+      const nCalc = durYearsCalc * perYearCalc
+      const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
+      const monthsCalc = getPaymentMonths(nCalc, freqCalc, 0)
+      let stdPVComputed = 0
+      if (monthlyRateCalc <= 0) {
+        stdPVComputed = perPaymentCalc * nCalc
+      } else {
+        for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
+      }
+
       effectiveStdPlan = {
         totalPrice,
-        financialDiscountRate: stdCfg ? (Number(stdCfg.std_financial_rate_percent) || 0) : (Number(priceRow.std_financial_rate_percent) || 0),
-        calculatedPV: totalPrice
+        financialDiscountRate: effRate,
+        calculatedPV: Number(stdPVComputed.toFixed(2))
       }
 
       // Default inputs fields from standard if not provided
@@ -666,10 +694,34 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
         stdCfg = pr.rows[0] || null
       } catch {}
 
+      // Compute Standard PV baseline from totalPrice using authoritative rate/duration/frequency
+      const effRate = stdCfg ? (Number(stdCfg.std_financial_rate_percent) || 0) : (Number(row.std_financial_rate_percent) || 0)
+      const durYearsCalc = Number(stdCfg?.plan_duration_years ?? (effInputs?.planDurationYears)) || 1
+      const freqCalc = (stdCfg?.installment_frequency || effInputs?.installmentFrequency || 'monthly')
+
+      const monthlyRateCalc = effRate > 0 ? Math.pow(1 + effRate / 100, 1 / 12) - 1 : 0
+      let perYearCalc = 12
+      switch (freqCalc) {
+        case Frequencies.Quarterly: perYearCalc = 4; break
+        case Frequencies.BiAnnually: perYearCalc = 2; break
+        case Frequencies.Annually: perYearCalc = 1; break
+        case Frequencies.Monthly:
+        default: perYearCalc = 12; break
+      }
+      const nCalc = durYearsCalc * perYearCalc
+      const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
+      const monthsCalc = getPaymentMonths(nCalc, freqCalc, 0)
+      let stdPVComputed = 0
+      if (monthlyRateCalc <= 0) {
+        stdPVComputed = perPaymentCalc * nCalc
+      } else {
+        for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
+      }
+
       effectiveStdPlan = {
         totalPrice,
-        financialDiscountRate: stdCfg ? (Number(stdCfg.std_financial_rate_percent) || 0) : (Number(row.std_financial_rate_percent) || 0),
-        calculatedPV: totalPrice
+        financialDiscountRate: effRate,
+        calculatedPV: Number(stdPVComputed.toFixed(2))
       }
 
       // Target Payment After 1 Year (optional, legacy)
