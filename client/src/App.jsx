@@ -1166,6 +1166,7 @@ export default function App(props) {
           buildPayload={buildPayload}
           setPreview={setPreview}
           setPreviewError={setPreviewError}
+          role={role}
         />
 
         {/* Standard vs Offer PV Comparison */}

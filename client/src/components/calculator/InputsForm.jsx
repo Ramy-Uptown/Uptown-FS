@@ -32,7 +32,8 @@ export default function InputsForm({
   validateForm,
   buildPayload,
   setPreview,
-  setPreviewError
+  setPreviewError,
+  role
 }) {
   const input = (err) => styles.input ? styles.input(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
   const select = (err) => styles.select ? styles.select(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
@@ -104,18 +105,20 @@ export default function InputsForm({
             <div>Maintenance (scheduled separately): {Number(unitPricingBreakdown.maintenance || 0).toLocaleString()}</div>
           </div>
         </div>
-        <div>
-          <label style={styles.label}>Std Financial Rate (%)</label>
-          <input
-            type="number"
-            value={stdPlan.financialDiscountRate}
-            onChange={e => setStdPlan(s => ({ ...s, financialDiscountRate: e.target.value }))}
-            style={input(errors.std_financialDiscountRate)}
-            disabled={rateLocked}
-            title={rateLocked ? 'Locked to server-approved standard for selected unit' : undefined}
-          />
-          {errors.std_financialDiscountRate && <small style={styles.error}>{errors.std_financialDiscountRate}</small>}
-        </div>
+        {role !== 'property_consultant' && (
+          <div>
+            <label style={styles.label}>Std Financial Rate (%)</label>
+            <input
+              type="number"
+              value={stdPlan.financialDiscountRate}
+              onChange={e => setStdPlan(s => ({ ...s, financialDiscountRate: e.target.value }))}
+              style={input(errors.std_financialDiscountRate)}
+              disabled={rateLocked}
+              title={rateLocked ? 'Locked to server-approved standard for selected unit' : undefined}
+            />
+            {errors.std_financialDiscountRate && <small style={styles.error}>{errors.std_financialDiscountRate}</small>}
+          </div>
+        )}
         <div>
           <label style={styles.label}>Std Calculated PV</label>
           <input
@@ -145,7 +148,31 @@ export default function InputsForm({
         </div>
         <div>
           <label style={styles.label}>Down Payment Value</label>
-          <input type="number" value={inputs.downPaymentValue} onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))} style={input(errors.downPaymentValue)} />
+          {inputs.dpType === 'percentage' ? (
+            <div style={{ position: 'relative' }}>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={inputs.downPaymentValue}
+                onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))}
+                style={{ ...input(errors.downPaymentValue), paddingRight: 36 }}
+                placeholder="e.g., 20"
+              />
+              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontWeight: 600 }}>%</span>
+            </div>
+          ) : (
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={inputs.downPaymentValue}
+              onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))}
+              style={input(errors.downPaymentValue)}
+              placeholder="e.g., 100000"
+            />
+          )}
           {errors.downPaymentValue && <small style={styles.error}>{errors.downPaymentValue}</small>}
         </div>
 
