@@ -64,13 +64,15 @@ export default function InputsForm({
         </div>
 
         <div>
-          <label style={styles.label}>Offer Date</label>
+          <label style={styles.label}>Offer Date<span style={{ color: '#ef4444' }}> *</span></label>
           <input
             type="date"
             value={inputs.offerDate || todayStr}
             onChange={e => setInputs(s => ({ ...s, offerDate: e.target.value }))}
-            style={input()}
+            style={input(errors.offerDate)}
+            required
           />
+          {errors.offerDate && <small style={styles.error}>{errors.offerDate}</small>}
         </div>
 
         <div>

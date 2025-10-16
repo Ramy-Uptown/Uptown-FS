@@ -630,6 +630,19 @@ export default function App(props) {
   // Client-side inline validation (mirrors server-side constraints)
   function validateForm() {
     const e = {}
+    // Ensure offerDate is present; default to today if missing
+    const todayStr = new Date().toISOString().slice(0, 10)
+    if (!inputs.offerDate) {
+      setInputs(s => ({ ...s, offerDate: todayStr }))
+    } else {
+      // Basic YYYY-MM-DD validation
+      const d = new Date(inputs.offerDate)
+      const iso = isFinite(d.getTime()) ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : ''
+      if (!iso) {
+        e.offerDate = 'Invalid date'
+      }
+    }
+
     const payload = buildPayload()
     const { stdPlan: sp, inputs: inp } = payload
 
@@ -686,10 +699,10 @@ export default function App(props) {
         ...payload,
         language,
         currency,
-        // base date for absolute due dates on schedule; prefer contract date, fallback to reservation form date
+        // base date for absolute due dates on schedule; require offerDate, default to today if missing
         inputs: {
           ...payload.inputs,
-          baseDate: inputs.offerDate || contractInfo.contract_date || contractInfo.reservation_form_date || null,
+          baseDate: inputs.offerDate || new Date().toISOString().slice(0, 10),
           maintenancePaymentAmount: Number(feeSchedule.maintenancePaymentAmount) || 0,
           maintenancePaymentMonth: Number(feeSchedule.maintenancePaymentMonth) || 0,
           garagePaymentAmount: Number(feeSchedule.garagePaymentAmount) || 0,
