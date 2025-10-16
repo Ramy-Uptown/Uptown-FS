@@ -156,7 +156,8 @@ export default function App(props) {
     installmentFrequency: 'monthly',
     additionalHandoverPayment: 0,
     handoverYear: 2,
-    splitFirstYearPayments: false
+    splitFirstYearPayments: false,
+    offerDate: new Date().toISOString().slice(0, 10)
   })
 
   // Current user (for role-based UI and hints)
@@ -688,7 +689,7 @@ export default function App(props) {
         // base date for absolute due dates on schedule; prefer contract date, fallback to reservation form date
         inputs: {
           ...payload.inputs,
-          baseDate: contractInfo.contract_date || contractInfo.reservation_form_date || null,
+          baseDate: inputs.offerDate || contractInfo.contract_date || contractInfo.reservation_form_date || null,
           maintenancePaymentAmount: Number(feeSchedule.maintenancePaymentAmount) || 0,
           maintenancePaymentMonth: Number(feeSchedule.maintenancePaymentMonth) || 0,
           garagePaymentAmount: Number(feeSchedule.garagePaymentAmount) || 0,

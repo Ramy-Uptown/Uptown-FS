@@ -37,6 +37,7 @@ export default function InputsForm({
 }) {
   const input = (err) => styles.input ? styles.input(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
   const select = (err) => styles.select ? styles.select(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
+  const todayStr = new Date().toISOString().slice(0, 10)
 
   return (
     <section style={styles.section}>
@@ -60,6 +61,16 @@ export default function InputsForm({
             <option value="AED">AED (UAE Dirhams)</option>
             <option value="KWD">Kuwaiti Dinars</option>
           </select>
+        </div>
+
+        <div>
+          <label style={styles.label}>Offer Date</label>
+          <input
+            type="date"
+            value={inputs.offerDate || todayStr}
+            onChange={e => setInputs(s => ({ ...s, offerDate: e.target.value }))}
+            style={input()}
+          />
         </div>
 
         <div>
