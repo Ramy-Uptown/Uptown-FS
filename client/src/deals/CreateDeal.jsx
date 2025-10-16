@@ -452,6 +452,7 @@ export default function CreateDeal() {
             <div><strong>Number:</strong> {selectedUnit.unit_number || '-'}</div>
             <div><strong>Floor:</strong> {selectedUnit.floor || '-'}</div>
             <div><strong>Building:</strong> {selectedUnit.building_number || '-'}</div>
+            <div><strong>Block / Sector:</strong> {selectedUnit.block_sector || '-'}</div>
             <div><strong>Zone:</strong> {selectedUnit.zone || '-'}</div>
           </div>
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #eef2f7' }}>
@@ -489,47 +490,7 @@ export default function CreateDeal() {
 
       
 
-      {/* Unit Summary (read-only; pulled from Inventory) */}
-      <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Unit & Project Information</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Model</label>
-            <input value={unitForm.unit_type} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Code</label>
-            <input value={unitForm.unit_code} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Unit Number</label>
-            <input value={unitForm.unit_number} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Floor</label>
-            <input value={unitForm.floor} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Building Number</label>
-            <input value={unitForm.building_number} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Block / Sector</label>
-            <input value={unitForm.block_sector} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Zone / Neighborhood</label>
-            <input value={unitForm.zone} readOnly style={inputStyle} placeholder='—' />
-          </div>
-          <div style={{ gridColumn: '1 / span 2' }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Garden Details</label>
-            <input value={unitForm.garden_details} readOnly style={inputStyle} placeholder='—' />
-          </div>
-        </div>
-        <small style={{ color: '#64748b' }}>
-          Unit data is loaded automatically from Inventory and locked here. Use Inventory to choose a unit.
-        </small>
-      </div>
+      
 
       <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
         <CalculatorApp embedded />
