@@ -96,11 +96,63 @@ export default function InputsForm({
         <div>
           <label style={styles.label}>{t('mode', language)}</label>
           <select value={mode} onChange={e => setMode(e.target.value)} style={select()}>
-            <option value="evaluateCustomPrice">evaluateCustomPrice</option>
-            <option value="calculateForTargetPV">calculateForTargetPV</option>
-            <option value="customYearlyThenEqual_useStdPrice">customYearlyThenEqual_useStdPrice</option>
-            <option value="customYearlyThenEqual_targetPV">customYearlyThenEqual_targetPV</option>
+            <option value="evaluateCustomPrice">{isRTL(language) ? 'سعر قياسي بعد الخصم (مقارنة بالقياسي)' : 'Discounted Standard Price (Compare to Standard)'}</option>
+            <option value="calculateForTargetPV">{isRTL(language) ? 'سعر مستهدف: مطابقة القيمة الحالية القياسية' : 'Target Price: Match Standard PV'}</option>
+            <option value="customYearlyThenEqual_useStdPrice">{isRTL(language) ? 'هيكل مخصص باستخدام السعر القياسي' : 'Custom Structure using Standard Price'}</option>
+            <option value="customYearlyThenEqual_targetPV">{isRTL(language) ? 'هيكل مخصص بهدف مطابقة القيمة الحالية القياسية' : 'Custom Structure targeting Standard PV'}</option>
           </select>
+          {(() => {
+            const info = {
+              evaluateCustomPrice: {
+                en: {
+                  name: 'Discounted Standard Price (Compare to Standard)',
+                  desc: 'Applies Sales Discount to the Standard Price, computes the plan (including your DP and structure), then compares the resulting schedule against acceptance thresholds.'
+                },
+                ar: {
+                  name: 'سعر قياسي بعد الخصم (مقارنة بالقياسي)',
+                  desc: 'يطبق خصم المبيعات على السعر القياسي ويُكوّن الخطة (بما في ذلك الدفعة المقدمة وهيكل السداد) ثم يقارن الجدول بحدود القبول.'
+                }
+              },
+              calculateForTargetPV: {
+                en: {
+                  name: 'Target Price: Match Standard PV',
+                  desc: 'Solves for installments so that Present Value equals the Standard PV using your chosen structure (including your DP). Then the schedule is evaluated against acceptance thresholds.'
+                },
+                ar: {
+                  name: 'سعر مستهدف: مطابقة القيمة الحالية القياسية',
+                  desc: 'يحسب الأقساط بحيث تساوي القيمة الحالية القيمة القياسية باستخدام الهيكل الذي تختاره (بما في ذلك الدفعة المقدمة)، ثم يتم تقييم الجدول مقابل حدود القبول.'
+                }
+              },
+              customYearlyThenEqual_useStdPrice: {
+                en: {
+                  name: 'Custom Structure using Standard Price',
+                  desc: 'Keeps the Standard Price but lets you define split First Year and subsequent years; the remainder is equal installments. The result is compared to acceptance thresholds.'
+                },
+                ar: {
+                  name: 'هيكل مخصص باستخدام السعر القياسي',
+                  desc: 'يُبقي على السعر القياسي مع تمكينك من تقسيم السنة الأولى وتحديد السنوات اللاحقة؛ ويتم توزيع الباقي كأقساط متساوية. ثم تُقارن النتيجة بحدود القبول.'
+                }
+              },
+              customYearlyThenEqual_targetPV: {
+                en: {
+                  name: 'Custom Structure targeting Standard PV',
+                  desc: 'Define split First Year and subsequent years; the remainder is equal installments. Solves so that Present Value equals the Standard PV, then evaluates the schedule against acceptance thresholds.'
+                },
+                ar: {
+                  name: 'هيكل مخصص بهدف مطابقة القيمة الحالية القياسية',
+                  desc: 'حدد تقسيم السنة الأولى والسنوات اللاحقة؛ ويتم توزيع الباقي كأقساط متساوية. يحسب بحيث تساوي القيمة الحالية القيمة القياسية ثم يقيم الجدول مقابل حدود القبول.'
+                }
+              }
+            }
+            const l = isRTL(language) ? 'ar' : 'en'
+            const m = info[mode] || info.evaluateCustomPrice
+            return (
+              <div style={{ marginTop: 8, background: '#fbfaf7', border: '1px dashed #ead9bd', borderRadius: 8, padding: 10 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>{m[l].name}</div>
+                <div style={{ fontSize: 13, color: '#4b5563' }}>{m[l].desc}</div>
+              </div>
+            )
+          })()}
         </div>
 
         <div>

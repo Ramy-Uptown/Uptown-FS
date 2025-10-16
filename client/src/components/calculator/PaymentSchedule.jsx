@@ -3,6 +3,36 @@ import { tableWrap as wrapDefault, table as tableDefault, th as thDefault, td as
 import numberToArabic from '../../lib/numberToArabic.js'
 import { t } from '../../lib/i18n.js'
 
+function translateLabel(label, language) {
+  const isAr = String(language) === 'ar'
+  if (!isAr || !label) return label
+  const map = {
+    'Down Payment': 'الدفعة المقدمة',
+    'Down Payment (Y1 split)': 'الدفعة المقدمة (تقسيم السنة الأولى)',
+    'Equal Installment': 'قسط متساوي',
+    'First Year': 'السنة الأولى',
+    'Handover': 'التسليم',
+    'Maintenance Fee': 'رسوم الصيانة',
+    'Garage Fee': 'رسوم الجراج'
+  }
+  if (map[label]) return map[label]
+
+  // Year N (frequency)
+  const m = String(label).match(/^Year\\s+(\\d+)\\s+\\((.+)\\)$/i)
+  if (m) {
+    const n = m[1]
+    const freqRaw = m[2].toLowerCase()
+    const freqKey = ({
+      'monthly': 'monthly',
+      'quarterly': 'quarterly',
+      'bi-annually': 'bi_annually',
+      'annually': 'annually'
+    })[freqRaw] || freqRaw
+    return `السنة ${n} (${t(freqKey, 'ar')})`
+  }
+  return label
+}
+
 export default function PaymentSchedule({ schedule = [], totals = null, language = 'en', onExportCSV, onExportXLSX, onGenerateChecks }) {
   const rtl = String(language) === 'ar'
   return (
@@ -13,7 +43,7 @@ export default function PaymentSchedule({ schedule = [], totals = null, language
             <th style={thDefault}>#</th>
             <th style={thDefault}>{t('month', language)}</th>
             <th style={thDefault}>{t('date', language)}</th>
-            <th style={thDefault}>{t('label', language)}</th>
+            <th style={{ ...thDefault, textAlign: 'center' }}>{t('label', language)}</th>
             <th style={{ ...thDefault, textAlign: 'right' }}>{t('amount_label', language)}</th>
             <th style={{ ...thDefault, textAlign: rtl ? 'right' : 'left' }}>{t('written_amount', language)}</th>
           </tr>
@@ -24,7 +54,7 @@ export default function PaymentSchedule({ schedule = [], totals = null, language
               <td style={tdDefault}>{idx + 1}</td>
               <td style={tdDefault}>{row.month}</td>
               <td style={tdDefault}>{row.date || ''}</td>
-              <td style={tdDefault}>{row.label}</td>
+              <td style={{ ...tdDefault, textAlign: 'center' }}>{translateLabel(row.label, language)}</td>
               <td style={{ ...tdDefault, textAlign: 'right' }}>
                 {Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </td>
