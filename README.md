@@ -106,7 +106,7 @@ Health checks:
 - Vite HMR configured to work behind Codespaces.
 
 7) Recent Fixes and Changes
-Timestamp convention: prefix new bullets with [YYYY-MM-DD] (UTC) to track when changes were applied. Optionally include time as [YYYY-MM-DD HH:MM].
+Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track when changes were applied.
 - Resolved App.jsx merge conflicts; rateLocked computed once from unitInfo.
 - Switched host API port to 3001 and updated client to talk to 3001.
 - Added .devcontainer/devcontainer.json with forwardPorts and postStartCommand.
@@ -139,7 +139,7 @@ Timestamp convention: prefix new bullets with [YYYY-MM-DD] (UTC) to track when c
 - Standard PV baseline fix: When resolving Standard Plan via unitId/standardPricingId, the API now computes Standard Calculated PV from the equal-installments baseline using the authoritative rate/duration/frequency instead of defaulting to the nominal total price. This ensures PV ≠ Standard Total Price and modes 2/4 target the correct PV. File: api/src/app.js.
 - Consultant UI — New Price visibility: For target-PV modes (2 and 4), the calculator now displays the solved New Price (offer total) in the Inputs panel Live Preview area, so consultants can immediately see the price that matches Standard PV. File: client/src/components/calculator/InputsForm.jsx.
 - Thresholds based on offer, not standard: Client-side preview percentages (for quick inline comparison before generating) now compute the Down Payment amount correctly when DP Type = percentage by basing it on the current offer total (preview/gen) instead of the Standard Total Price. File: client/src/App.jsx.
-- [2025-10-16] Standard PV locking (Modes 2/4): When a unit is selected, the client now fetches the authoritative Standard PV from the server (/api/generate-plan evaluation.pv.standardPV) and locks it, preventing the UI from recomputing PV client-side. This fixes cases where Standard Price incorrectly equaled PV over multi‑year plans due to missing/zero rate context. Files: client/src/App.jsx.
+- [2025-10-16 00:00] Standard PV locking (Modes 2/4): When a unit is selected, the client now fetches the authoritative Standard PV from the server (/api/generate-plan evaluation.pv.standardPV) and locks it, preventing the UI from recomputing PV client-side. This fixes cases where Standard Price incorrectly equaled PV over multi‑year plans due to missing/zero rate context. Files: client/src/App.jsx.
 - Standard Plan defaults hydration: On load, the client fetches the latest active Standard Plan and pre-fills financial rate, plan duration, and installment frequency for consultants, ensuring Std Calculated PV is derived consistently. File: client/src/App.jsx.
 - Std Calculated PV read-only: The “Std Calculated PV” field in the calculator is now read-only and auto-derived from Standard Total Price, rate, duration and frequency. File: client/src/components/calculator/InputsForm.jsx.
 - Financial Manager — Standard Pricing log: Added “Calculated PV” (equal-installments PV of the standard nominal excluding maintenance, using the active Standard Plan rate/duration/frequency) and “Annual Financial Rate (%)” columns to the listing for clarity. File: client/src/admin/StandardPricing.jsx.
@@ -298,11 +298,13 @@ Any automated agent (AI or script) committing changes MUST:
 3) If new endpoints, routes, or commands are added, document them briefly under API Reference or a new section.
 4) Keep instructions accurate for both local Docker and Codespaces.
 5) Do not remove existing notes; append and refine.
+6) Prefix every new bullet in “Recent Fixes and Changes” with a timestamp in the form [YYYY-MM-DD HH:MM] (UTC).
 
 Checklist before finishing any task:
 - [ ] Code builds and runs locally (docker compose up -d) or in Codespaces
 - [ ] Ports are correct and forwarded
 - [ ] README updated with the changes
+- [ ] README entry is timestamped [YYYY-MM-DD HH:MM] (UTC) in “Recent Fixes and Changes”
 - [ ] Commit message references what was updated in README
 
 ---
