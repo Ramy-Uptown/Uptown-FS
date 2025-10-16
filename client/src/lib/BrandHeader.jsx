@@ -232,7 +232,7 @@ export default function BrandHeader({ title, onLogout }) {
 
   return (
     <div style={{ position: 'sticky', top: 0, zIndex: 1000 }}>
-      <div style={{ background: BRAND.primary, color: '#fff', borderBottom: `4px solid ${BRAND.primaryDark}` }}>
+      <div dir="ltr" style={{ background: BRAND.primary, color: '#fff', borderBottom: `4px solid ${BRAND.primaryDark}` }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {logoUrl ? (
@@ -274,7 +274,7 @@ export default function BrandHeader({ title, onLogout }) {
         </div>
       </div>
       {apiHealthy === false && (
-        <div style={{ background: '#991b1b', color: '#fff', padding: '6px 12px', borderBottom: '1px solid #7f1d1d' }}>
+        <div dir="ltr" style={{ background: '#991b1b', color: '#fff', padding: '6px 12px', borderBottom: '1px solid #7f1d1d' }}>
           <div style={{ maxWidth: 1200, margin: '0 auto', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
               API unreachable. {apiHealthMsg ? `(${apiHealthMsg}) ` : ''}Please ensure containers are running.
