@@ -82,7 +82,7 @@ export function buildPlanRequest(snapshot, unitId) {
       splitFirstYearPayments: !!inputs.splitFirstYearPayments,
       firstYearPayments: Array.isArray(snapshot?.firstYearPayments) ? snapshot.firstYearPayments : [],
       subsequentYears: Array.isArray(snapshot?.subsequentYears) ? snapshot.subsequentYears : [],
-      baseDate: snapshot?.inputs?.offerDate || new Date().toISOString().slice(0, 10),
+      baseDate: snapshot?.inputs?.firstPaymentDate || snapshot?.inputs?.offerDate || new Date().toISOString().slice(0, 10),
       maintenancePaymentAmount: Number(snapshot?.feeSchedule?.maintenancePaymentAmount) || 0,
       maintenancePaymentMonth: Number(snapshot?.feeSchedule?.maintenancePaymentMonth) || 0,
       garagePaymentAmount: Number(snapshot?.feeSchedule?.garagePaymentAmount) || 0,

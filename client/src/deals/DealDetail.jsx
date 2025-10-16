@@ -158,7 +158,11 @@ export default function DealDetail() {
         mode: snap.mode,
         stdPlan: snap.stdPlan,
         inputs: snap.inputs,
-        generatedPlan: snap.generatedPlan
+        generatedPlan: snap.generatedPlan,
+        data: {
+          offer_date: snap?.inputs?.offerDate || new Date().toISOString().slice(0, 10),
+          first_payment_date: snap?.inputs?.firstPaymentDate || snap?.inputs?.offerDate || new Date().toISOString().slice(0, 10)
+        }
       }
       // Show full-page loader for this heavy operation
       const label = documentType === 'pricing_form'
@@ -187,7 +191,7 @@ export default function DealDetail() {
       }
       const blob = await resp.blob()
       const cd = resp.headers.get('Content-Disposition') || ''
-      const match = /filename\*=UTF-8''([^;]+)|filename=\"?([^\\";]+)\"?/i.exec(cd)
+      const match = /filename\*=UTF-8''([^;]+)|filename=\\"?([^\\";]+)\\"?/i.exec(cd)
       let filename = ''
       if (match) filename = decodeURIComponent(match[1] || match[2] || '')
       if (!filename) {

@@ -157,7 +157,8 @@ export default function App(props) {
     additionalHandoverPayment: 0,
     handoverYear: 2,
     splitFirstYearPayments: false,
-    offerDate: new Date().toISOString().slice(0, 10)
+    offerDate: new Date().toISOString().slice(0, 10),
+    firstPaymentDate: new Date().toISOString().slice(0, 10)
   })
 
   // Current user (for role-based UI and hints)
@@ -642,6 +643,17 @@ export default function App(props) {
         e.offerDate = 'Invalid date'
       }
     }
+    // Ensure firstPaymentDate is present; default to offerDate or today
+    const baseDefault = inputs.offerDate || todayStr
+    if (!inputs.firstPaymentDate) {
+      setInputs(s => ({ ...s, firstPaymentDate: baseDefault }))
+    } else {
+      const d = new Date(inputs.firstPaymentDate)
+      const iso = isFinite(d.getTime()) ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : ''
+      if (!iso) {
+        e.firstPaymentDate = 'Invalid date'
+      }
+    }
 
     const payload = buildPayload()
     const { stdPlan: sp, inputs: inp } = payload
@@ -699,10 +711,10 @@ export default function App(props) {
         ...payload,
         language,
         currency,
-        // base date for absolute due dates on schedule; require offerDate, default to today if missing
+        // base date for absolute due dates on schedule; require firstPaymentDate (fallback to offerDate or today)
         inputs: {
           ...payload.inputs,
-          baseDate: inputs.offerDate || new Date().toISOString().slice(0, 10),
+          baseDate: inputs.firstPaymentDate || inputs.offerDate || new Date().toISOString().slice(0, 10),
           maintenancePaymentAmount: Number(feeSchedule.maintenancePaymentAmount) || 0,
           maintenancePaymentMonth: Number(feeSchedule.maintenancePaymentMonth) || 0,
           garagePaymentAmount: Number(feeSchedule.garagePaymentAmount) || 0,
@@ -771,6 +783,9 @@ export default function App(props) {
       phone_primary: clientInfo.phone_primary || '',
       phone_secondary: clientInfo.phone_secondary || '',
       email: clientInfo.email || '',
+      // Dates
+      offer_date: inputs.offerDate || new Date().toISOString().slice(0, 10),
+      first_payment_date: inputs.firstPaymentDate || inputs.offerDate || new Date().toISOString().slice(0, 10),
       // Client info (Arabic aliases for templates)
       'اسم المشترى': clientInfo.buyer_name || '',
       'الجنسية': clientInfo.nationality || '',
