@@ -156,11 +156,10 @@ Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track 
 - [2025-10-16 00:00] Standard PV locking (Modes 2/4): When a unit is selected, the client now fetches the authoritative Standard PV from the server (/api/generate-plan evaluation.pv.standardPV) and locks it, preventing the UI from recomputing PV client-side. This fixes cases where Standard Price incorrectly equaled PV over multi‑year plans due to missing/zero rate context. Files: client/src/App.jsx.
 - Standard Plan defaults hydration: On load, the client fetches the latest active Standard Plan and pre-fills financial rate, plan duration, and installment frequency for consultants, ensuring Std Calculated PV is derived consistently. File: client/src/App.jsx.
 - Std Calculated PV read-only: The “Std Calculated PV” field in the calculator is now read-only and auto-derived from Standard Total Price, rate, duration and frequency. File: client/src/components/calculator/InputsForm.jsx.
-- [2025-10-17 15:30] Standard Pricing requests now include financial settings:
-  - FM request payload to Top Management includes std_financial_rate_percent, plan_duration_years, installment_frequency, and calculated_pv.
-  - Pending and listing endpoints return these fields so FM and TM can preview the full terms.
-  - Admin table shows Annual Financial Rate (%), Plan Duration (years), and Installment Frequency columns.
-  Files: api/src/migrations/040_add_financial_fields_to_model_pricing.sql, api/src/pricingRoutes.js, client/src/admin/StandardPricing.jsx.
+- [2025-10-17 15:45] Top Management approvals page updated:
+  - Pending approvals table now displays Annual Rate (%), Duration (years), Frequency, and Std Calculated PV for each pricing request.
+  - Data is sourced from the pricing record fields added in the FM request flow.
+  Files: client/src/admin/StandardPricingApprovals.jsx.
 - Header stays LTR: Top navigation/header is always LTR even when Arabic is selected, keeping consultant layout stable.
 - Payment Schedule Arabic polish: “الوصف” column shows Arabic labels for schedule rows and is center‑aligned in Arabic.
 - Calculator PV baseline: Standard Calculated PV is now auto-computed on the client from Standard Total Price, financial rate, duration and frequency. This prevents it from mistakenly matching the nominal price and ensures Modes 2 and 4 solve a new final price against the correct Standard PV baseline. File: client/src/App.jsx.
