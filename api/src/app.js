@@ -645,30 +645,11 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
         durationYearsUsedMeta = rowDur
         frequencyUsedMeta = rowFreq
       } else if (rateValid && durValid && freqValid) {
-        // Compute using Active Standard Plan
-        const monthlyRateCalc = Math.pow(1 + effRate / 100, 1 / 12) - 1
-        let perYearCalc = 12
-        switch (freqCalc) {
-          case Frequencies.Quarterly: perYearCalc = 4; break
-          case Frequencies.BiAnnually: perYearCalc = 2; break
-          case Frequencies.Annually: perYearCalc = 1; break
-          case Frequencies.Monthly:
-          default: perYearCalc = 12; break
-        }
-        const nCalc = durYears * perYearCalc
-        const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
-        const monthsCalc = getPaymentMonths(nCalc, freqCalc, 0)
-        let stdPVComputed = 0
-        for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
-
-        effectiveStdPlan = {
-          totalPrice,
-          financialDiscountRate: effRate,
-          calculatedPV: Number(stdPVComputed.toFixed(2))
-        }
-        annualRateUsedMeta = effRate
-        durationYearsUsedMeta = durYears
-        frequencyUsedMeta = freqCalc
+        // Policy: When a unit/model is selected, per-pricing financial settings are REQUIRED.
+        // Do not fall back to Active Standard Plan for calculations in unit/model flows.
+        return bad(res, 422,
+          'Per-pricing financial settings are required (std_financial_rate_percent, plan_duration_years, installment_frequency). Configure and approve them for the selected unit/model.'
+        )
       } else {
         // Fallback: FM stored PV
         let fmPV = null
@@ -999,35 +980,11 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
         durationYearsUsedMeta = rowDur
         frequencyUsedMeta = rowFreq
       } else if (rateValid && durValid && freqValid) {
-        const monthlyRateCalc = Math.pow(1 + effRate / 100, 1 / 12) - 1
-        let perYearCalc = 12
-        switch (freqCalc) {
-          case Frequencies.Quarterly: perYearCalc = 4; break
-          case Frequencies.BiAnnually: perYearCalc = 2; break
-          case Frequencies.Annually: perYearCalc = 1; break
-          case Frequencies.Monthly:
-          default: perYearCalc = 12; break
-        }
-        const nCalc = durYears * perYearCalc
-        const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
-        const monthsCalc = getPaymentMonths(nCalc, freqCalc, 0)
-        let stdPVComputed = 0
-        if (monthlyRateCalc <= 0 || nCalc === 0) {
-          stdPVComputed = perPaymentCalc * nCalc
-          computedPVEqualsTotalNominal = true
-        } else {
-          for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
-          computedPVEqualsTotalNominal = false
-        }
-
-        effectiveStdPlan = {
-          totalPrice,
-          financialDiscountRate: effRate,
-          calculatedPV: Number(stdPVComputed.toFixed(2))
-        }
-        annualRateUsedMeta = effRate
-        durationYearsUsedMeta = durYears
-        frequencyUsedMeta = freqCalc
+        // Policy: When a unit/model is selected, per-pricing financial settings are REQUIRED.
+        // Do not fall back to Active Standard Plan for plan generation in unit/model flows.
+        return bad(res, 422,
+          'Per-pricing financial settings are required (std_financial_rate_percent, plan_duration_years, installment_frequency). Configure and approve them for the selected unit/model.'
+        )
       } else {
         // Fallback: FM stored PV
         let fmPV = null

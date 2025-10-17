@@ -109,11 +109,11 @@ Health checks:
 
 For calculations to work correctly, the following must be configured:
 
-- Active Standard Plan (Finance → Standard Plan; configured by Financial Manager, approved by Top Management):
+- Per-Pricing Financial Settings are required for unit/model flows:
   - std_financial_rate_percent: numeric percent (annual), must be > 0
   - plan_duration_years: integer ≥ 1
-  - installment_frequency: one of { monthly, quarterly, biannually, annually }
-    - Internally normalized to 'bi-annually' for the engine
+  - installment_frequency: one of { monthly, quarterly, biannually, annually } (normalized to 'bi-annually' internally)
+  - The calculator and plan generation will not fall back to Active Standard Plan when a unit/model is selected; per-pricing terms must exist and be approved.
 
 If no active Standard Plan exists or its values are invalid, the server will attempt to use the Financial Manager’s stored “Calculated PV” for the selected unit/model. If that is not present, the API returns 422 with a clear message.
 
