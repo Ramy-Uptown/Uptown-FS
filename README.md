@@ -109,11 +109,11 @@ Health checks:
 
 For calculations to work correctly, the following must be configured:
 
-- Active Standard Plan (Top Management → Standard Plan):
+- Per-Pricing Financial Settings are required for unit/model flows:
   - std_financial_rate_percent: numeric percent (annual), must be > 0
   - plan_duration_years: integer ≥ 1
-  - installment_frequency: one of { monthly, quarterly, biannually, annually }
-    - Internally normalized to 'bi-annually' for the engine
+  - installment_frequency: one of { monthly, quarterly, biannually, annually } (normalized to 'bi-annually' internally)
+  - The calculator and plan generation will not fall back to Active Standard Plan when a unit/model is selected; per-pricing terms must exist and be approved.
 
 If no active Standard Plan exists or its values are invalid, the server will attempt to use the Financial Manager’s stored “Calculated PV” for the selected unit/model. If that is not present, the API returns 422 with a clear message.
 
@@ -156,7 +156,10 @@ Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track 
 - [2025-10-16 00:00] Standard PV locking (Modes 2/4): When a unit is selected, the client now fetches the authoritative Standard PV from the server (/api/generate-plan evaluation.pv.standardPV) and locks it, preventing the UI from recomputing PV client-side. This fixes cases where Standard Price incorrectly equaled PV over multi‑year plans due to missing/zero rate context. Files: client/src/App.jsx.
 - Standard Plan defaults hydration: On load, the client fetches the latest active Standard Plan and pre-fills financial rate, plan duration, and installment frequency for consultants, ensuring Std Calculated PV is derived consistently. File: client/src/App.jsx.
 - Std Calculated PV read-only: The “Std Calculated PV” field in the calculator is now read-only and auto-derived from Standard Total Price, rate, duration and frequency. File: client/src/components/calculator/InputsForm.jsx.
-- Financial Manager — Standard Pricing log: Added “Calculated PV” (equal-installments PV of the standard nominal excluding maintenance, using the active Standard Plan rate/duration/frequency) and “Annual Financial Rate (%)” columns to the listing for clarity. File: client/src/admin/StandardPricing.jsx.
+- [2025-10-17 16:25] Client banner for missing per-pricing terms:
+  - Calculator page shows a red policy banner when a unit/model is selected and the API returns 422 requiring per-pricing terms.
+  - Message instructs to configure Annual Rate, Duration, and Frequency on the Standard Pricing page for that unit model.
+  File: client/src/App.jsx.
 - Header stays LTR: Top navigation/header is always LTR even when Arabic is selected, keeping consultant layout stable.
 - Payment Schedule Arabic polish: “الوصف” column shows Arabic labels for schedule rows and is center‑aligned in Arabic.
 - Calculator PV baseline: Standard Calculated PV is now auto-computed on the client from Standard Total Price, financial rate, duration and frequency. This prevents it from mistakenly matching the nominal price and ensures Modes 2 and 4 solve a new final price against the correct Standard PV baseline. File: client/src/App.jsx.
@@ -166,6 +169,8 @@ Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track 
   - Removed silent fallback to 0% when Standard Plan is missing/invalid; server now either uses FM stored Calculated PV or returns 422 with a clear message.
   - Added diagnostics meta in responses: rateUsedPercent, durationYearsUsed, frequencyUsed, computedPVEqualsTotalNominal, usedStoredFMpv.
   - Fixed frequency mismatches by normalizing before switch statements and calculations. Files: api/src/app.js.
+
+- [2025-10-17 15:10] Terminology correction: Standard Plan is configured by the Financial Manager and approved by Top Management. Updated README “Configuration Requirements” to reflect ownership and removed “global” wording.
 
 Future tasks:
 - PDF templates: map offer_date and first_payment_date placeholders in server-side document templates for Pricing Form, Reservation Form, and Contract.

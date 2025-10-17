@@ -1423,6 +1423,18 @@ export default function App(props) {
               </button>
             </div>
           </div>
+          {/* Policy banner: require per-pricing financial settings for unit/model flows */}
+          {(() => {
+            const uid = Number(unitInfo?.unit_id) || 0;
+            const needsPerPricing = uid > 0 && typeof genError === 'string' && genError.toLowerCase().includes('per-pricing financial settings are required');
+            if (!needsPerPricing) return null;
+            return (
+              <div style={{ border: '1px solid #dc2626', background: '#fff4f4', color: '#991b1b', padding: '8px 12px', borderRadius: 8, marginBottom: 8 }}>
+                Per-pricing financial settings are required for this unit/model. Please ensure the Financial Manager has configured and Top Management has approved:
+                {' '}Annual Financial Rate (%), Plan Duration (years), and Installment Frequency in Standard Pricing for this unit model.
+              </div>
+            );
+          })()}
           {genError ? <p style={styles.error}>{genError}</p> : null}
           {docError ? <p style={styles.error}>{docError}</p> : null}
           {/* Dates summary above schedule for visibility */}
