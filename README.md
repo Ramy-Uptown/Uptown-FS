@@ -167,6 +167,8 @@ Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track 
   - Added diagnostics meta in responses: rateUsedPercent, durationYearsUsed, frequencyUsed, computedPVEqualsTotalNominal, usedStoredFMpv.
   - Fixed frequency mismatches by normalizing before switch statements and calculations. Files: api/src/app.js.
 
+- [2025-10-17 14:30] Allow zero-rate (0%) Standard Plan as valid; engine now treats 0% as PV equals nominal total. This removes false \"Active standard plan is missing or invalid\" errors when Top Management sets 0% annual rate. Files: api/src/app.js.
+
 Future tasks:
 - PDF templates: map offer_date and first_payment_date placeholders in server-side document templates for Pricing Form, Reservation Form, and Contract.
 

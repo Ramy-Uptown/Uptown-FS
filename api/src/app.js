@@ -562,7 +562,8 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
       const durYears = Number(durRaw)
       const freqCalc = normalizeFrequency(freqRaw)
 
-      const rateValid = Number.isFinite(effRate) && effRate > 0
+      // Allow zero-rate standard plans (0% is valid); engine handles PV = nominal in that case
+      const rateValid = Number.isFinite(effRate) && effRate >= 0
       const durValid = Number.isInteger(durYears) && durYears >= 1
       const freqValid = !!freqCalc
 
@@ -848,7 +849,8 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
       const durYears = Number(durRaw)
       const freqCalc = normalizeFrequency(freqRaw)
 
-      const rateValid = Number.isFinite(effRate) && effRate > 0
+      // Allow zero-rate standard plans (0% is valid); engine handles PV = nominal in that case
+      const rateValid = Number.isFinite(effRate) && effRate >= 0
       const durValid = Number.isInteger(durYears) && durYears >= 1
       const freqValid = !!freqCalc
 
