@@ -746,7 +746,12 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
         durationYearsUsed: durationYearsUsedMeta,
         frequencyUsed: frequencyUsedMeta,
         computedPVEqualsTotalNominal,
-        usedStoredFMpv
+        usedStoredFMpv,
+        rateSource: usedStoredFMpv
+          ? 'fm_stored_pv'
+          : ((annualRateUsedMeta === effRate && durationYearsUsedMeta === durYears && frequencyUsedMeta === freqCalc)
+              ? 'standard_plan'
+              : 'per_pricing')
       }
     } else {
       // Only accept stdPlan when no unitId/standardPricingId is provided
