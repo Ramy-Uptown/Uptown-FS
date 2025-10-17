@@ -181,7 +181,11 @@ export default function StandardPricing() {
           garage_price: garagePrice === '' ? 0 : Number(garagePrice),
           garden_price: gardenPrice === '' ? 0 : Number(gardenPrice),
           roof_price: roofPrice === '' ? 0 : Number(roofPrice),
-          storage_price: storagePrice === '' ? 0 : Number(storagePrice)
+          storage_price: storagePrice === '' ? 0 : Number(storagePrice),
+          std_financial_rate_percent: Number(annualRate),
+          plan_duration_years: Number(years),
+          installment_frequency: String(frequency),
+          calculated_pv: Number(pv)
         })
       });
       const data = await res.json();
