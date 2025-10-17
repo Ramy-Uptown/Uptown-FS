@@ -526,6 +526,8 @@ export default function StandardPricing() {
                 <th style={th}>Maintenance</th>
                 <th style={th}>Calculated PV</th>
                 <th style={th}>Annual Financial Rate (%)</th>
+                <th style={th}>Plan Duration (years)</th>
+                <th style={th}>Installment Frequency</th>
                 <th style={th}>Status</th>
                 <th style={th}>Created By</th>
                 <th style={th}>Approved By</th>
@@ -539,10 +541,24 @@ export default function StandardPricing() {
                   + (Number(p.roof_price || 0))
                   + (Number(p.storage_price || 0))
                   + (Number(p.garage_price || 0));
-                const planYears = Number(stdPlanCfg?.plan_duration_years) || Number(years) || 5;
-                const planFreq = String(stdPlanCfg?.installment_frequency || frequency || 'monthly');
-                const rate = Number(stdPlanCfg?.std_financial_rate_percent) || Number(annualRate) || 0;
-                const pvRow = calculatePV(totalNominal, 0, planYears, planFreq, rate);
+
+                // Prefer per-pricing financial settings when available; fall back to active Standard Plan; then local form defaults
+                const rowYears = (p.plan_duration_years != null ? Number(p.plan_duration_years) : null)
+                  ?? (stdPlanCfg?.plan_duration_years != null ? Number(stdPlanCfg.plan_duration_years) : null)
+                  ?? (Number(years) || 5);
+                const normalizeFreq = (f) => {
+                  const v = String(f || '').toLowerCase().trim();
+                  if (v === 'biannually') return 'bi-annually';
+                  return v || 'monthly';
+                };
+                const rowFreq = (p.installment_frequency ? normalizeFreq(p.installment_frequency) : null)
+                  ?? (stdPlanCfg?.installment_frequency ? normalizeFreq(stdPlanCfg.installment_frequency) : null)
+                  ?? normalizeFreq(frequency || 'monthly');
+                const rowRate = (p.std_financial_rate_percent != null ? Number(p.std_financial_rate_percent) : null)
+                  ?? (stdPlanCfg?.std_financial_rate_percent != null ? Number(stdPlanCfg.std_financial_rate_percent) : null)
+                  ?? (Number(annualRate) || 0);
+
+                const pvRow = calculatePV(totalNominal, 0, rowYears, rowFreq, rowRate);
                 return (
                   <tr key={p.id}>
                     <td style={td}>{p.model_name}</td>
@@ -569,7 +585,9 @@ export default function StandardPricing() {
                     <td style={td}>{Number(p.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td style={td}>{Number(p.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td style={td}>{Number(pvRow || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td style={td}>{Number(rate || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{Number(rowRate || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{rowYears}</td>
+                    <td style={td}>{rowFreq}</td>
                     <td style={td}>{p.status}</td>
                     <td style={td}>{p.created_by_email || ''}</td>
                     <td style={td}>{p.approved_by_email || ''}</td>
