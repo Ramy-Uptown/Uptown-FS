@@ -398,6 +398,24 @@ const allowedModes = new Set(Object.values(CalculationModes))
 const allowedFrequencies = new Set(Object.values(Frequencies))
 
 /**
+ * Frequency normalization utility
+ * - trims spaces
+ * - accepts case-insensitive variants
+ * - maps 'biannually' -> 'bi-annually'
+ * - validates against engine enum; returns null if unknown
+ */
+function normalizeFrequency(s) {
+  if (!s) return null
+  const v = String(s).trim().toLowerCase()
+  let norm = v
+  if (v === 'biannually') norm = 'bi-annually'
+  // Direct matches to enum values
+  const candidates = new Set(Object.values(Frequencies))
+  if (candidates.has(norm)) return norm
+  return null
+}
+
+/**
  * Validate inputs payload more granularly
  */
 function validateInputs(inputs) {
@@ -536,47 +554,135 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
         stdCfg = pr.rows[0] || null
       } catch {}
 
-      // Compute Standard PV baseline from totalPrice using authoritative rate/duration/frequency
-      const effRate = stdCfg ? (Number(stdCfg.std_financial_rate_percent) || 0) : (Number(priceRow.std_financial_rate_percent) || 0)
-      // Prefer plan settings from global standard_plan; otherwise fall back to provided inputs
-      const durYearsCalc = Number(stdCfg?.plan_duration_years ?? (req.body.inputs?.planDurationYears)) || 1
-      const freqCalc = (stdCfg?.installment_frequency || req.body.inputs?.installmentFrequency || 'monthly')
+      // Determine validity of stdCfg
+      const effRateRaw = stdCfg?.std_financial_rate_percent
+      const durRaw = stdCfg?.plan_duration_years
+      const freqRaw = stdCfg?.installment_frequency
+      const effRate = Number(effRateRaw)
+      const durYears = Number(durRaw)
+      const freqCalc = normalizeFrequency(freqRaw)
 
-      // Monthly effective rate
-      const monthlyRateCalc = effRate > 0 ? Math.pow(1 + effRate / 100, 1 / 12) - 1 : 0
+      const rateValid = Number.isFinite(effRate) && effRate > 0
+      const durValid = Number.isInteger(durYears) && durYears >= 1
+      const freqValid = !!freqCalc
 
-      // Number of installments for equal baseline
-      let perYearCalc = 12
-      switch (freqCalc) {
-        case Frequencies.Quarterly: perYearCalc = 4; break
-        case Frequencies.BiAnnually: perYearCalc = 2; break
-        case Frequencies.Annually: perYearCalc = 1; break
-        case Frequencies.Monthly:
-        default: perYearCalc = 12; break
-      }
-      const nCalc = durYearsCalc * perYearCalc
-      const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
-      const monthsCalc = getPaymentMonths(nCalc, freqCalc, 0)
-      let stdPVComputed = 0
-      if (monthlyRateCalc <= 0) {
-        stdPVComputed = perPaymentCalc * nCalc
+      let usedStoredFMpv = false
+      let computedPVEqualsTotalNominal = false
+      let annualRateUsedMeta = null
+      let durationYearsUsedMeta = null
+      let frequencyUsedMeta = null
+
+      if (!rateValid || !durValid || !freqValid) {
+        // Try FM stored PV fallbacks
+        let fmPV = null
+        try {
+          if (unitId) {
+            // unit_model_pricing.calculated_pv (if column exists)
+            try {
+              const q1 = await pool.query(
+                `SELECT p.calculated_pv
+                 FROM units u
+                 JOIN unit_model_pricing p ON p.model_id = u.model_id
+                 WHERE u.id=$1 AND p.status='approved'
+                 ORDER BY p.id DESC
+                 LIMIT 1`,
+                [Number(unitId)]
+              )
+              fmPV = Number(q1.rows[0]?.calculated_pv) || null
+            } catch (e) { /* column may not exist; ignore */ }
+
+            if (fmPV == null) {
+              // standard_pricing.calculated_pv by unit
+              try {
+                const q2 = await pool.query(
+                  `SELECT calculated_pv
+                   FROM standard_pricing
+                   WHERE status='approved' AND unit_id=$1
+                   ORDER BY id DESC
+                   LIMIT 1`,
+                  [Number(unitId)]
+                )
+                fmPV = Number(q2.rows[0]?.calculated_pv) || null
+              } catch (e) { /* ignore */ }
+            }
+          } else if (standardPricingId) {
+            try {
+              const q3 = await pool.query(
+                `SELECT calculated_pv
+                 FROM standard_pricing
+                 WHERE id=$1`,
+                [Number(standardPricingId)]
+              )
+              fmPV = Number(q3.rows[0]?.calculated_pv) || null
+            } catch (e) { /* ignore */ }
+          }
+        } catch (e) { /* ignore */ }
+
+        if (fmPV != null && fmPV > 0) {
+          usedStoredFMpv = true
+          annualRateUsedMeta = Number(stdCfg?.std_financial_rate_percent) || null
+          durationYearsUsedMeta = Number(stdCfg?.plan_duration_years) || null
+          frequencyUsedMeta = freqCalc || null
+
+          effectiveStdPlan = {
+            totalPrice,
+            financialDiscountRate: annualRateUsedMeta,
+            calculatedPV: fmPV
+          }
+        } else {
+          return bad(res, 422,
+            'Active standard plan is missing or invalid (rate/duration/frequency). Configure it under Top Management → Standard Plan. Alternatively, ensure FM Calculated PV exists for this unit model.'
+          )
+        }
       } else {
-        for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
-      }
+        // Compute Standard PV baseline using equal installments and normalized frequency
+        const monthlyRateCalc = Math.pow(1 + effRate / 100, 1 / 12) - 1
+        let perYearCalc = 12
+        switch (freqCalc) {
+          case Frequencies.Quarterly: perYearCalc = 4; break
+          case Frequencies.BiAnnually: perYearCalc = 2; break
+          case Frequencies.Annually: perYearCalc = 1; break
+          case Frequencies.Monthly:
+          default: perYearCalc = 12; break
+        }
+        const nCalc = durYears * perYearCalc
+        const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
+        const monthsCalc = getPaymentMonths(nCalc, freqCalc, 0)
+        let stdPVComputed = 0
+        if (monthlyRateCalc <= 0 || nCalc === 0) {
+          stdPVComputed = perPaymentCalc * nCalc
+          computedPVEqualsTotalNominal = true
+        } else {
+          for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
+          computedPVEqualsTotalNominal = false
+        }
 
-      effectiveStdPlan = {
-        totalPrice,
-        financialDiscountRate: effRate,
-        calculatedPV: Number(stdPVComputed.toFixed(2))
+        effectiveStdPlan = {
+          totalPrice,
+          financialDiscountRate: effRate,
+          calculatedPV: Number(stdPVComputed.toFixed(2))
+        }
+        annualRateUsedMeta = effRate
+        durationYearsUsedMeta = durYears
+        frequencyUsedMeta = freqCalc
       }
 
       // Default inputs fields from standard if not provided
       if (!isObject(req.body.inputs)) req.body.inputs = {}
-      if (stdCfg?.plan_duration_years != null && req.body.inputs.planDurationYears == null) {
-        req.body.inputs.planDurationYears = Number(stdCfg.plan_duration_years)
+      if (durValid && req.body.inputs.planDurationYears == null) {
+        req.body.inputs.planDurationYears = durYears
       }
-      if (stdCfg?.installment_frequency && !req.body.inputs.installmentFrequency) {
-        req.body.inputs.installmentFrequency = stdCfg.installment_frequency
+      if (freqValid && !req.body.inputs.installmentFrequency) {
+        req.body.inputs.installmentFrequency = frequencyUsedMeta
+      }
+
+      // Diagnostics meta attached via result later
+      req._stdMeta = {
+        rateUsedPercent: annualRateUsedMeta,
+        durationYearsUsed: durationYearsUsedMeta,
+        frequencyUsed: frequencyUsedMeta,
+        computedPVEqualsTotalNominal,
+        usedStoredFMpv
       }
     } else {
       // Only accept stdPlan when no unitId/standardPricingId is provided
@@ -603,6 +709,22 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
     if (!isObject(effInputs)) {
       return bad(res, 400, 'inputs must be an object')
     }
+
+    // Normalize frequency strings in inputs before validation/use
+    if (effInputs.installmentFrequency) {
+      const nf = normalizeFrequency(effInputs.installmentFrequency)
+      if (!nf) {
+        return bad(res, 422, 'Invalid inputs', [{ field: 'installmentFrequency', message: 'Invalid frequency' }])
+      }
+      effInputs.installmentFrequency = nf
+    }
+    if (Array.isArray(effInputs.subsequentYears)) {
+      effInputs.subsequentYears = effInputs.subsequentYears.map(y => ({
+        ...y,
+        frequency: y?.frequency ? normalizeFrequency(y.frequency) : effInputs.installmentFrequency
+      }))
+    }
+
     const inputErrors = validateInputs(effInputs)
     if (inputErrors.length > 0) {
       return bad(res, 422, 'Invalid inputs', inputErrors)
@@ -621,7 +743,7 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
     const overPolicy = disc > policyLimit
 
     const result = calculateByMode(mode, effectiveStdPlan, effInputs)
-    return res.json({ ok: true, data: result, meta: { policyLimit, overPolicy, authorityLimit, overAuthority } })
+    return res.json({ ok: true, data: result, meta: { policyLimit, overPolicy, authorityLimit, overAuthority, ...(req._stdMeta || {}) } })
   } catch (err) {
     console.error('POST /api/calculate error:', err)
     return bad(res, 500, 'Internal error during calculation')
@@ -645,6 +767,15 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
     let effectiveStdPlan = null
     const effInputs = req.body.inputs || inputs || {}
 
+    // Normalize main input frequency before any switch logic
+    if (effInputs.installmentFrequency) {
+      const nf = normalizeFrequency(effInputs.installmentFrequency)
+      if (!nf) {
+        return bad(res, 422, 'Invalid inputs', [{ field: 'installmentFrequency', message: 'Invalid frequency' }])
+      }
+      effInputs.installmentFrequency = nf
+    }
+
     if (standardPricingId || unitId) {
       // Resolve nominal base from approved pricing and authoritative rate/duration/frequency from global standard_plan
       let row = null
@@ -659,16 +790,32 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
         )
         row = r.rows[0] || null
       } else if (unitId) {
-        const r = await pool.query(
-          `SELECT p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price
-           FROM units u
-           JOIN unit_model_pricing p ON p.model_id = u.model_id
-           WHERE u.id=$1 AND p.status='approved'
-           ORDER BY p.id DESC
-           LIMIT 1`,
-          [Number(unitId)]
-        )
-        row = r.rows[0] || null
+        // Try to also fetch stored FM PV/rate if columns exist
+        try {
+          const r = await pool.query(
+            `SELECT p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price,
+                    p.calculated_pv, p.std_financial_rate_percent
+             FROM units u
+             JOIN unit_model_pricing p ON p.model_id = u.model_id
+             WHERE u.id=$1 AND p.status='approved'
+             ORDER BY p.id DESC
+             LIMIT 1`,
+            [Number(unitId)]
+          )
+          row = r.rows[0] || null
+        } catch (e) {
+          // Fallback when optional columns don't exist
+          const r2 = await pool.query(
+            `SELECT p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price
+             FROM units u
+             JOIN unit_model_pricing p ON p.model_id = u.model_id
+             WHERE u.id=$1 AND p.status='approved'
+             ORDER BY p.id DESC
+             LIMIT 1`,
+            [Number(unitId)]
+          )
+          row = r2.rows[0] || null
+        }
       }
       if (!row) {
         return bad(res, 404, 'Approved standard price not found for the selected unit/model')
@@ -694,64 +841,119 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
         stdCfg = pr.rows[0] || null
       } catch {}
 
-      // Compute Standard PV baseline from totalPrice using authoritative rate/duration/frequency
-      const effRate = stdCfg ? (Number(stdCfg.std_financial_rate_percent) || 0) : (Number(row.std_financial_rate_percent) || 0)
-      const durYearsCalc = Number(stdCfg?.plan_duration_years ?? (effInputs?.planDurationYears)) || 1
-      const freqCalc = (stdCfg?.installment_frequency || effInputs?.installmentFrequency || 'monthly')
+      const effRateRaw = stdCfg?.std_financial_rate_percent
+      const durRaw = stdCfg?.plan_duration_years
+      const freqRaw = stdCfg?.installment_frequency
+      const effRate = Number(effRateRaw)
+      const durYears = Number(durRaw)
+      const freqCalc = normalizeFrequency(freqRaw)
 
-      const monthlyRateCalc = effRate > 0 ? Math.pow(1 + effRate / 100, 1 / 12) - 1 : 0
-      let perYearCalc = 12
-      switch (freqCalc) {
-        case Frequencies.Quarterly: perYearCalc = 4; break
-        case Frequencies.BiAnnually: perYearCalc = 2; break
-        case Frequencies.Annually: perYearCalc = 1; break
-        case Frequencies.Monthly:
-        default: perYearCalc = 12; break
-      }
-      const nCalc = durYearsCalc * perYearCalc
-      const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
-      const monthsCalc = getPaymentMonths(nCalc, freqCalc, 0)
-      let stdPVComputed = 0
-      if (monthlyRateCalc <= 0) {
-        stdPVComputed = perPaymentCalc * nCalc
-      } else {
-        for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
-      }
+      const rateValid = Number.isFinite(effRate) && effRate > 0
+      const durValid = Number.isInteger(durYears) && durYears >= 1
+      const freqValid = !!freqCalc
 
-      effectiveStdPlan = {
-        totalPrice,
-        financialDiscountRate: effRate,
-        calculatedPV: Number(stdPVComputed.toFixed(2))
-      }
+      let usedStoredFMpv = false
+      let computedPVEqualsTotalNominal = false
+      let annualRateUsedMeta = null
+      let durationYearsUsedMeta = null
+      let frequencyUsedMeta = null
 
-      // Target Payment After 1 Year (optional, legacy)
-      try {
-        if (standardPricingId) {
-          const t = await pool.query(
-            `SELECT target_payment_after_1y FROM standard_pricing WHERE id=$1`,
-            [Number(standardPricingId)]
-          )
-          if (t.rows[0] && t.rows[0].target_payment_after_1y != null) {
-            effectiveStdPlan.targetPaymentAfter1Year = Number(t.rows[0].target_payment_after_1y)
+      if (!rateValid || !durValid || !freqValid) {
+        // Try FM stored PV
+        let fmPV = null
+        try {
+          if (unitId) {
+            try {
+              const q1 = await pool.query(
+                `SELECT p.calculated_pv
+                 FROM units u
+                 JOIN unit_model_pricing p ON p.model_id = u.model_id
+                 WHERE u.id=$1 AND p.status='approved'
+                 ORDER BY p.id DESC
+                 LIMIT 1`,
+                [Number(unitId)]
+              )
+              fmPV = Number(q1.rows[0]?.calculated_pv) || null
+            } catch (e) { /* ignore */ }
+
+            if (fmPV == null) {
+              try {
+                const q2 = await pool.query(
+                  `SELECT calculated_pv
+                   FROM standard_pricing
+                   WHERE status='approved' AND unit_id=$1
+                   ORDER BY id DESC
+                   LIMIT 1`,
+                  [Number(unitId)]
+                )
+                fmPV = Number(q2.rows[0]?.calculated_pv) || null
+              } catch (e) { /* ignore */ }
+            }
+          } else if (standardPricingId) {
+            try {
+              const q3 = await pool.query(
+                `SELECT calculated_pv
+                 FROM standard_pricing
+                 WHERE id=$1`,
+                [Number(standardPricingId)]
+              )
+              fmPV = Number(q3.rows[0]?.calculated_pv) || null
+            } catch (e) { /* ignore */ }
           }
-        } else if (unitId) {
-          const t2 = await pool.query(
-            `SELECT target_payment_after_1y
-             FROM standard_pricing
-             WHERE status='approved' AND unit_id=$1
-             ORDER BY id DESC
-             LIMIT 1`,
-            [Number(unitId)]
-          )
-          if (t2.rows[0] && t2.rows[0].target_payment_after_1y != null) {
-            effectiveStdPlan.targetPaymentAfter1Year = Number(t2.rows[0].target_payment_after_1y)
+        } catch (e) { /* ignore */ }
+
+        if (fmPV != null && fmPV > 0) {
+          usedStoredFMpv = true
+          annualRateUsedMeta = Number(stdCfg?.std_financial_rate_percent) || null
+          durationYearsUsedMeta = Number(stdCfg?.plan_duration_years) || null
+          frequencyUsedMeta = freqCalc || null
+
+          effectiveStdPlan = {
+            totalPrice,
+            financialDiscountRate: annualRateUsedMeta,
+            calculatedPV: fmPV
           }
+        } else {
+          return bad(res, 422,
+            'Active standard plan is missing or invalid (rate/duration/frequency). Configure it under Top Management → Standard Plan. Alternatively, ensure FM Calculated PV exists for this unit model.'
+          )
         }
-      } catch {}
+      } else {
+        // Compute Standard PV baseline from totalPrice using authoritative rate/duration/frequency
+        const monthlyRateCalc = Math.pow(1 + effRate / 100, 1 / 12) - 1
+        let perYearCalc = 12
+        switch (freqCalc) {
+          case Frequencies.Quarterly: perYearCalc = 4; break
+          case Frequencies.BiAnnually: perYearCalc = 2; break
+          case Frequencies.Annually: perYearCalc = 1; break
+          case Frequencies.Monthly:
+          default: perYearCalc = 12; break
+        }
+        const nCalc = durYears * perYearCalc
+        const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
+        const monthsCalc = getPaymentMonths(nCalc, freqCalc, 0)
+        let stdPVComputed = 0
+        if (monthlyRateCalc <= 0 || nCalc === 0) {
+          stdPVComputed = perPaymentCalc * nCalc
+          computedPVEqualsTotalNominal = true
+        } else {
+          for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
+          computedPVEqualsTotalNominal = false
+        }
+
+        effectiveStdPlan = {
+          totalPrice,
+          financialDiscountRate: effRate,
+          calculatedPV: Number(stdPVComputed.toFixed(2))
+        }
+        annualRateUsedMeta = effRate
+        durationYearsUsedMeta = durYears
+        frequencyUsedMeta = freqCalc
+      }
 
       // Default inputs from stdCfg when not provided
-      if (stdCfg && effInputs.planDurationYears == null) effInputs.planDurationYears = Number(stdCfg.plan_duration_years) || 1
-      if (stdCfg && !effInputs.installmentFrequency) effInputs.installmentFrequency = stdCfg.installment_frequency || 'monthly'
+      if (stdCfg && effInputs.planDurationYears == null && durValid) effInputs.planDurationYears = durYears
+      if (stdCfg && !effInputs.installmentFrequency && freqValid) effInputs.installmentFrequency = freqCalc
     } else {
       // Only accept stdPlan when unitId/standardPricingId not supplied
       if (!isObject(stdPlan) || !isObject(effInputs)) {
@@ -918,7 +1120,7 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
       } catch {}
 
       const durYears = Number(stdCfg?.plan_duration_years ?? effInputs.planDurationYears) || 1
-      const freq = (stdCfg?.installment_frequency || effInputs.installmentFrequency || 'monthly')
+      const freq = normalizeFrequency(stdCfg?.installment_frequency || effInputs.installmentFrequency || 'monthly')
       let perYear = 12
       switch (freq) {
         case Frequencies.Quarterly: perYear = 4; break
@@ -1027,7 +1229,7 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
       ok: true,
       schedule,
       totals,
-      meta: { ...result.meta, npvWarning, rateUsedPercent: annualRate },
+      meta: { ...result.meta, npvWarning, rateUsedPercent: Number(effectiveStdPlan.financialDiscountRate) || null, durationYearsUsed: req._stdMeta?.durationYearsUsed || (effInputs.planDurationYears || null), frequencyUsed: effInputs.installmentFrequency || null, computedPVEqualsTotalNominal: req._stdMeta?.computedPVEqualsTotalNominal || false, usedStoredFMpv: req._stdMeta?.usedStoredFMpv || false },
       evaluation
     })
   } catch (err) {
@@ -1046,7 +1248,7 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
  * }
  * Notes:
  * - Placeholders in the .docx should use Autocrat-style delimiters: <<placeholder_name>>
- * - Service will also add *_words fields for numeric values in data using the requested language
+ * - Service will also add "*_words" fields for numeric values in data using the requested language
  */
 app.post('/api/generate-document', validate(generateDocumentSchema), async (req, res) => {
   try {
