@@ -109,7 +109,7 @@ Health checks:
 
 For calculations to work correctly, the following must be configured:
 
-- Active Standard Plan (Top Management → Standard Plan):
+- Active Standard Plan (Finance → Standard Plan; configured by Financial Manager, approved by Top Management):
   - std_financial_rate_percent: numeric percent (annual), must be > 0
   - plan_duration_years: integer ≥ 1
   - installment_frequency: one of { monthly, quarterly, biannually, annually }
@@ -167,9 +167,7 @@ Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track 
   - Added diagnostics meta in responses: rateUsedPercent, durationYearsUsed, frequencyUsed, computedPVEqualsTotalNominal, usedStoredFMpv.
   - Fixed frequency mismatches by normalizing before switch statements and calculations. Files: api/src/app.js.
 
-- [2025-10-17 14:45] Fix Standard Plan validation and fallbacks:
-  - Reverted zero-rate allowance: Standard Plan now requires annual rate > 0.
-  - If global Standard Plan is missing/invalid, the API now falls back to the approved per-unit/model financial settings (rate/duration/frequency) to compute the authoritative Standard PV baseline, before attempting FM stored PV. This removes false "Active standard plan is missing or invalid" errors when the unit/model has valid approved pricing with 12% annual rate. Files: api/src/app.js.
+- [2025-10-17 15:10] Terminology correction: Standard Plan is configured by the Financial Manager and approved by Top Management. Updated README “Configuration Requirements” to reflect ownership and removed “global” wording.
 
 Future tasks:
 - PDF templates: map offer_date and first_payment_date placeholders in server-side document templates for Pricing Form, Reservation Form, and Contract.
