@@ -573,146 +573,79 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
       let durationYearsUsedMeta = null
       let frequencyUsedMeta = null
 
-      if (!rateValid || !durValid || !freqValid) {
-        // Fallback 1: use per-unit/model approved standard pricing's rate/duration/frequency if present
-        // We already selected priceRow above; try to read its financial settings (if columns exist)
-        let rowRate = null, rowDur = null, rowFreq = null
-        try {
-          // For unitId path, fetch extended fields if available
-          if (unitId) {
-            const rExt = await pool.query(
-              `SELECT p.std_financial_rate_percent, p.plan_duration_years, p.installment_frequency
-               FROM units u
-               JOIN unit_model_pricing p ON p.model_id = u.model_id
-               WHERE u.id=$1 AND p.status='approved'
-               ORDER BY p.id DESC
-               LIMIT 1`,
-              [Number(unitId)]
-            )
-            const rr = rExt.rows[0]
-            if (rr) {
-              rowRate = rr.std_financial_rate_percent != null ? Number(rr.std_financial_rate_percent) : null
-              rowDur = rr.plan_duration_years != null ? Number(rr.plan_duration_years) : null
-              rowFreq = normalizeFrequency(rr.installment_frequency)
-            }
-          }
-          // For standardPricingId path, the record has the fields directly
-          if (standardPricingId && (rowRate == null || rowDur == null || !rowFreq)) {
-            const rSP = await pool.query(
-              `SELECT std_financial_rate_percent, plan_duration_years, installment_frequency
-               FROM standard_pricing
-               WHERE id=$1`,
-              [Number(standardPricingId)]
-            )
-            const sp = rSP.rows[0]
-            if (sp) {
-              rowRate = sp.std_financial_rate_percent != null ? Number(sp.std_financial_rate_percent) : rowRate
-              rowDur = sp.plan_duration_years != null ? Number(sp.plan_duration_years) : rowDur
-              rowFreq = rowFreq || normalizeFrequency(sp.installment_frequency)
-            }
-          }
-        } catch (e) { /* ignore */ }
-
-        const rowRateValid = Number.isFinite(rowRate) && rowRate > 0
-        const rowDurValid = Number.isInteger(rowDur) && rowDur >= 1
-        const rowFreqValid = !!rowFreq
-
-        if (rowRateValid && rowDurValid && rowFreqValid) {
-          // Compute Standard PV baseline using per-record financial settings
-          const monthlyRateCalc = Math.pow(1 + rowRate / 100, 1 / 12) - 1
-          let perYearCalc = 12
-          switch (rowFreq) {
-            case Frequencies.Quarterly: perYearCalc = 4; break
-            case Frequencies.BiAnnually: perYearCalc = 2; break
-            case Frequencies.Annually: perYearCalc = 1; break
-            case Frequencies.Monthly:
-            default: perYearCalc = 12; break
-          }
-          const nCalc = rowDur * perYearCalc
-          const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
-          const monthsCalc = getPaymentMonths(nCalc, rowFreq, 0)
-          let stdPVComputed = 0
-          if (monthlyRateCalc <= 0 || nCalc === 0) {
-            stdPVComputed = perPaymentCalc * nCalc
-            computedPVEqualsTotalNominal = true
-          } else {
-            for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
-            computedPVEqualsTotalNominal = false
-          }
-
-          effectiveStdPlan = {
-            totalPrice,
-            financialDiscountRate: rowRate,
-            calculatedPV: Number(stdPVComputed.toFixed(2))
-          }
-          annualRateUsedMeta = rowRate
-          durationYearsUsedMeta = rowDur
-          frequencyUsedMeta = rowFreq
-        } else {
-          // Fallback 2: use FM stored PV if available; else return 422
-          let fmPV = null
-          try {
-            if (unitId) {
-              // unit_model_pricing.calculated_pv (if column exists)
-              try {
-                const q1 = await pool.query(
-                  `SELECT p.calculated_pv
-                   FROM units u
-                   JOIN unit_model_pricing p ON p.model_id = u.model_id
-                   WHERE u.id=$1 AND p.status='approved'
-                   ORDER BY p.id DESC
-                   LIMIT 1`,
-                  [Number(unitId)]
-                )
-                fmPV = Number(q1.rows[0]?.calculated_pv) || null
-              } catch (e) { /* column may not exist; ignore */ }
-
-              if (fmPV == null) {
-                // standard_pricing.calculated_pv by unit
-                try {
-                  const q2 = await pool.query(
-                    `SELECT calculated_pv
-                     FROM standard_pricing
-                     WHERE status='approved' AND unit_id=$1
-                     ORDER BY id DESC
-                     LIMIT 1`,
-                    [Number(unitId)]
-                  )
-                  fmPV = Number(q2.rows[0]?.calculated_pv) || null
-                } catch (e) { /* ignore */ }
-              }
-            } else if (standardPricingId) {
-              try {
-                const q3 = await pool.query(
-                  `SELECT calculated_pv
-                   FROM standard_pricing
-                   WHERE id=$1`,
-                  [Number(standardPricingId)]
-                )
-                fmPV = Number(q3.rows[0]?.calculated_pv) || null
-              } catch (e) { /* ignore */ }
-            }
-          } catch (e) { /* ignore */ }
-
-          if (fmPV != null && fmPV > 0) {
-            usedStoredFMpv = true
-            annualRateUsedMeta = Number(stdCfg?.std_financial_rate_percent) || null
-            durationYearsUsedMeta = Number(stdCfg?.plan_duration_years) || null
-            frequencyUsedMeta = freqCalc || null
-
-            effectiveStdPlan = {
-              totalPrice,
-              financialDiscountRate: annualRateUsedMeta,
-              calculatedPV: fmPV
-            }
-          } else {
-            return bad(res, 422,
-              'Active standard plan is missing or invalid (rate/duration/frequency). Configure it under Top Management → Standard Plan. Alternatively, ensure FM Calculated PV exists for this unit model.'
-            )
+      // Prefer per-pricing financial settings when available; then fall back to Active Standard Plan; then FM stored PV
+      let rowRate = null, rowDur = null, rowFreq = null
+      try {
+        if (unitId) {
+          const rExt = await pool.query(
+            `SELECT p.std_financial_rate_percent, p.plan_duration_years, p.installment_frequency
+             FROM units u
+             JOIN unit_model_pricing p ON p.model_id = u.model_id
+             WHERE u.id=$1 AND p.status='approved'
+             ORDER BY p.id DESC
+             LIMIT 1`,
+            [Number(unitId)]
+          )
+          const rr = rExt.rows[0]
+          if (rr) {
+            rowRate = rr.std_financial_rate_percent != null ? Number(rr.std_financial_rate_percent) : null
+            rowDur = rr.plan_duration_years != null ? Number(rr.plan_duration_years) : null
+            rowFreq = normalizeFrequency(rr.installment_frequency)
           }
         }
-      } else {
-        // Compute Standard PV baseline using equal installments and normalized frequency from global standard plan
+        if (standardPricingId && (rowRate == null || rowDur == null || !rowFreq)) {
+          const rSP = await pool.query(
+            `SELECT std_financial_rate_percent, plan_duration_years, installment_frequency
+             FROM standard_pricing
+             WHERE id=$1`,
+            [Number(standardPricingId)]
+          )
+          const sp = rSP.rows[0]
+          if (sp) {
+            rowRate = sp.std_financial_rate_percent != null ? Number(sp.std_financial_rate_percent) : rowRate
+            rowDur = sp.plan_duration_years != null ? Number(sp.plan_duration_years) : rowDur
+            rowFreq = rowFreq || normalizeFrequency(sp.installment_frequency)
+          }
+        }
+      } catch (e) { /* ignore */ }
+
+      const rowRateValid = Number.isFinite(rowRate) && rowRate > 0
+      const rowDurValid = Number.isInteger(rowDur) && rowDur >= 1
+      const rowFreqValid = !!rowFreq
+
+      if (rowRateValid && rowDurValid && rowFreqValid) {
+        // Compute using per-record financial settings
+        const monthlyRateCalc = Math.pow(1 + rowRate / 100, 1 / 12) - 1
+        let perYearCalc = 12
+        switch (rowFreq) {
+          case Frequencies.Quarterly: perYearCalc = 4; break
+          case Frequencies.BiAnnually: perYearCalc = 2; break
+          case Frequencies.Annually: perYearCalc = 1; break
+          case Frequencies.Monthly:
+          default: perYearCalc = 12; break
+        }
+        const nCalc = rowDur * perYearCalc
+        const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
+        const monthsCalc = getPaymentMonths(nCalc, rowFreq, 0)
+        let stdPVComputed = 0
+        if (monthlyRateCalc <= 0 || nCalc === 0) {
+          stdPVComputed = perPaymentCalc * nCalc
+          computedPVEqualsTotalNominal = true
+        } else {
+          for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
+          computedPVEqualsTotalNominal = false
+        }
+
+        effectiveStdPlan = {
+          totalPrice,
+          financialDiscountRate: rowRate,
+          calculatedPV: Number(stdPVComputed.toFixed(2))
+        }
+        annualRateUsedMeta = rowRate
+        durationYearsUsedMeta = rowDur
+        frequencyUsedMeta = rowFreq
+      } else if (rateValid && durValid && freqValid) {
+        // Compute using Active Standard Plan
         const monthlyRateCalc = Math.pow(1 + effRate / 100, 1 / 12) - 1
         let perYearCalc = 12
         switch (freqCalc) {
@@ -736,6 +669,66 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
         annualRateUsedMeta = effRate
         durationYearsUsedMeta = durYears
         frequencyUsedMeta = freqCalc
+      } else {
+        // Fallback: FM stored PV
+        let fmPV = null
+        try {
+          if (unitId) {
+            try {
+              const q1 = await pool.query(
+                `SELECT p.calculated_pv
+                 FROM units u
+                 JOIN unit_model_pricing p ON p.model_id = u.model_id
+                 WHERE u.id=$1 AND p.status='approved'
+                 ORDER BY p.id DESC
+                 LIMIT 1`,
+                [Number(unitId)]
+              )
+              fmPV = Number(q1.rows[0]?.calculated_pv) || null
+            } catch (e) { /* column may not exist; ignore */ }
+
+            if (fmPV == null) {
+              try {
+                const q2 = await pool.query(
+                  `SELECT calculated_pv
+                   FROM standard_pricing
+                   WHERE status='approved' AND unit_id=$1
+                   ORDER BY id DESC
+                   LIMIT 1`,
+                  [Number(unitId)]
+                )
+                fmPV = Number(q2.rows[0]?.calculated_pv) || null
+              } catch (e) { /* ignore */ }
+            }
+          } else if (standardPricingId) {
+            try {
+              const q3 = await pool.query(
+                `SELECT calculated_pv
+                 FROM standard_pricing
+                 WHERE id=$1`,
+                [Number(standardPricingId)]
+              )
+              fmPV = Number(q3.rows[0]?.calculated_pv) || null
+            } catch (e) { /* ignore */ }
+          }
+        } catch (e) { /* ignore */ }
+
+        if (fmPV != null && fmPV > 0) {
+          usedStoredFMpv = true
+          annualRateUsedMeta = Number(stdCfg?.std_financial_rate_percent) || null
+          durationYearsUsedMeta = Number(stdCfg?.plan_duration_years) || null
+          frequencyUsedMeta = freqCalc || null
+
+          effectiveStdPlan = {
+            totalPrice,
+            financialDiscountRate: annualRateUsedMeta,
+            calculatedPV: fmPV
+          }
+        } else {
+          return bad(res, 422,
+            'Active standard plan is missing or invalid (rate/duration/frequency). Configure it under Top Management → Standard Plan. Alternatively, ensure FM Calculated PV exists for this unit model.'
+          )
+        }
       }
 
       // Default inputs fields from standard if not provided
@@ -930,78 +923,167 @@ app.post('/api/generate-plan', validate(generatePlanSchema), async (req, res) =>
       let durationYearsUsedMeta = null
       let frequencyUsedMeta = null
 
-      if (!rateValid || !durValid || !freqValid) {
-        // Fallback 1: use per-unit/model approved standard pricing's rate/duration/frequency if present
-        let rowRate = null, rowDur = null, rowFreq = null
+      // Prefer per-pricing financial settings when available; then Active Standard Plan; then FM stored PV
+      let rowRate = null, rowDur = null, rowFreq = null
+      try {
+        if (unitId) {
+          const rExt = await pool.query(
+            `SELECT p.std_financial_rate_percent, p.plan_duration_years, p.installment_frequency
+             FROM units u
+             JOIN unit_model_pricing p ON p.model_id = u.model_id
+             WHERE u.id=$1 AND p.status='approved'
+             ORDER BY p.id DESC
+             LIMIT 1`,
+            [Number(unitId)]
+          )
+          const rr = rExt.rows[0]
+          if (rr) {
+            rowRate = rr.std_financial_rate_percent != null ? Number(rr.std_financial_rate_percent) : null
+            rowDur = rr.plan_duration_years != null ? Number(rr.plan_duration_years) : null
+            rowFreq = normalizeFrequency(rr.installment_frequency)
+          }
+        }
+        if (standardPricingId && (rowRate == null || rowDur == null || !rowFreq)) {
+          const rSP = await pool.query(
+            `SELECT std_financial_rate_percent, plan_duration_years, installment_frequency
+             FROM standard_pricing
+             WHERE id=$1`,
+            [Number(standardPricingId)]
+          )
+          const sp = rSP.rows[0]
+          if (sp) {
+            rowRate = sp.std_financial_rate_percent != null ? Number(sp.std_financial_rate_percent) : rowRate
+            rowDur = sp.plan_duration_years != null ? Number(sp.plan_duration_years) : rowDur
+            rowFreq = rowFreq || normalizeFrequency(sp.installment_frequency)
+          }
+        }
+      } catch (e) { /* ignore */ }
+
+      const rowRateValid = Number.isFinite(rowRate) && rowRate > 0
+      const rowDurValid = Number.isInteger(rowDur) && rowDur >= 1
+      const rowFreqValid = !!rowFreq
+
+      if (rowRateValid && rowDurValid && rowFreqValid) {
+        const monthlyRateCalc = Math.pow(1 + rowRate / 100, 1 / 12) - 1
+        let perYearCalc = 12
+        switch (rowFreq) {
+          case Frequencies.Quarterly: perYearCalc = 4; break
+          case Frequencies.BiAnnually: perYearCalc = 2; break
+          case Frequencies.Annually: perYearCalc = 1; break
+          case Frequencies.Monthly:
+          default: perYearCalc = 12; break
+        }
+        const nCalc = rowDur * perYearCalc
+        const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
+        const monthsCalc = getPaymentMonths(nCalc, rowFreq, 0)
+        let stdPVComputed = 0
+        if (monthlyRateCalc <= 0 || nCalc === 0) {
+          stdPVComputed = perPaymentCalc * nCalc
+          computedPVEqualsTotalNominal = true
+        } else {
+          for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
+          computedPVEqualsTotalNominal = false
+        }
+
+        effectiveStdPlan = {
+          totalPrice,
+          financialDiscountRate: rowRate,
+          calculatedPV: Number(stdPVComputed.toFixed(2))
+        }
+        annualRateUsedMeta = rowRate
+        durationYearsUsedMeta = rowDur
+        frequencyUsedMeta = rowFreq
+      } else if (rateValid && durValid && freqValid) {
+        const monthlyRateCalc = Math.pow(1 + effRate / 100, 1 / 12) - 1
+        let perYearCalc = 12
+        switch (freqCalc) {
+          case Frequencies.Quarterly: perYearCalc = 4; break
+          case Frequencies.BiAnnually: perYearCalc = 2; break
+          case Frequencies.Annually: perYearCalc = 1; break
+          case Frequencies.Monthly:
+          default: perYearCalc = 12; break
+        }
+        const nCalc = durYears * perYearCalc
+        const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
+        const monthsCalc = getPaymentMonths(nCalc, freqCalc, 0)
+        let stdPVComputed = 0
+        if (monthlyRateCalc <= 0 || nCalc === 0) {
+          stdPVComputed = perPaymentCalc * nCalc
+          computedPVEqualsTotalNominal = true
+        } else {
+          for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
+          computedPVEqualsTotalNominal = false
+        }
+
+        effectiveStdPlan = {
+          totalPrice,
+          financialDiscountRate: effRate,
+          calculatedPV: Number(stdPVComputed.toFixed(2))
+        }
+        annualRateUsedMeta = effRate
+        durationYearsUsedMeta = durYears
+        frequencyUsedMeta = freqCalc
+      } else {
+        // Fallback: FM stored PV
+        let fmPV = null
         try {
           if (unitId) {
-            const rExt = await pool.query(
-              `SELECT p.std_financial_rate_percent, p.plan_duration_years, p.installment_frequency
-               FROM units u
-               JOIN unit_model_pricing p ON p.model_id = u.model_id
-               WHERE u.id=$1 AND p.status='approved'
-               ORDER BY p.id DESC
-               LIMIT 1`,
-              [Number(unitId)]
-            )
-            const rr = rExt.rows[0]
-            if (rr) {
-              rowRate = rr.std_financial_rate_percent != null ? Number(rr.std_financial_rate_percent) : null
-              rowDur = rr.plan_duration_years != null ? Number(rr.plan_duration_years) : null
-              rowFreq = normalizeFrequency(rr.installment_frequency)
+            try {
+              const q1 = await pool.query(
+                `SELECT p.calculated_pv
+                 FROM units u
+                 JOIN unit_model_pricing p ON p.model_id = u.model_id
+                 WHERE u.id=$1 AND p.status='approved'
+                 ORDER BY p.id DESC
+                 LIMIT 1`,
+                [Number(unitId)]
+              )
+              fmPV = Number(q1.rows[0]?.calculated_pv) || null
+            } catch (e) { /* ignore */ }
+
+            if (fmPV == null) {
+              try {
+                const q2 = await pool.query(
+                  `SELECT calculated_pv
+                   FROM standard_pricing
+                   WHERE status='approved' AND unit_id=$1
+                   ORDER BY id DESC
+                   LIMIT 1`,
+                  [Number(unitId)]
+                )
+                fmPV = Number(q2.rows[0]?.calculated_pv) || null
+              } catch (e) { /* ignore */ }
             }
-          }
-          if (standardPricingId && (rowRate == null || rowDur == null || !rowFreq)) {
-            const rSP = await pool.query(
-              `SELECT std_financial_rate_percent, plan_duration_years, installment_frequency
-               FROM standard_pricing
-               WHERE id=$1`,
-              [Number(standardPricingId)]
-            )
-            const sp = rSP.rows[0]
-            if (sp) {
-              rowRate = sp.std_financial_rate_percent != null ? Number(sp.std_financial_rate_percent) : rowRate
-              rowDur = sp.plan_duration_years != null ? Number(sp.plan_duration_years) : rowDur
-              rowFreq = rowFreq || normalizeFrequency(sp.installment_frequency)
-            }
+          } else if (standardPricingId) {
+            try {
+              const q3 = await pool.query(
+                `SELECT calculated_pv
+                 FROM standard_pricing
+                 WHERE id=$1`,
+                [Number(standardPricingId)]
+              )
+              fmPV = Number(q3.rows[0]?.calculated_pv) || null
+            } catch (e) { /* ignore */ }
           }
         } catch (e) { /* ignore */ }
 
-        const rowRateValid = Number.isFinite(rowRate) && rowRate > 0
-        const rowDurValid = Number.isInteger(rowDur) && rowDur >= 1
-        const rowFreqValid = !!rowFreq
-
-        if (rowRateValid && rowDurValid && rowFreqValid) {
-          const monthlyRateCalc = Math.pow(1 + rowRate / 100, 1 / 12) - 1
-          let perYearCalc = 12
-          switch (rowFreq) {
-            case Frequencies.Quarterly: perYearCalc = 4; break
-            case Frequencies.BiAnnually: perYearCalc = 2; break
-            case Frequencies.Annually: perYearCalc = 1; break
-            case Frequencies.Monthly:
-            default: perYearCalc = 12; break
-          }
-          const nCalc = rowDur * perYearCalc
-          const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
-          const monthsCalc = getPaymentMonths(nCalc, rowFreq, 0)
-          let stdPVComputed = 0
-          if (monthlyRateCalc <= 0 || nCalc === 0) {
-            stdPVComputed = perPaymentCalc * nCalc
-            computedPVEqualsTotalNominal = true
-          } else {
-            for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
-            computedPVEqualsTotalNominal = false
-          }
+        if (fmPV != null && fmPV > 0) {
+          usedStoredFMpv = true
+          annualRateUsedMeta = Number(stdCfg?.std_financial_rate_percent) || null
+          durationYearsUsedMeta = Number(stdCfg?.plan_duration_years) || null
+          frequencyUsedMeta = freqCalc || null
 
           effectiveStdPlan = {
             totalPrice,
-            financialDiscountRate: rowRate,
-            calculatedPV: Number(stdPVComputed.toFixed(2))
+            financialDiscountRate: annualRateUsedMeta,
+            calculatedPV: fmPV
           }
-          annualRateUsedMeta = rowRate
-          durationYearsUsedMeta = rowDur
-          frequencyUsedMeta = rowFreq
         } else {
+          return bad(res, 422,
+            'Active standard plan is missing or invalid (rate/duration/frequency). Configure it under Top Management → Standard Plan. Alternatively, ensure FM Calculated PV exists for this unit model.'
+          )
+        }
+      } else {
           // Fallback 2: use FM stored PV if available; else return 422
           let fmPV = null
           try {
