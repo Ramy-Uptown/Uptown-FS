@@ -14,6 +14,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   const typingTimerRef = useRef(null)
   // Track focus transitions (short window to guard blur->focus race)
   const [lastFocusChangeAt, setLastFocusChangeAt] = useState(0)
+  // Track pointer-down window to guard initial click focus
+  const [pointerDownAt, setPointerDownAt] = useState(0)
   // Ref to the form section to check whether the browser focus is inside this form
   const formRef = useRef(null)
 
@@ -21,7 +23,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   useEffect(() => {
     const now = Date.now()
     const recentlyEditing = (now - lastEditAt) < 1200 // extend debounce to 1.2s to avoid race with external syncs
-    const inFocusTransitionWindow = (now - lastFocusChangeAt) < 300 // small guard over blur/focus shuffle
+    const inFocusTransitionWindow = (now - lastFocusChangeAt) < 300 // guard blur/focus shuffle
+    const inPointerDownWindow = (now - pointerDownAt) < 300 // guard initial click down within form
     const activeEl = typeof document !== 'undefined' ? document.activeElement : null
 
     // Robust focus detection using :focus-within and explicit activeElement
@@ -43,7 +46,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
         (!!activeEl && formRef.current.contains(activeEl) && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) ||
         !!anyFocusedEl)
 
-    const shouldSkip = !!focusedKey || recentlyEditing || typing || isFocusedInForm || inFocusTransitionWindow
+    const shouldSkip = !!focusedKey || recentlyEditing || typing || isFocusedInForm || inFocusTransitionWindow || inPointerDownWindow
 
     if (shouldSkip) {
       console.log('[ClientInfoForm] Skip parent->local sync due to focus or recent edit', {
@@ -53,6 +56,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
         isFocusedInForm,
         focusWithin,
         inFocusTransitionWindow,
+        inPointerDownWindow,
         activeTag: activeEl?.tagName,
         activeId: activeEl?.id,
         anyFocusedTag: anyFocusedEl?.tagName,
@@ -68,6 +72,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
       isFocusedInForm,
       focusWithin,
       inFocusTransitionWindow,
+      inPointerDownWindow,
       activeTag: activeEl?.tagName,
       activeId: activeEl?.id,
       anyFocusedTag: anyFocusedEl?.tagName,
@@ -77,7 +82,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
     setLocal(prev => {
       return { ...prev, ...clientInfo }
     })
-  }, [clientInfo, focusedKey, lastEditAt, typing, lastFocusChangeAt])
+  }, [clientInfo, focusedKey, lastEditAt, typing, lastFocusChangeAt, pointerDownAt])
 
   // Commit a single field to parent state
   const commit = (key) => {
@@ -232,7 +237,13 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   )
 
   return (
-    <section ref={formRef} style={{ ...styles.section }} dir={isRTL(language) ? 'rtl' : 'ltr'}>
+    <section
+      ref={formRef}
+      onMouseDown={() => { setPointerDownAt(Date.now()); setLastFocusChangeAt(Date.now()) }}
+      onFocusCapture={() => setLastFocusChangeAt(Date.now())}
+      style={{ ...styles.section }}
+      dir={isRTL(language) ? 'rtl' : 'ltr'}
+    >
       <h2 style={{ ...styles.sectionTitle, textAlign: isRTL(language) ? 'right' : 'left' }}>{t('client_information', language)}</h2>
       <Grid>{Fields}</Grid>
       {/* Inline scanner (OCR) below client fields */}
