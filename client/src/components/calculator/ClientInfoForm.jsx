@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react'
-import ClientIdScanner from '../ocr/ClientIdScanner.jsx'
+import React, { useEffect, useRef, useState, lazy, Suspense } from 'react'
+const ClientIdScanner = lazy(() => import('../ocr/ClientIdScanner.jsx'))
 import { t, isRTL } from '../../lib/i18n.js'
 
 function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language = 'en' }) {
@@ -318,12 +318,14 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
       {/* OCR module (lazy mount only when OCR mode) */}
       {entryMode === 'ocr' && (
         <div style={{ marginTop: 12, padding: 12, border: '1px solid #ead9bd', borderRadius: 10, background: '#fbfbf7' }}>
-          <ClientIdScanner
-            styles={styles}
-            onStart={handleOCRStart}
-            onApply={handleOCRApply}
-            onError={handleOCRError}
-          />
+          <Suspense fallback={<small style={{ color: '#6b7280' }}>Loading OCR module…</small>}>
+            <ClientIdScanner
+              styles={styles}
+              onStart={handleOCRStart}
+              onApply={handleOCRApply}
+              onError={handleOCRError}
+            />
+          </Suspense>
         </div>
       )}
     </section>
