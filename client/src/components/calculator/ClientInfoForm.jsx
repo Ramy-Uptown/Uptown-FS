@@ -109,7 +109,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={textarea()}
           value={local.address || ''}
           onChange={e => setLocal(s => ({ ...s, address: e.target.value }))}
-          onFocus={()=> commit('address')}
+          onFocus={() => setFocusedKey('address')}
+          onBlur={() => { commit('address'); setFocusedKey(null) }}
         />
       </div>
       <div>
