@@ -121,6 +121,10 @@ If no active Standard Plan exists or its values are invalid, the server will att
 
 7) Recent Fixes and Changes
 Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track when changes were applied.
+- [2025-10-18 03:14] Lazy-loaded OCR module: ClientInfoForm now dynamically imports the OCR scanner with React.lazy + Suspense, reducing initial bundle size. File: client/src/components/calculator/ClientInfoForm.jsx.
+- [2025-10-18 03:12] Modular OCR: Moved ClientIdScanner to client/src/components/ocr/ClientIdScanner.jsx and refactored to use local callbacks (onStart/onApply/onError) instead of global window hooks. This improves modularity and avoids side-effects.
+- [2025-10-18 03:10] Client Info entry modes (Manual vs OCR-assisted): Added a user toggle to select Manual entry or OCR-assisted. In OCR-assisted mode, only ID‑derived fields (buyer_name, nationality, id_or_passport, id_issue_date, birth_date, address) are populated; phones (phone_primary, phone_secondary) and email remain strictly manual. During OCR processing, auto‑filled fields are temporarily disabled to prevent focus/typing races; upon completion, a selective merge applies updates without touching manual‑only fields. Files: client/src/components/calculator/ClientInfoForm.jsx, client/src/components/ocr/ClientIdScanner.jsx.
+- [2025-10-18 02:55] Client Information — stronger typing protection: Iteratively improved guards (typing flag, :focus-within detection, short focus transition window) and added selective parent→local merge to avoid overwriting the currently active field. File: client/src/components/calculator/ClientInfoForm.jsx.
 - [2025-10-18 02:45] Client Information typing stability — enhanced guard + logging: Added a debounce-based guard in ClientInfoForm.jsx to suppress parent→local sync for 500ms after the last keystroke or while a field is focused. Also instrumented temporary console logging inside the sync useEffect to confirm when syncs are skipped vs applied, aiding field testing. This aims to prevent the “one-character-only” typing interruption caused by external state updates or rapid re-renders. File: client/src/components/calculator/ClientInfoForm.jsx.
 - [2025-10-18 02:30] Target PV correction (Modes 2/4): The API now computes the Standard PV target as the true Present Value of the standard plan structure including its Down Payment, not the equal-installments-only baseline. In /api/calculate and /api/generate-plan, when resolving effectiveStdPlan for unit/model flows, we run the standard plan parameters through the engine (EvaluateCustomPrice) using the request’s Down Payment definition to derive calculatedPV. This fixes the issue where entering the standard Down Payment amount in Target-PV modes solved to a lower total price. With this change, using the standard plan’s DP, duration, and frequency in Mode 2 yields a solved New Price equal to the Standard Total Price. Files: api/src/app.js.
 - [2025-10-18 00:00] Standard Pricing PV source fixed: Removed client-side duplicate PV formula in StandardPricing.jsx and now fetch the authoritative PV from the backend (/api/calculate) whenever form inputs change (price components, DP%, years, frequency, rate). Previously, the form used a local calculatePV that only considered Base Unit Price, causing mismatches (e.g., 4.3M total, 20% rate, 20% DP, 6y monthly showed ~2,730,836.86 instead of the backend’s ~2,937,031.55). Updated table rows as well to fetch and display authoritative PV per row using the same backend endpoint for consistency across the page.
@@ -166,7 +170,7 @@ Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track 
 - Std Calculated PV read-only: The “Std Calculated PV” field in the calculator is now read-only and auto-derived from Standard Total Price, rate, duration and frequency. File: client/src/components/calculator/InputsForm.jsx.
 - [2025-10-17 16:25] Client banner for missing per-pricing terms:
   - Calculator page shows a red policy banner when a unit/model is selected and the API returns 422 requiring per-pricing terms.
-  - Message instructs to configure Annual Rate, Duration, and Frequency on the Standard Pricing page for that unit model.
+  - Message instructs to configure Annual Financial Rate, Duration, and Frequency on the Standard Pricing page for that unit model.
   File: client/src/App.jsx.
 - Header stays LTR: Top navigation/header is always LTR even when Arabic is selected, keeping consultant layout stable.
 - Payment Schedule Arabic polish: “الوصف” column shows Arabic labels for schedule rows and is center‑aligned in Arabic.
@@ -182,6 +186,14 @@ Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track 
 
 Future tasks:
 - PDF templates: map offer_date and first_payment_date placeholders in server-side document templates for Pricing Form, Reservation Form, and Contract.
+
+Future Enhancements (proposed):
+- Optional pending external update banner in ClientInfoForm: “New client data available — Apply now or after editing” with an explicit apply action.
+- Versioned, deferred-apply strategy for external updates (e.g., OCR) across the app to avoid focus/typing races without timing heuristics.
+- Further code-splitting: lazy-load larger calculator modules (UnitInfoSection, ContractDetailsForm) conditioned on role/mode to reduce initial bundle size.
+- Tests: add React Testing Library unit/integration tests for form sync behavior (typing uninterrupted, OCR apply selective merge).
+- Incremental TypeScript adoption for calculator payloads and API responses to improve safety and DX.
+- Accessibility pass: ensure disabled states and status messages (OCR processing) are announced properly via ARIA.
 
 ---
 
