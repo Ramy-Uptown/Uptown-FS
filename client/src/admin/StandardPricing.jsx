@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { fetchWithAuth } from '../lib/apiClient.js';
 import { notifyError, notifySuccess } from '../lib/notifications.js';
 import LoadingButton from '../components/LoadingButton.jsx';
@@ -8,51 +8,7 @@ import BrandHeader from '../lib/BrandHeader.jsx';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-function getPaymentMonths(numberOfInstallments, frequency) {
-  const out = [];
-  if (!numberOfInstallments) return out;
-  let period;
-  let first = 1;
-  switch (frequency) {
-    case 'monthly': period = 1; first = 1; break;
-    case 'quarterly': period = 3; first = 3; break;
-    case 'bi-annually': period = 6; first = 6; break;
-    case 'annually': period = 12; first = 12; break;
-    default: period = 1; first = 1;
-  }
-  out.push(first);
-  for (let i = 1; i < numberOfInstallments; i++) {
-    out.push(out[i - 1] + period);
-  }
-  return out;
-}
 
-function calculatePV(totalPrice, dpPercent, years, frequency, annualRate) {
-  const n = Number(totalPrice) || 0;
-  const dpPerc = Number(dpPercent) / 100 || 0;
-  const rate = Number(annualRate) / 100 || 0;
-  const downPayment = n * dpPerc;
-  const loan = n - downPayment;
-
-  let installments = 0;
-  if (years > 0) {
-    if (frequency === 'monthly') installments = years * 12;
-    else if (frequency === 'quarterly') installments = years * 4;
-    else if (frequency === 'bi-annually') installments = years * 2;
-    else if (frequency === 'annually') installments = years * 1;
-  }
-
-  if (installments <= 0) return downPayment;
-
-  const perInstallment = loan / installments;
-  const months = getPaymentMonths(installments, frequency);
-  const monthlyRate = Math.pow(1 + rate, 1 / 12) - 1;
-  let pv = downPayment;
-  for (const m of months) {
-    pv += perInstallment / Math.pow(1 + monthlyRate, m);
-  }
-  return pv;
-}
 
 export default function StandardPricing() {
   const [models, setModels] = useState([]);
@@ -230,10 +186,82 @@ export default function StandardPricing() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [rejectReasons, setRejectReasons] = useState({});
 
-  const pv = useMemo(() => {
-    const total = Number(stdPrice) || 0;
-    return calculatePV(total, dpPercent, Number(years), frequency, annualRate);
-  }, [stdPrice, dpPercent, years, frequency, annualRate]);
+  const [pv, setPv] = useState(0);
+  const [pvError, setPvError] = useState('');
+  const pvDebounce = useRef(null);
+
+  useEffect(() => {
+    if (pvDebounce.current) clearTimeout(pvDebounce.current);
+
+    pvDebounce.current = setTimeout(async () => {
+      try {
+        const total =
+          (Number(stdPrice || 0)) +
+          (selectedModel?.has_garden ? Number(gardenPrice || 0) : 0) +
+          (selectedModel?.has_roof ? Number(roofPrice || 0) : 0) +
+          (Number(storagePrice || 0)) +
+          (Number(garagePrice || 0));
+
+        const yrs = Number(years) || 0;
+        const rate = Number(annualRate);
+        const freq = String(frequency || 'monthly');
+
+        // Basic guards
+        if (!(total > 0) || !(yrs > 0) || !['monthly','quarterly','bi-annually','annually'].includes(freq)) {
+          setPv(0);
+          setPvError('');
+          return;
+        }
+
+        // Build request mirroring LivePreview pattern, using authoritative backend engine
+        const body = {
+          mode: 'evaluateCustomPrice',
+          stdPlan: {
+            totalPrice: total,
+            financialDiscountRate: rate,
+            calculatedPV: 0
+          },
+          inputs: {
+            salesDiscountPercent: 0,
+            dpType: 'percentage',
+            downPaymentValue: Number(dpPercent) || 0,
+            planDurationYears: yrs,
+            installmentFrequency: freq,
+            additionalHandoverPayment: 0,
+            handoverYear: 1,
+            splitFirstYearPayments: false,
+            firstYearPayments: [],
+            subsequentYears: []
+          }
+        };
+
+        const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await resp.json().catch(() => null);
+
+        if (!resp.ok || !data) {
+          setPv(0);
+          setPvError(data?.error?.message || 'Failed to calculate PV');
+          return;
+        }
+
+        const calcPv = Number(data?.data?.calculatedPV) || 0;
+        setPv(calcPv);
+        setPvError('');
+      } catch (e) {
+        setPv(0);
+        setPvError('Failed to calculate PV');
+      }
+    }, 400);
+
+    return () => {
+      if (pvDebounce.current) clearTimeout(pvDebounce.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stdPrice, gardenPrice, roofPrice, storagePrice, garagePrice, dpPercent, years, frequency, annualRate, selectedModel]);
 
   const installmentsCount = useMemo(() => {
     const y = Number(years) || 0;
