@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import ClientIdScanner from './ClientIdScanner.jsx'
 import { t, isRTL } from '../../lib/i18n.js'
 
@@ -9,19 +9,41 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   const [focusedKey, setFocusedKey] = useState(null)
   // Track recent edits to add a debounce window where parent sync is ignored
   const [lastEditAt, setLastEditAt] = useState(0)
+  // Ref to the form section to check whether the browser focus is inside this form
+  const formRef = useRef(null)
 
   // Sync local buffer when parent clientInfo changes (e.g., OCR apply or snapshot load)
   useEffect(() => {
     const now = Date.now()
     const recentlyEditing = (now - lastEditAt) < 500 // 0.5s debounce after last keystroke
-    const shouldSkip = !!focusedKey || recentlyEditing
+    const activeEl = typeof document !== 'undefined' ? document.activeElement : null
+    const isFocusedInForm =
+      !!formRef.current &&
+      !!activeEl &&
+      formRef.current.contains(activeEl) &&
+      (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')
+
+    const shouldSkip = !!focusedKey || recentlyEditing || isFocusedInForm
 
     if (shouldSkip) {
-      console.log('[ClientInfoForm] Skip parent->local sync due to focus or recent edit', { focusedKey, recentlyEditing })
+      console.log('[ClientInfoForm] Skip parent->local sync due to focus or recent edit', {
+        focusedKey,
+        recentlyEditing,
+        isFocusedInForm,
+        activeTag: activeEl?.tagName,
+        activeId: activeEl?.id,
+      })
       return
     }
 
-    console.log('[ClientInfoForm] Apply parent->local sync', { focusedKey, recentlyEditing, clientInfo })
+    console.log('[ClientInfoForm] Apply parent->local sync', {
+      focusedKey,
+      recentlyEditing,
+      isFocusedInForm,
+      activeTag: activeEl?.tagName,
+      activeId: activeEl?.id,
+      clientInfo,
+    })
     setLocal(prev => {
       return { ...prev, ...clientInfo }
     })
@@ -169,7 +191,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   )
 
   return (
-    <section style={{ ...styles.section }} dir={isRTL(language) ? 'rtl' : 'ltr'}>
+    <section ref={formRef} style={{ ...styles.section }} dir={isRTL(language) ? 'rtl' : 'ltr'}>
       <h2 style={{ ...styles.sectionTitle, textAlign: isRTL(language) ? 'right' : 'left' }}>{t('client_information', language)}</h2>
       <Grid>{Fields}</Grid>
       {/* Inline scanner (OCR) below client fields */}
