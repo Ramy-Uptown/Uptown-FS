@@ -9,29 +9,45 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   const [focusedKey, setFocusedKey] = useState(null)
   // Track recent edits to add a debounce window where parent sync is ignored
   const [lastEditAt, setLastEditAt] = useState(0)
+  // Track active typing via onChange with inactivity timeout
+  const [typing, setTyping] = useState(false)
+  const typingTimerRef = useRef(null)
   // Ref to the form section to check whether the browser focus is inside this form
   const formRef = useRef(null)
 
   // Sync local buffer when parent clientInfo changes (e.g., OCR apply or snapshot load)
   useEffect(() => {
     const now = Date.now()
-    const recentlyEditing = (now - lastEditAt) < 500 // 0.5s debounce after last keystroke
+    const recentlyEditing = (now - lastEditAt) < 1200 // extend debounce to 1.2s to avoid race with external syncs
     const activeEl = typeof document !== 'undefined' ? document.activeElement : null
+
+    // Fallback check: is any input/textarea currently focused within the form?
+    const anyFocusedEl = (() => {
+      if (!formRef.current) return null
+      try {
+        return formRef.current.querySelector('input:focus, textarea:focus')
+      } catch {
+        return null
+      }
+    })()
+
     const isFocusedInForm =
       !!formRef.current &&
-      !!activeEl &&
-      formRef.current.contains(activeEl) &&
-      (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')
+      ((!!activeEl && formRef.current.contains(activeEl) && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA'))
+        || !!anyFocusedEl)
 
-    const shouldSkip = !!focusedKey || recentlyEditing || isFocusedInForm
+    const shouldSkip = !!focusedKey || recentlyEditing || isFocusedInForm || typing
 
     if (shouldSkip) {
       console.log('[ClientInfoForm] Skip parent->local sync due to focus or recent edit', {
         focusedKey,
         recentlyEditing,
         isFocusedInForm,
+        typing,
         activeTag: activeEl?.tagName,
         activeId: activeEl?.id,
+        anyFocusedTag: anyFocusedEl?.tagName,
+        anyFocusedId: anyFocusedEl?.id,
       })
       return
     }
@@ -40,14 +56,17 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
       focusedKey,
       recentlyEditing,
       isFocusedInForm,
+      typing,
       activeTag: activeEl?.tagName,
       activeId: activeEl?.id,
+      anyFocusedTag: anyFocusedEl?.tagName,
+      anyFocusedId: anyFocusedEl?.id,
       clientInfo,
     })
     setLocal(prev => {
       return { ...prev, ...clientInfo }
     })
-  }, [clientInfo, focusedKey, lastEditAt])
+  }, [clientInfo, focusedKey, lastEditAt, typing])
 
   // Commit a single field to parent state
   const commit = (key) => {
@@ -57,6 +76,17 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   // Shared input props
   const input = (err) => styles.input ? styles.input(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
   const textarea = (err) => styles.textarea ? styles.textarea(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff', minHeight: 70, resize: 'vertical' }
+
+  // Helper to mark typing activity and debounce its reset
+  const markTyping = () => {
+    setLastEditAt(Date.now())
+    setTyping(true)
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+    typingTimerRef.current = setTimeout(() => {
+      setTyping(false)
+      typingTimerRef.current = null
+    }, 1000)
+  }
 
   const Grid = ({ children }) => <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>{children}</div>
 
@@ -71,7 +101,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="name"
           style={input()}
           value={local.buyer_name || ''}
-          onChange={e => { setLocal(s => ({ ...s, buyer_name: e.target.value })); setLastEditAt(Date.now()) }}
+          onChange={e => { setLocal(s => ({ ...s, buyer_name: e.target.value })); markTyping() }}
           onFocus={() => setFocusedKey('buyer_name')}
           onBlur={() => { commit('buyer_name'); setFocusedKey(null) }}
         />
@@ -85,7 +115,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="country-name"
           style={input()}
           value={local.nationality || ''}
-          onChange={e => { setLocal(s => ({ ...s, nationality: e.target.value })); setLastEditAt(Date.now()) }}
+          onChange={e => { setLocal(s => ({ ...s, nationality: e.target.value })); markTyping() }}
           onFocus={() => setFocusedKey('nationality')}
           onBlur={() => { commit('nationality'); setFocusedKey(null) }}
         />
@@ -99,7 +129,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="off"
           style={input()}
           value={local.id_or_passport || ''}
-          onChange={e => { setLocal(s => ({ ...s, id_or_passport: e.target.value })); setLastEditAt(Date.now()) }}
+          onChange={e => { setLocal(s => ({ ...s, id_or_passport: e.target.value })); markTyping() }}
           onFocus={() => setFocusedKey('id_or_passport')}
           onBlur={() => { commit('id_or_passport'); setFocusedKey(null) }}
         />
@@ -112,7 +142,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           type="date"
           style={input()}
           value={local.id_issue_date || ''}
-          onChange={e => { setLocal(s => ({ ...s, id_issue_date: e.target.value })); setLastEditAt(Date.now()) }}
+          onChange={e => { setLocal(s => ({ ...s, id_issue_date: e.target.value })); markTyping() }}
           onFocus={() => setFocusedKey('id_issue_date')}
           onBlur={() => { commit('id_issue_date'); setFocusedKey(null) }}
         />
@@ -126,7 +156,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="bday"
           style={input()}
           value={local.birth_date || ''}
-          onChange={e => { setLocal(s => ({ ...s, birth_date: e.target.value })); setLastEditAt(Date.now()) }}
+          onChange={e => { setLocal(s => ({ ...s, birth_date: e.target.value })); markTyping() }}
           onFocus={() => setFocusedKey('birth_date')}
           onBlur={() => { commit('birth_date'); setFocusedKey(null) }}
         />
@@ -140,7 +170,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="street-address"
           style={textarea()}
           value={local.address || ''}
-          onChange={e => { setLocal(s => ({ ...s, address: e.target.value })); setLastEditAt(Date.now()) }}
+          onChange={e => { setLocal(s => ({ ...s, address: e.target.value })); markTyping() }}
           onFocus={() => setFocusedKey('address')}
           onBlur={() => { commit('address'); setFocusedKey(null) }}
         />
@@ -154,7 +184,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="tel"
           style={input()}
           value={local.phone_primary || ''}
-          onChange={e => { setLocal(s => ({ ...s, phone_primary: e.target.value })); setLastEditAt(Date.now()) }}
+          onChange={e => { setLocal(s => ({ ...s, phone_primary: e.target.value })); markTyping() }}
           onFocus={() => setFocusedKey('phone_primary')}
           onBlur={() => { commit('phone_primary'); setFocusedKey(null) }}
         />
@@ -168,7 +198,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="tel-national"
           style={input()}
           value={local.phone_secondary || ''}
-          onChange={e => { setLocal(s => ({ ...s, phone_secondary: e.target.value })); setLastEditAt(Date.now()) }}
+          onChange={e => { setLocal(s => ({ ...s, phone_secondary: e.target.value })); markTyping() }}
           onFocus={() => setFocusedKey('phone_secondary')}
           onBlur={() => { commit('phone_secondary'); setFocusedKey(null) }}
         />
@@ -182,7 +212,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="email"
           style={input()}
           value={local.email || ''}
-          onChange={e => { setLocal(s => ({ ...s, email: e.target.value })); setLastEditAt(Date.now()) }}
+          onChange={e => { setLocal(s => ({ ...s, email: e.target.value })); markTyping() }}
           onFocus={() => setFocusedKey('email')}
           onBlur={() => { commit('email'); setFocusedKey(null) }}
         />
