@@ -65,7 +65,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           value={local.nationality || ''}
           onChange={e => { setLocal(s => ({ ...s, nationality: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('nationality')}
-          onBlur={() => {sedKey(null) }}
+          onBlur={() => { commit('nationality'); setFocusedKey(null) }}
         />
       </div>
       <div>
@@ -93,8 +93,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           onChange={e => { setLocal(s => ({ ...s, id_issue_date: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('id_issue_date')}
           onBlur={() => { commit('id_issue_date'); setFocusedKey(null) }}
-      _code  new/</>
-      </div>
+        />
+    </</div</   </div>
       <div>
         <label htmlFor="birth_date" style={styles.label}>{t('birth_date', language)} (<span style={styles.arInline}>[[تاريخ الميلاد]]</span>)</label>
         <input
@@ -107,7 +107,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           onChange={e => { setLocal(s => ({ ...s, birth_date: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('birth_date')}
           onBlur={() => { commit('birth_date'); setFocusedKey(null) }}
-      _code  new/</>
+        />
       </div>
       <div style={styles.blockFull}>
         <label htmlFor="address" style={styles.label}>{t('address', language)} (<span style={styles.arInline}>[[العنوان]]</span>)</label>
@@ -120,7 +120,9 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           value={local.address || ''}
           onChange={e => { setLocal(s => ({ ...s, address: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('address')}
-          onBlur={() => { commit('address'); setFocusedKey(null)      </div>
+          onBlur={() => { commit('address'); setFocusedKey(null) }}
+        />
+      </div>
       <div>
         <label htmlFor="phone_primary" style={styles.label}>{t('primary_phone', language)} (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
         <input
@@ -133,7 +135,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           onChange={e => { setLocal(s => ({ ...s, phone_primary: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('phone_primary')}
           onBlur={() => { commit('phone_primary'); setFocusedKey(null) }}
-        /</>
+        />
       </div>
       <div>
         <label htmlFor="phone_secondary" style={styles.label}>{t('secondary_phone', language)} (<span style={styles.arInline}>[[رقم الهاتف (2)]]</span>)</label>
