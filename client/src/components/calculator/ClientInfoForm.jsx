@@ -14,8 +14,6 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   const typingTimerRef = useRef(null)
   // Track focus transitions (short window to guard blur->focus race)
   const [lastFocusChangeAt, setLastFocusChangeAt] = useState(0)
-  // Track pointer-down window to guard initial click focus
-  const [pointerDownAt, setPointerDownAt] = useState(0)
   // Ref to the form section to check whether the browser focus is inside this form
   const formRef = useRef(null)
 
@@ -23,8 +21,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   useEffect(() => {
     const now = Date.now()
     const recentlyEditing = (now - lastEditAt) < 1200 // extend debounce to 1.2s to avoid race with external syncs
-    const inFocusTransitionWindow = (now - lastFocusChangeAt) < 300 // guard blur/focus shuffle
-    const inPointerDownWindow = (now - pointerDownAt) < 300 // guard initial click down within form
+    const inFocusTransitionWindow = (now - lastFocusChangeAt) < 200 // smaller guard over blur/focus shuffle
     const activeEl = typeof document !== 'undefined' ? document.activeElement : null
 
     // Robust focus detection using :focus-within and explicit activeElement
@@ -46,7 +43,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
         (!!activeEl && formRef.current.contains(activeEl) && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) ||
         !!anyFocusedEl)
 
-    const shouldSkip = !!focusedKey || recentlyEditing || typing || isFocusedInForm || inFocusTransitionWindow || inPointerDownWindow
+    const shouldSkip = !!focusedKey || recentlyEditing || typing || isFocusedInForm || inFocusTransitionWindow
 
     if (shouldSkip) {
       console.log('[ClientInfoForm] Skip parent->local sync due to focus or recent edit', {
@@ -56,7 +53,6 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
         isFocusedInForm,
         focusWithin,
         inFocusTransitionWindow,
-        inPointerDownWindow,
         activeTag: activeEl?.tagName,
         activeId: activeEl?.id,
         anyFocusedTag: anyFocusedEl?.tagName,
@@ -65,24 +61,25 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
       return
     }
 
-    console.log('[ClientInfoForm] Apply parent->local sync', {
-      focusedKey,
-      recentlyEditing,
-      typing,
-      isFocusedInForm,
-      focusWithin,
-      inFocusTransitionWindow,
-      inPointerDownWindow,
-      activeTag: activeEl?.tagName,
-      activeId: activeEl?.id,
-      anyFocusedTag: anyFocusedEl?.tagName,
-      anyFocusedId: anyFocusedEl?.id,
-      clientInfo,
-    })
+    // Selective merge: do not overwrite the actively focused field
     setLocal(prev => {
-      return { ...prev, ...clientInfo }
+      const merged = { ...prev }
+      let appliedCount = 0
+      for (const k of Object.keys(clientInfo || {})) {
+        if (focusedKey && k === focusedKey) continue
+        if (merged[k] !== clientInfo[k]) {
+          merged[k] = clientInfo[k]
+          appliedCount++
+        }
+      }
+      console.log('[ClientInfoForm] Apply parent->local selective merge', {
+        focusedKey,
+        appliedCount,
+        keysApplied: appliedCount > 0 ? Object.keys(clientInfo || {}).filter(k => (!focusedKey || k !== focusedKey) && prev[k] !== clientInfo[k]) : [],
+      })
+      return merged
     })
-  }, [clientInfo, focusedKey, lastEditAt, typing, lastFocusChangeAt, pointerDownAt])
+  }, [clientInfo, focusedKey, lastEditAt, typing, lastFocusChangeAt])
 
   // Commit a single field to parent state
   const commit = (key) => {
@@ -239,7 +236,6 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   return (
     <section
       ref={formRef}
-      onMouseDown={() => { setPointerDownAt(Date.now()); setLastFocusChangeAt(Date.now()) }}
       onFocusCapture={() => setLastFocusChangeAt(Date.now())}
       style={{ ...styles.section }}
       dir={isRTL(language) ? 'rtl' : 'ltr'}
@@ -247,7 +243,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
       <h2 style={{ ...styles.sectionTitle, textAlign: isRTL(language) ? 'right' : 'left' }}>{t('client_information', language)}</h2>
       <Grid>{Fields}</Grid>
       {/* Inline scanner (OCR) below client fields */}
-      <div style={{ marginTop: 12, padding: 12, border: '1px solid #ead9bd', borderRadius: 10, background: '#fbfaf7' }}>
+      <div style={{ marginTop: 12, padding: 12, border: '1px solid #ead9bd', borderRadius: 10, background: '#fbfbf7' }}>
         <ClientIdScanner styles={styles} />
       </div>
     </section>
