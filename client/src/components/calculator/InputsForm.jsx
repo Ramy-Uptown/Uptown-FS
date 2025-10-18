@@ -223,10 +223,16 @@ export default function InputsForm({
 
         <div>
           <label style={styles.label}>{t('dp_type', language)}</label>
-          <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={select(errors.dpType)}>
-            <option value="amount">{t('amount', language)}</option>
-            <option value="percentage">{t('percentage', language)}</option>
-          </select>
+          {['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) ? (
+            <select value="amount" disabled style={select(errors.dpType)}>
+              <option value="amount">{t('amount', language)} (fixed)</option>
+            </select>
+          ) : (
+            <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={select(errors.dpType)}>
+              <option value="amount">{t('amount', language)}</option>
+              <option value="percentage">{t('percentage', language)}</option>
+            </select>
+          )}
           {errors.dpType && <small style={styles.error}>{errors.dpType}</small>}
         </div>
         <div>
@@ -235,7 +241,7 @@ export default function InputsForm({
               ? `${t('down_payment_value', language)} (amount)`
               : t('down_payment_value', language)}
           </label>
-          {inputs.dpType === 'percentage' ? (
+          {inputs.dpType === 'percentage' && !['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) ? (
             <div style={{ position: 'relative' }}>
               <input
                 type="number"
@@ -255,7 +261,7 @@ export default function InputsForm({
               min="0"
               step="0.01"
               value={inputs.downPaymentValue}
-              onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))}
+              onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value, dpType: ['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) ? 'amount' : s.dpType }))}
               style={input(errors.downPaymentValue)}
               placeholder="e.g., 100000"
             />
