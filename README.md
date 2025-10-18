@@ -121,6 +121,8 @@ If no active Standard Plan exists or its values are invalid, the server will att
 
 7) Recent Fixes and Changes
 Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track when changes were applied.
+- [2025-10-18 00:00] Standard Pricing PV source fixed: Removed client-side duplicate PV formula in StandardPricing.jsx and now fetch the authoritative PV from the backend (/api/calculate) whenever form inputs change (price components, DP%, years, frequency, rate). Previously, the form used a local calculatePV that only considered Base Unit Price, causing mismatches (e.g., 4.3M total, 20% rate, 20% DP, 6y monthly showed ~2,730,836.86 instead of the backend’s ~2,937,031.55). Updated table rows as well to fetch and display authoritative PV per row using the same backend endpoint for consistency across the page.
+- [2025-10-18 00:20] Client Information form stability and accessibility: Added id/name to all fields and associated labels with htmlFor; provided autocomplete hints (name, country-name, street-address, tel, email, bday). Implemented local buffered inputs that commit onBlur to parent state to prevent “one-character-only” typing interruptions caused by external re-renders. File: client/src/components/calculator/ClientInfoForm.jsx.
 - Resolved App.jsx merge conflicts; rateLocked computed once from unitInfo.
 - Switched host API port to 3001 and updated client to talk to 3001.
 - Added .devcontainer/devcontainer.json with forwardPorts and postStartCommand.
