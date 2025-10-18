@@ -234,6 +234,13 @@ export default function InputsForm({
             </select>
           )}
           {errors.dpType && <small style={styles.error}>{errors.dpType}</small>}
+          {['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) && (
+            <small style={{ ...styles.metaText, display: 'block', marginTop: 6 }}>
+              {isRTL(language)
+                ? 'تم تعطيل الدفعة المقدمة كنسبة مئوية في أوضاع مطابقة القيمة الحالية لتجنب الحلقة عند حل السعر من القيمة الحالية. الرجاء استخدام قيمة ثابتة.'
+                : 'Percentage down payment is disabled in PV-target modes to avoid circular dependency when solving price from PV. Please use a fixed amount.'}
+            </small>
+          )}
         </div>
         <div>
           <label style={styles.label}>

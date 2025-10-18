@@ -5,15 +5,17 @@ import { t, isRTL } from '../../lib/i18n.js'
 function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language = 'en' }) {
   // Local buffered state to avoid external re-renders interrupting typing
   const [local, setLocal] = useState({ ...clientInfo })
+  // Track which field is currently being edited to prevent parent sync clobbering keystrokes
+  const [focusedKey, setFocusedKey] = useState(null)
 
   // Sync local buffer when parent clientInfo changes (e.g., OCR apply or snapshot load)
   useEffect(() => {
+    // If user is actively editing a field, defer syncing to avoid cursor jumps or character loss
+    if (focusedKey) return
     setLocal(prev => {
-      // Only replace when reference changes meaningfully to avoid cursor jumps
-      // and not while user is actively typing the same value.
       return { ...prev, ...clientInfo }
     })
-  }, [clientInfo])
+  }, [clientInfo, focusedKey])
 
   // Commit a single field to parent state
   const commit = (key) => {
@@ -38,7 +40,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.buyer_name || ''}
           onChange={e => setLocal(s => ({ ...s, buyer_name: e.target.value }))}
-          onBlur={() => commit('buyer_name')}
+          onFocus={() => setFocusedKey('buyer_name')}
+          onBlur={() => { commit('buyer_name'); setFocusedKey(null) }}
         />
       </div>
       <div>
@@ -51,7 +54,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.nationality || ''}
           onChange={e => setLocal(s => ({ ...s, nationality: e.target.value }))}
-          onBlur={() => commit('nationality')}
+          onFocus={() => setFocusedKey('nationality')}
+          onBlur={() => { commit('nationality'); setFocusedKey(null) }}
         />
       </div>
       <div>
@@ -64,7 +68,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.id_or_passport || ''}
           onChange={e => setLocal(s => ({ ...s, id_or_passport: e.target.value }))}
-          onBlur={() => commit('id_or_passport')}
+          onFocus={() => setFocusedKey('id_or_passport')}
+          onBlur={() => { commit('id_or_passport'); setFocusedKey(null) }}
         />
       </div>
       <div>
@@ -76,7 +81,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.id_issue_date || ''}
           onChange={e => setLocal(s => ({ ...s, id_issue_date: e.target.value }))}
-          onBlur={() => commit('id_issue_date')}
+          onFocus={() => setFocusedKey('id_issue_date')}
+          onBlur={() => { commit('id_issue_date'); setFocusedKey(null) }}
         />
       </div>
       <div>
@@ -89,7 +95,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.birth_date || ''}
           onChange={e => setLocal(s => ({ ...s, birth_date: e.target.value }))}
-          onBlur={() => commit('birth_date')}
+          onFocus={() => setFocusedKey('birth_date')}
+          onBlur={() => { commit('birth_date'); setFocusedKey(null) }}
         />
       </div>
       <div style={styles.blockFull}>
@@ -102,7 +109,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={textarea()}
           value={local.address || ''}
           onChange={e => setLocal(s => ({ ...s, address: e.target.value }))}
-          onBlur={() => commit('address')}
+          onFocus={() => setFocusedKey('address')}
+          onBlur={() => { commit('address'); setFocusedKey(null) }}
         />
       </div>
       <div>
@@ -115,7 +123,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.phone_primary || ''}
           onChange={e => setLocal(s => ({ ...s, phone_primary: e.target.value }))}
-          onBlur={() => commit('phone_primary')}
+          onFocus={() => setFocusedKey('phone_primary')}
+          onBlur={() => { commit('phone_primary'); setFocusedKey(null) }}
         />
       </div>
       <div>
@@ -128,7 +137,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.phone_secondary || ''}
           onChange={e => setLocal(s => ({ ...s, phone_secondary: e.target.value }))}
-          onBlur={() => commit('phone_secondary')}
+          onFocus={() => setFocusedKey('phone_secondary')}
+          onBlur={() => { commit('phone_secondary'); setFocusedKey(null) }}
         />
       </div>
       <div>
@@ -141,7 +151,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.email || ''}
           onChange={e => setLocal(s => ({ ...s, email: e.target.value }))}
-          onBlur={() => commit('email')}
+          onFocus={() => setFocusedKey('email')}
+          onBlur={() => { commit('email'); setFocusedKey(null) }}
         />
       </div>
     </>
