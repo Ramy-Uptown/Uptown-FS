@@ -12,6 +12,10 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   // Track active typing via onChange with inactivity timeout
   const [typing, setTyping] = useState(false)
   const typingTimerRef = useRef(null)
+  // Track focus transitions (short window to guard blur->focus race)
+  const [lastFocusChangeAt, setLastFocusChangeAt] = useState(0)
+  // Track pointer-down window to guard initial click focus
+  const [pointerDownAt, setPointerDownAt] = useState(0)
   // Ref to the form section to check whether the browser focus is inside this form
   const formRef = useRef(null)
 
@@ -19,7 +23,12 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   useEffect(() => {
     const now = Date.now()
     const recentlyEditing = (now - lastEditAt) < 1200 // extend debounce to 1.2s to avoid race with external syncs
+    const inFocusTransitionWindow = (now - lastFocusChangeAt) < 300 // guard blur/focus shuffle
+    const inPointerDownWindow = (now - pointerDownAt) < 300 // guard initial click down within form
     const activeEl = typeof document !== 'undefined' ? document.activeElement : null
+
+    // Robust focus detection using :focus-within and explicit activeElement
+    const focusWithin = !!formRef.current && typeof formRef.current.matches === 'function' && formRef.current.matches(':focus-within')
 
     // Fallback check: is any input/textarea currently focused within the form?
     const anyFocusedEl = (() => {
@@ -33,17 +42,21 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
 
     const isFocusedInForm =
       !!formRef.current &&
-      ((!!activeEl && formRef.current.contains(activeEl) && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA'))
-        || !!anyFocusedEl)
+      (focusWithin ||
+        (!!activeEl && formRef.current.contains(activeEl) && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) ||
+        !!anyFocusedEl)
 
-    const shouldSkip = !!focusedKey || recentlyEditing || isFocusedInForm || typing
+    const shouldSkip = !!focusedKey || recentlyEditing || typing || isFocusedInForm || inFocusTransitionWindow || inPointerDownWindow
 
     if (shouldSkip) {
       console.log('[ClientInfoForm] Skip parent->local sync due to focus or recent edit', {
         focusedKey,
         recentlyEditing,
-        isFocusedInForm,
         typing,
+        isFocusedInForm,
+        focusWithin,
+        inFocusTransitionWindow,
+        inPointerDownWindow,
         activeTag: activeEl?.tagName,
         activeId: activeEl?.id,
         anyFocusedTag: anyFocusedEl?.tagName,
@@ -55,8 +68,11 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
     console.log('[ClientInfoForm] Apply parent->local sync', {
       focusedKey,
       recentlyEditing,
-      isFocusedInForm,
       typing,
+      isFocusedInForm,
+      focusWithin,
+      inFocusTransitionWindow,
+      inPointerDownWindow,
       activeTag: activeEl?.tagName,
       activeId: activeEl?.id,
       anyFocusedTag: anyFocusedEl?.tagName,
@@ -66,7 +82,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
     setLocal(prev => {
       return { ...prev, ...clientInfo }
     })
-  }, [clientInfo, focusedKey, lastEditAt, typing])
+  }, [clientInfo, focusedKey, lastEditAt, typing, lastFocusChangeAt, pointerDownAt])
 
   // Commit a single field to parent state
   const commit = (key) => {
@@ -102,8 +118,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.buyer_name || ''}
           onChange={e => { setLocal(s => ({ ...s, buyer_name: e.target.value })); markTyping() }}
-          onFocus={() => setFocusedKey('buyer_name')}
-          onBlur={() => { commit('buyer_name'); setFocusedKey(null) }}
+          onFocus={() => { setFocusedKey('buyer_name'); setLastFocusChangeAt(Date.now()) }}
+          onBlur={() => { commit('buyer_name'); setFocusedKey(null); setLastFocusChangeAt(Date.now()) }}
         />
       </div>
       <div>
@@ -116,8 +132,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.nationality || ''}
           onChange={e => { setLocal(s => ({ ...s, nationality: e.target.value })); markTyping() }}
-          onFocus={() => setFocusedKey('nationality')}
-          onBlur={() => { commit('nationality'); setFocusedKey(null) }}
+          onFocus={() => { setFocusedKey('nationality'); setLastFocusChangeAt(Date.now()) }}
+          onBlur={() => { commit('nationality'); setFocusedKey(null); setLastFocusChangeAt(Date.now()) }}
         />
       </div>
       <div>
@@ -130,8 +146,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.id_or_passport || ''}
           onChange={e => { setLocal(s => ({ ...s, id_or_passport: e.target.value })); markTyping() }}
-          onFocus={() => setFocusedKey('id_or_passport')}
-          onBlur={() => { commit('id_or_passport'); setFocusedKey(null) }}
+          onFocus={() => { setFocusedKey('id_or_passport'); setLastFocusChangeAt(Date.now()) }}
+          onBlur={() => { commit('id_or_passport'); setFocusedKey(null); setLastFocusChangeAt(Date.now()) }}
         />
       </div>
       <div>
@@ -143,8 +159,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.id_issue_date || ''}
           onChange={e => { setLocal(s => ({ ...s, id_issue_date: e.target.value })); markTyping() }}
-          onFocus={() => setFocusedKey('id_issue_date')}
-          onBlur={() => { commit('id_issue_date'); setFocusedKey(null) }}
+          onFocus={() => { setFocusedKey('id_issue_date'); setLastFocusChangeAt(Date.now()) }}
+          onBlur={() => { commit('id_issue_date'); setFocusedKey(null); setLastFocusChangeAt(Date.now()) }}
         />
       </div> {/* Corrected closing tag for this div */}
       <div>
@@ -157,8 +173,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.birth_date || ''}
           onChange={e => { setLocal(s => ({ ...s, birth_date: e.target.value })); markTyping() }}
-          onFocus={() => setFocusedKey('birth_date')}
-          onBlur={() => { commit('birth_date'); setFocusedKey(null) }}
+          onFocus={() => { setFocusedKey('birth_date'); setLastFocusChangeAt(Date.now()) }}
+          onBlur={() => { commit('birth_date'); setFocusedKey(null); setLastFocusChangeAt(Date.now()) }}
         />
       </div>
       <div style={styles.blockFull}>
@@ -171,8 +187,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={textarea()}
           value={local.address || ''}
           onChange={e => { setLocal(s => ({ ...s, address: e.target.value })); markTyping() }}
-          onFocus={() => setFocusedKey('address')}
-          onBlur={() => { commit('address'); setFocusedKey(null) }}
+          onFocus={() => { setFocusedKey('address'); setLastFocusChangeAt(Date.now()) }}
+          onBlur={() => { commit('address'); setFocusedKey(null); setLastFocusChangeAt(Date.now()) }}
         />
       </div>
       <div>
@@ -185,8 +201,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.phone_primary || ''}
           onChange={e => { setLocal(s => ({ ...s, phone_primary: e.target.value })); markTyping() }}
-          onFocus={() => setFocusedKey('phone_primary')}
-          onBlur={() => { commit('phone_primary'); setFocusedKey(null) }}
+          onFocus={() => { setFocusedKey('phone_primary'); setLastFocusChangeAt(Date.now()) }}
+          onBlur={() => { commit('phone_primary'); setFocusedKey(null); setLastFocusChangeAt(Date.now()) }}
         />
       </div>
       <div>
@@ -199,8 +215,8 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.phone_secondary || ''}
           onChange={e => { setLocal(s => ({ ...s, phone_secondary: e.target.value })); markTyping() }}
-          onFocus={() => setFocusedKey('phone_secondary')}
-          onBlur={() => { commit('phone_secondary'); setFocusedKey(null) }}
+          onFocus={() => { setFocusedKey('phone_secondary'); setLastFocusChangeAt(Date.now()) }}
+          onBlur={() => { commit('phone_secondary'); setFocusedKey(null); setLastFocusChangeAt(Date.now()) }}
         />
       </div>
       <div>
@@ -213,15 +229,21 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           style={input()}
           value={local.email || ''}
           onChange={e => { setLocal(s => ({ ...s, email: e.target.value })); markTyping() }}
-          onFocus={() => setFocusedKey('email')}
-          onBlur={() => { commit('email'); setFocusedKey(null) }}
+          onFocus={() => { setFocusedKey('email'); setLastFocusChangeAt(Date.now()) }}
+          onBlur={() => { commit('email'); setFocusedKey(null); setLastFocusChangeAt(Date.now()) }}
         />
       </div>
     </>
   )
 
   return (
-    <section ref={formRef} style={{ ...styles.section }} dir={isRTL(language) ? 'rtl' : 'ltr'}>
+    <section
+      ref={formRef}
+      onMouseDown={() => { setPointerDownAt(Date.now()); setLastFocusChangeAt(Date.now()) }}
+      onFocusCapture={() => setLastFocusChangeAt(Date.now())}
+      style={{ ...styles.section }}
+      dir={isRTL(language) ? 'rtl' : 'ltr'}
+    >
       <h2 style={{ ...styles.sectionTitle, textAlign: isRTL(language) ? 'right' : 'left' }}>{t('client_information', language)}</h2>
       <Grid>{Fields}</Grid>
       {/* Inline scanner (OCR) below client fields */}
