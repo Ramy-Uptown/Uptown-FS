@@ -614,27 +614,24 @@ app.post('/api/calculate', validate(calculateSchema), async (req, res) => {
       const rowFreqValid = !!rowFreq
 
       if (rowRateValid && rowDurValid && rowFreqValid) {
-        // Compute using per-record financial settings
-        const monthlyRateCalc = Math.pow(1 + rowRate / 100, 1 / 12) - 1
-        let perYearCalc = 12
-        switch (rowFreq) {
-          case Frequencies.Quarterly: perYearCalc = 4; break
-          case Frequencies.BiAnnually: perYearCalc = 2; break
-          case Frequencies.Annually: perYearCalc = 1; break
-          case Frequencies.Monthly:
-          default: perYearCalc = 12; break
+        // Compute the true Standard PV by running the standard structure (including Down Payment) through the engine.
+        // We intentionally use the request's inputs Down Payment definition here so Target-PV modes can solve back to the Standard Price when consultants
+        // enter the same DP amount/percent used by the standard plan configuration.
+        const stdInputsForPv = {
+          salesDiscountPercent: 0,
+          dpType: (req.body?.inputs?.dpType === 'percentage' || req.body?.inputs?.dpType === 'amount') ? req.body.inputs.dpType : 'percentage',
+          downPaymentValue: Number(req.body?.inputs?.downPaymentValue) || 0,
+          planDurationYears: rowDur,
+          installmentFrequency: rowFreq,
+          additionalHandoverPayment: 0,
+          handoverYear: 1,
+          splitFirstYearPayments: false,
+          firstYearPayments: [],
+          subsequentYears: []
         }
-        const nCalc = rowDur * perYearCalc
-        const perPaymentCalc = nCalc > 0 ? (totalPrice / nCalc) : 0
-        const monthsCalc = getPaymentMonths(nCalc, rowFreq, 0)
-        let stdPVComputed = 0
-        if (monthlyRateCalc <= 0 || nCalc === 0) {
-          stdPVComputed = perPaymentCalc * nCalc
-          computedPVEqualsTotalNominal = true
-        } else {
-          for (const m of monthsCalc) stdPVComputed += perPaymentCalc / Math.pow(1 + monthlyRateCalc, m)
-          computedPVEqualsTotalNominal = false
-        }
+        const stdPvResult = calculateByMode(CalculationModes.EvaluateCustomPrice, { totalPrice, financialDiscountRate: rowRate, calculatedPV: 0 }, stdInputsForPv)
+        const stdPVComputed = Number(stdPvResult?.calculatedPV) || 0
+        computedPVEqualsTotalNominal = stdPVComputed === totalPrice
 
         effectiveStdPlan = {
           totalPrice,
