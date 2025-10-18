@@ -7,15 +7,25 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
   const [local, setLocal] = useState({ ...clientInfo })
   // Track which field is currently being edited to prevent parent sync clobbering keystrokes
   const [focusedKey, setFocusedKey] = useState(null)
+  // Track recent edits to add a debounce window where parent sync is ignored
+  const [lastEditAt, setLastEditAt] = useState(0)
 
   // Sync local buffer when parent clientInfo changes (e.g., OCR apply or snapshot load)
   useEffect(() => {
-    // If user is actively editing a field, defer syncing to avoid cursor jumps or character loss
-    if (focusedKey) return
+    const now = Date.now()
+    const recentlyEditing = (now - lastEditAt) < 500 // 0.5s debounce after last keystroke
+    const shouldSkip = !!focusedKey || recentlyEditing
+
+    if (shouldSkip) {
+      console.log('[ClientInfoForm] Skip parent->local sync due to focus or recent edit', { focusedKey, recentlyEditing })
+      return
+    }
+
+    console.log('[ClientInfoForm] Apply parent->local sync', { focusedKey, recentlyEditing, clientInfo })
     setLocal(prev => {
       return { ...prev, ...clientInfo }
     })
-  }, [clientInfo, focusedKey])
+  }, [clientInfo, focusedKey, lastEditAt])
 
   // Commit a single field to parent state
   const commit = (key) => {
@@ -39,7 +49,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="name"
           style={input()}
           value={local.buyer_name || ''}
-          onChange={e => setLocal(s => ({ ...s, buyer_name: e.target.value }))}
+          onChange={e => { setLocal(s => ({ ...s, buyer_name: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('buyer_name')}
           onBlur={() => { commit('buyer_name'); setFocusedKey(null) }}
         />
@@ -53,9 +63,9 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="country-name"
           style={input()}
           value={local.nationality || ''}
-          onChange={e => setLocal(s => ({ ...s, nationality: e.target.value }))}
+          onChange={e => { setLocal(s => ({ ...s, nationality: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('nationality')}
-          onBlur={() => { commit('nationality'); setFocusedKey(null) }}
+          onBlur={() => {sedKey(null) }}
         />
       </div>
       <div>
@@ -67,7 +77,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="off"
           style={input()}
           value={local.id_or_passport || ''}
-          onChange={e => setLocal(s => ({ ...s, id_or_passport: e.target.value }))}
+          onChange={e => { setLocal(s => ({ ...s, id_or_passport: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('id_or_passport')}
           onBlur={() => { commit('id_or_passport'); setFocusedKey(null) }}
         />
@@ -80,10 +90,10 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           type="date"
           style={input()}
           value={local.id_issue_date || ''}
-          onChange={e => setLocal(s => ({ ...s, id_issue_date: e.target.value }))}
+          onChange={e => { setLocal(s => ({ ...s, id_issue_date: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('id_issue_date')}
           onBlur={() => { commit('id_issue_date'); setFocusedKey(null) }}
-        />
+      _code  new/</>
       </div>
       <div>
         <label htmlFor="birth_date" style={styles.label}>{t('birth_date', language)} (<span style={styles.arInline}>[[تاريخ الميلاد]]</span>)</label>
@@ -94,10 +104,10 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="bday"
           style={input()}
           value={local.birth_date || ''}
-          onChange={e => setLocal(s => ({ ...s, birth_date: e.target.value }))}
+          onChange={e => { setLocal(s => ({ ...s, birth_date: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('birth_date')}
           onBlur={() => { commit('birth_date'); setFocusedKey(null) }}
-        />
+      _code  new/</>
       </div>
       <div style={styles.blockFull}>
         <label htmlFor="address" style={styles.label}>{t('address', language)} (<span style={styles.arInline}>[[العنوان]]</span>)</label>
@@ -108,11 +118,9 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="street-address"
           style={textarea()}
           value={local.address || ''}
-          onChange={e => setLocal(s => ({ ...s, address: e.target.value }))}
+          onChange={e => { setLocal(s => ({ ...s, address: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('address')}
-          onBlur={() => { commit('address'); setFocusedKey(null) }}
-        />
-      </div>
+          onBlur={() => { commit('address'); setFocusedKey(null)      </div>
       <div>
         <label htmlFor="phone_primary" style={styles.label}>{t('primary_phone', language)} (<span style={styles.arInline}>[[رقم الهاتف]]</span>)</label>
         <input
@@ -122,10 +130,10 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="tel"
           style={input()}
           value={local.phone_primary || ''}
-          onChange={e => setLocal(s => ({ ...s, phone_primary: e.target.value }))}
+          onChange={e => { setLocal(s => ({ ...s, phone_primary: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('phone_primary')}
           onBlur={() => { commit('phone_primary'); setFocusedKey(null) }}
-        />
+        /</>
       </div>
       <div>
         <label htmlFor="phone_secondary" style={styles.label}>{t('secondary_phone', language)} (<span style={styles.arInline}>[[رقم الهاتف (2)]]</span>)</label>
@@ -136,7 +144,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="tel-national"
           style={input()}
           value={local.phone_secondary || ''}
-          onChange={e => setLocal(s => ({ ...s, phone_secondary: e.target.value }))}
+          onChange={e => { setLocal(s => ({ ...s, phone_secondary: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('phone_secondary')}
           onBlur={() => { commit('phone_secondary'); setFocusedKey(null) }}
         />
@@ -150,7 +158,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           autoComplete="email"
           style={input()}
           value={local.email || ''}
-          onChange={e => setLocal(s => ({ ...s, email: e.target.value }))}
+          onChange={e => { setLocal(s => ({ ...s, email: e.target.value })); setLastEditAt(Date.now()) }}
           onFocus={() => setFocusedKey('email')}
           onBlur={() => { commit('email'); setFocusedKey(null) }}
         />
