@@ -1,7 +1,15 @@
 import React, { useState } from 'react'
 import { fetchWithAuth, API_URL } from '../../lib/apiClient.js'
 
-export default function ClientIdScanner({ styles }) {
+/**
+ * ClientIdScanner (modular)
+ * Props:
+ * - styles: optional style helpers
+ * - onStart: () => void
+ * - onApply: (updates: object) => void
+ * - onError: (message: string) => void
+ */
+export default function ClientIdScanner({ styles, onStart, onApply, onError }) {
   const [file, setFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -14,9 +22,12 @@ export default function ClientIdScanner({ styles }) {
       setError('')
       setResult(null)
       if (!file) {
-        setError('Please choose an ID image first.')
+        const msg = 'Please choose an ID image first.'
+        setError(msg)
+        onError && onError(msg)
         return
       }
+      onStart && onStart()
       setLoading(true)
       const form = new FormData()
       form.append('image', file)
@@ -25,22 +36,26 @@ export default function ClientIdScanner({ styles }) {
       if (!resp.ok) throw new Error(data?.error?.message || 'OCR failed')
       setResult(data)
       const fields = data?.fields || {}
-      const apply = window.__uptown_calc_applyClientInfo
-      if (typeof apply === 'function') {
-        const updates = {
-          buyer_name: String(fields.name || ''),
-          id_or_passport: String(fields.nationalId || ''),
-          address: String(fields.address || '')
-        }
-        // If national ID looks numeric -> set nationality and birth date if available
-        if (updates.id_or_passport && !/\D/.test(updates.id_or_passport)) {
-          updates.nationality = 'Egyptian'
-          if (fields.birthDate) updates.birth_date = fields.birthDate // expect YYYY-MM-DD when available
-        }
-        apply(updates)
+
+      // Build sanitized updates (exclude phones and email; only ID-derived fields)
+      const updates = {
+        buyer_name: String(fields.name || ''),
+        id_or_passport: String(fields.nationalId || ''),
+        address: String(fields.address || '')
       }
+      // If national ID looks numeric -> set nationality and birth date if available
+      if (updates.id_or_passport && !/\D/.test(updates.id_or_passport)) {
+        updates.nationality = 'Egyptian'
+        if (fields.birthDate) updates.birth_date = fields.birthDate // expect YYYY-MM-DD when available
+      }
+      // id_issue_date if available
+      if (fields.issueDate) updates.id_issue_date = fields.issueDate
+
+      onApply && onApply(updates)
     } catch (e) {
-      setError(e.message || String(e))
+      const msg = e.message || String(e)
+      setError(msg)
+      onError && onError(msg)
     } finally {
       setLoading(false)
     }
