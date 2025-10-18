@@ -17,11 +17,34 @@ router.post('/unit-model', requireRole(['financial_manager']), async (req, res) 
       garage_price,
       garden_price,
       roof_price,
-      storage_price
+      storage_price,
+      std_financial_rate_percent,
+      plan_duration_years,
+      installment_frequency,
+      calculated_pv
     } = req.body || {};
     if (!model_id || !Number.isFinite(Number(price))) {
       return res.status(400).json({ error: { message: 'model_id and numeric price are required' } });
     }
+
+    // Basic validation for new fields
+    const rate = std_financial_rate_percent != null ? Number(std_financial_rate_percent) : null;
+    const years = plan_duration_years != null ? Number(plan_duration_years) : null;
+    const freq = installment_frequency != null ? String(installment_frequency).toLowerCase().trim() : null;
+    if (rate != null && !Number.isFinite(rate)) {
+      return res.status(400).json({ error: { message: 'std_financial_rate_percent must be numeric when provided' } });
+    }
+    if (years != null && (!Number.isInteger(years) || years <= 0)) {
+      return res.status(400).json({ error: { message: 'plan_duration_years must be integer >= 1 when provided' } });
+    }
+    if (freq != null && !['monthly','quarterly','biannually','annually','bi-annually'].includes(freq)) {
+      return res.status(400).json({ error: { message: 'installment_frequency must be one of monthly|quarterly|biannually|bi-annually|annually when provided' } });
+    }
+    const calcPv = calculated_pv != null ? Number(calculated_pv) : null;
+    if (calcPv != null && (!Number.isFinite(calcPv) || calcPv < 0)) {
+      return res.status(400).json({ error: { message: 'calculated_pv must be a non-negative number when provided' } });
+    }
+
     const pid = Number(model_id);
     const pr = Number(price);
     const mp = Number(maintenance_price ?? 0);
@@ -36,18 +59,21 @@ router.post('/unit-model', requireRole(['financial_manager']), async (req, res) 
       const r = await pool.query(
         `UPDATE unit_model_pricing
          SET price=$1, maintenance_price=$2, garage_price=$3, garden_price=$4, roof_price=$5, storage_price=$6,
+             std_financial_rate_percent=$7, plan_duration_years=$8, installment_frequency=$9, calculated_pv=$10,
              status='pending_approval', approved_by=NULL, updated_at=now()
-         WHERE model_id=$7
+         WHERE model_id=$11
          RETURNING *`,
-        [pr, mp, gp, gdp, rfp, stp, pid]
+        [pr, mp, gp, gdp, rfp, stp, rate, years, freq === 'biannually' ? 'biannually' : freq, calcPv, pid]
       );
       out = r.rows[0];
     } else {
       const r = await pool.query(
-        `INSERT INTO unit_model_pricing (model_id, price, maintenance_price, garage_price, garden_price, roof_price, storage_price, status, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending_approval', $8)
+        `INSERT INTO unit_model_pricing (model_id, price, maintenance_price, garage_price, garden_price, roof_price, storage_price,
+                                         std_financial_rate_percent, plan_duration_years, installment_frequency, calculated_pv,
+                                         status, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending_approval', $12)
          RETURNING *`,
-        [pid, pr, mp, gp, gdp, rfp, stp, req.user.id]
+        [pid, pr, mp, gp, gdp, rfp, stp, rate, years, (freq === 'biannually' ? 'biannually' : freq), calcPv, req.user.id]
       );
       out = r.rows[0];
     }
@@ -55,7 +81,19 @@ router.post('/unit-model', requireRole(['financial_manager']), async (req, res) 
     await pool.query(
       `INSERT INTO unit_model_pricing_audit (pricing_id, action, changed_by, details)
        VALUES ($1, $2, $3, $4)`,
-      [out.id, 'upsert', req.user.id, JSON.stringify({ price: pr, maintenance_price: mp, garage_price: gp, garden_price: gdp, roof_price: rfp, storage_price: stp, model_id: pid })]
+      [out.id, 'upsert', req.user.id, JSON.stringify({
+        model_id: pid,
+        price: pr,
+        maintenance_price: mp,
+        garage_price: gp,
+        garden_price: gdp,
+        roof_price: rfp,
+        storage_price: stp,
+        std_financial_rate_percent: rate,
+        plan_duration_years: years,
+        installment_frequency: freq,
+        calculated_pv: calcPv
+      })]
     );
 
     return res.status(201).json({ ok: true, pricing: out });
@@ -132,7 +170,9 @@ router.get('/unit-model', requireRole(['financial_manager', 'ceo', 'chairman', '
   try {
     const r = await pool.query(
       `SELECT
-         p.id, p.model_id, p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price, p.status, p.created_at, p.updated_at,
+         p.id, p.model_id, p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price,
+         p.std_financial_rate_percent, p.plan_duration_years, p.installment_frequency, p.calculated_pv,
+         p.status, p.created_at, p.updated_at,
          m.model_name,
          m.model_code,
          m.area,
@@ -156,7 +196,9 @@ router.get('/unit-model/pending', requireRole(['ceo', 'chairman', 'vice_chairman
   try {
     const r = await pool.query(
       `SELECT
-         p.id, p.model_id, p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price, p.status,
+         p.id, p.model_id, p.price, p.maintenance_price, p.garage_price, p.garden_price, p.roof_price, p.storage_price,
+         p.std_financial_rate_percent, p.plan_duration_years, p.installment_frequency, p.calculated_pv,
+         p.status,
          m.model_name,
          m.model_code,
          m.area,

@@ -108,11 +108,14 @@ export default function BrandHeader({ title, onLogout }) {
   }, [])
 
   const navForRole = (role) => {
-    const base = [{ label: 'Calculator', href: '/calculator' }, { label: 'Deals', href: '/deals' }]
-    const baseWithoutCalc = [{ label: 'Deals', href: '/deals' }]
-    const queuesLink = { label: `Queues${queueCount ? ` (${queueCount})` : ''}`, href: '/deals/queues' }
-    switch (role) {
-      case 'superadmin':
+    // Base without calculator
+    const base = [{ label: 'Deals', href: '/deals' }]
+    // Base with calculator shortcut
+    const baseWithCalc = [{ label: 'Calculator', href: '/deals/create' }, ...base]
+    const baseWithoutCalc = base
+    const queuesLink = { label: `Queues${queueCount ? ` (${queueCount})` : ''}`, href: '/deals/queues' }
+    switch (role) {
+      case 'superadmin':
         return [
           { label: 'Users', href: '/admin/users' },
           { label: 'Sales Team', href: '/admin/sales' },
@@ -129,11 +132,12 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Finance Team', href: '/admin/finance-team' },
           { label: 'Payment Thresholds', href: '/admin/payment-thresholds' }
         ]
-      case 'financial_manager':
+      case 'financial_manager':
         return [
-          ...base,
+          ...baseWithCalc,
           queuesLink,
           { label: 'Inventory Drafts', href: '/admin/inventory-drafts' },
+          { label: 'Inventory Changes', href: '/admin/inventory-changes' },
           { label: 'Rejected Requests', href: '/admin/rejected-pricings' },
           { label: 'Finance Team', href: '/admin/finance-team' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
@@ -141,38 +145,39 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Holds', href: '/admin/holds' },
           { label: 'Payment Thresholds', href: '/admin/payment-thresholds' },
        ]
-      case 'financial_admin':
+      case 'financial_admin':
         return [
-          ...base,
+          ...baseWithCalc,
           { label: 'Inventory', href: '/admin/inventory' },
+          { label: 'My Inventory Requests', href: '/admin/inventory-change-history' },
           { label: 'Standard Pricing', href: '/admin/standard-pricing' },
           { label: 'My Proposals', href: '/deals/my-proposals' }
         ]
-      case 'sales_manager':
-        return [
-          ...base,
-          queuesLink,
-          { label: 'Sales Team', href: '/admin/sales-team' },
-          { label: 'Team Proposals', href: '/deals/team-proposals' },
-          { label: 'Holds', href: '/admin/holds' },
-          { label: 'Workflow Logs', href: '/admin/workflow-logs' }
-        ]
-      case 'property_consultant':
-        return [
-          ...base,
-          { label: 'My Proposals', href: '/deals/my-proposals' }
-        ]
-      case 'contract_person':
-        return [
-          ...baseWithoutCalc
-        ]
-      case 'contract_manager':
-        return [
-          ...baseWithoutCalc,
-          { label: 'Contracts Team', href: '/admin/contracts-team' },
-          { label: 'Workflow Logs', href: '/admin/workflow-logs' },
-          { label: 'Hold Approvals', href: '/admin/hold-approvals' }
-        ]
+      case 'sales_manager':
+        return [
+          ...baseWithCalc,
+          queuesLink,
+          { label: 'Sales Team', href: '/admin/sales-team' },
+          { label: 'Team Proposals', href: '/deals/team-proposals' },
+          { label: 'Holds', href: '/admin/holds' },
+          { label: 'Workflow Logs', href: '/admin/workflow-logs' }
+        ]
+      case 'property_consultant':
+        return [
+          ...baseWithCalc,
+          { label: 'My Proposals', href: '/deals/my-proposals' }
+        ]
+      case 'contract_person':
+        return [
+          ...baseWithoutCalc
+        ]
+      case 'contract_manager':
+        return [
+          ...baseWithoutCalc,
+          { label: 'Contracts Team', href: '/admin/contracts-team' },
+          { label: 'Workflow Logs', href: '/admin/workflow-logs' },
+          { label: 'Hold Approvals', href: '/admin/hold-approvals' }
+        ]
       // --- THIS SECTION IS MODIFIED ---
       case 'ceo':
       case 'chairman':
@@ -187,10 +192,10 @@ export default function BrandHeader({ title, onLogout }) {
           { label: 'Hold Approvals', href: '/admin/hold-approvals' }
         ]
       // --- END OF MODIFICATION ---
-      default:
-        return base
-    }
-  }
+      default:
+        return base
+    }
+  }
 
   const shortcuts = navForRole(user?.role)
   const pathname = useMemo(() => (typeof window !== 'undefined' ? window.location.pathname : ''), [])
@@ -227,7 +232,7 @@ export default function BrandHeader({ title, onLogout }) {
 
   return (
     <div style={{ position: 'sticky', top: 0, zIndex: 1000 }}>
-      <div style={{ background: BRAND.primary, color: '#fff', borderBottom: `4px solid ${BRAND.primaryDark}` }}>
+      <div dir="ltr" style={{ background: BRAND.primary, color: '#fff', borderBottom: `4px solid ${BRAND.primaryDark}` }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {logoUrl ? (
@@ -269,7 +274,7 @@ export default function BrandHeader({ title, onLogout }) {
         </div>
       </div>
       {apiHealthy === false && (
-        <div style={{ background: '#991b1b', color: '#fff', padding: '6px 12px', borderBottom: '1px solid #7f1d1d' }}>
+        <div dir="ltr" style={{ background: '#991b1b', color: '#fff', padding: '6px 12px', borderBottom: '1px solid #7f1d1d' }}>
           <div style={{ maxWidth: 1200, margin: '0 auto', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
               API unreachable. {apiHealthMsg ? `(${apiHealthMsg}) ` : ''}Please ensure containers are running.

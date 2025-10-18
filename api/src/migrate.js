@@ -23,7 +23,7 @@ export async function runMigrations() {
   const thisDir = path.dirname(fileURLToPath(import.meta.url))
   const migrationsDir = path.join(thisDir, 'migrations')
   if (!fs.existsSync(migrationsDir)) {
-    // Nothing to do
+    console.warn('[migrations] No migrations directory found:', migrationsDir)
     return
   }
 
@@ -44,6 +44,7 @@ export async function runMigrations() {
     // Skip if same filename and same hash already applied
     const prevHash = appliedMap.get(file)
     if (prevHash && prevHash === hash) {
+      console.log(`[migrations] Skipping already applied ${file}`)
       continue
     }
 
@@ -64,3 +65,17 @@ export async function runMigrations() {
     }
   }
 }
+
+// Execute when called directly: `node src/migrate.js`
+;(async () => {
+  try {
+    await runMigrations()
+    console.log('[migrations] All migrations executed.')
+  } catch (e) {
+    console.error('[migrations] Migration run failed:', e?.message || e)
+    process.exitCode = 1
+  } finally {
+    // Do NOT end the shared pool here; the API process reuses it.
+    // If you want to run migrations as a one-off script, set SKIP_MIGRATIONS=1 and invoke migrate separately.
+  }
+})()

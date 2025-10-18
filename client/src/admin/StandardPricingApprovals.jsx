@@ -95,6 +95,10 @@ export default function StandardPricingApprovals() {
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Maintenance (EGP)</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total (EGP)</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price / m² (EGP)</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Annual Rate (%)</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration (years)</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Frequency</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Std Calculated PV</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requested By</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                         </tr>
@@ -113,8 +117,11 @@ export default function StandardPricingApprovals() {
                             <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-2/5"/></td>
                             <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-2/5"/></td>
                             <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-2/5"/></td>
-                            <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-24"/></td>
+                            <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-20"/></td>
                             <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-16"/></td>
+                            <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-20"/></td>
+                            <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-24"/></td>
+                            <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-24"/></td>
                           </tr>
                         ))}
                       </tbody>
@@ -139,6 +146,10 @@ export default function StandardPricingApprovals() {
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Maintenance (EGP)</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total (EGP)</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price / m² (EGP)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Annual Rate (%)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration (years)</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Frequency</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Std Calculated PV</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requested By</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                                 </tr>
@@ -167,6 +178,10 @@ export default function StandardPricingApprovals() {
                                         <td className="px-4 py-4 whitespace-nowrap">{fmt(item.maintenance_price)}</td>
                                         <td className="px-4 py-4 whitespace-nowrap">{fmt(total)}</td>
                                         <td className="px-4 py-4 whitespace-nowrap">{fmt(pricePerSqM)}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{Number(item.std_financial_rate_percent ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{Number(item.plan_duration_years ?? 0)}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{String(item.installment_frequency || '').toLowerCase()}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{fmt(item.calculated_pv)}</td>
                                         <td className="px-4 py-4 whitespace-nowrap">{item.created_by_email}</td>
                                         <td className="px-4 py-4 whitespace-nowrap space-x-2">
                                             <LoadingButton

@@ -28,13 +28,13 @@ async function setAcceptabilityFlags(id, flags, user) {
   } = flags
   const upd = await pool.query(
     `UPDATE deals
-     SET acceptable_pv=$1,
-         acceptable_first_year=$2,
-         acceptable_second_year=$3,
-         acceptable_handover=$4,
-         updated_at=now()
-     WHERE id=$5
-     RETURNING *`,
+      SET acceptable_pv=$1,
+          acceptable_first_year=$2,
+          acceptable_second_year=$3,
+          acceptable_handover=$4,
+          updated_at=now()
+      WHERE id=$5
+      RETURNING *`,
     [
       acceptable_pv == null ? null : !!acceptable_pv,
       acceptable_first_year == null ? null : !!acceptable_first_year,
@@ -88,63 +88,63 @@ router.get('/', authMiddleware, async (req, res) => {
 
     if (status && typeof status === 'string') {
       params.push(status)
-      where.push(`d.status = ${params.length}`)
+      where.push(`d.status = $${params.length}`)
     }
     if (search && typeof search === 'string' && search.trim()) {
       params.push(`%${search.trim().toLowerCase()}%`)
-      where.push(`(LOWER(d.title) LIKE ${params.length})`)
+      where.push(`(LOWER(d.title) LIKE $${params.length})`)
     }
     if (creatorId && toNumber(creatorId)) {
       params.push(toNumber(creatorId))
-      where.push(`d.created_by = ${params.length}`)
+      where.push(`d.created_by = $${params.length}`)
     }
     if (creatorEmail && typeof creatorEmail === 'string' && creatorEmail.trim()) {
       params.push(creatorEmail.trim().toLowerCase())
-      where.push(`EXISTS (SELECT 1 FROM users cu WHERE cu.id=d.created_by AND LOWER(cu.email) = ${params.length})`)
+      where.push(`EXISTS (SELECT 1 FROM users cu WHERE cu.id=d.created_by AND LOWER(cu.email) = $${params.length})`)
     }
     if (reviewerId && toNumber(reviewerId)) {
       params.push(toNumber(reviewerId))
-      where.push(`EXISTS (SELECT 1 FROM deal_history h WHERE h.deal_id=d.id AND h.action='submit' AND h.user_id=${params.length})`)
+      where.push(`EXISTS (SELECT 1 FROM deal_history h WHERE h.deal_id=d.id AND h.action='submit' AND h.user_id=$${params.length})`)
     }
     if (reviewerEmail && typeof reviewerEmail === 'string' && reviewerEmail.trim()) {
       params.push(reviewerEmail.trim().toLowerCase())
       where.push(`EXISTS (
         SELECT 1 FROM deal_history h
         JOIN users ru ON ru.id = h.user_id
-        WHERE h.deal_id=d.id AND h.action='submit' AND LOWER(ru.email) = ${params.length}
+        WHERE h.deal_id=d.id AND h.action='submit' AND LOWER(ru.email) = $${params.length}
       )`)
     }
     if (approverId && toNumber(approverId)) {
       params.push(toNumber(approverId))
-      where.push(`EXISTS (SELECT 1 FROM deal_history h WHERE h.deal_id=d.id AND h.action='approve' AND h.user_id=${params.length})`)
+      where.push(`EXISTS (SELECT 1 FROM deal_history h WHERE h.deal_id=d.id AND h.action='approve' AND h.user_id=$${params.length})`)
     }
     if (approverEmail && typeof approverEmail === 'string' && approverEmail.trim()) {
       params.push(approverEmail.trim().toLowerCase())
       where.push(`EXISTS (
         SELECT 1 FROM deal_history h
         JOIN users au ON au.id = h.user_id
-        WHERE h.deal_id=d.id AND h.action='approve' AND LOWER(au.email) = ${params.length}
+        WHERE h.deal_id=d.id AND h.action='approve' AND LOWER(au.email) = $${params.length}
       )`)
     }
     if (startDate) {
       params.push(new Date(startDate))
-      where.push(`d.created_at >= ${params.length}`)
+      where.push(`d.created_at >= $${params.length}`)
     }
     if (endDate) {
       params.push(new Date(endDate))
-      where.push(`d.created_at <= ${params.length}`)
+      where.push(`d.created_at <= $${params.length}`)
     }
     if (minAmount && toNumber(minAmount) != null) {
       params.push(toNumber(minAmount))
-      where.push(`d.amount >= ${params.length}`)
+      where.push(`d.amount >= $${params.length}`)
     }
     if (maxAmount && toNumber(maxAmount) != null) {
       params.push(toNumber(maxAmount))
-      where.push(`d.amount <= ${params.length}`)
+      where.push(`d.amount <= $${params.length}`)
     }
     if (unitType && typeof unitType === 'string' && unitType.trim()) {
       params.push(unitType.trim())
-      where.push(`d.unit_type = ${params.length}`)
+      where.push(`d.unit_type = $${params.length}`)
     }
 
     // Role-based visibility: non-elevated users can only see their own deals
@@ -152,7 +152,7 @@ router.get('/', authMiddleware, async (req, res) => {
     const isElevated = elevatedRoles.has(req.user?.role)
     if (!isElevated) {
       params.push(req.user.id)
-      where.push(`d.created_by = ${params.length}`)
+      where.push(`d.created_by = $${params.length}`)
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
@@ -180,7 +180,7 @@ router.get('/', authMiddleware, async (req, res) => {
       LEFT JOIN users u ON u.id = d.created_by
       ${whereSql}
       ORDER BY ${sortCol} ${dir}
-      LIMIT ${params.length - 1} OFFSET ${params.length}
+      LIMIT $${params.length - 1} OFFSET $${params.length}
     `
     const rows = await pool.query(listSql, params)
 
@@ -226,6 +226,24 @@ router.get('/my', authMiddleware, async (req, res) => {
     return res.json({ ok: true, deals: rows.rows })
   } catch (e) {
     console.error('GET /api/deals/my error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Client alias: some legacy clients call /api/deals/my-proposals — map to /my for compatibility
+router.get('/my-proposals', authMiddleware, async (req, res) => {
+  try {
+    const rows = await pool.query(
+      `SELECT d.*, u.email as created_by_email
+       FROM deals d
+       LEFT JOIN users u ON u.id = d.created_by
+       WHERE d.created_by=$1
+       ORDER BY d.id DESC`,
+      [req.user.id]
+    )
+    return res.json({ ok: true, deals: rows.rows })
+  } catch (e) {
+    console.error('GET /api/deals/my-proposals error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
   }
 })
@@ -366,6 +384,35 @@ router.post('/:id/submit', authMiddleware, validate(dealSubmitSchema), async (re
     // Optional: acceptability flags passed by client to persist
     if (req.body?.acceptability) {
       await setAcceptabilityFlags(id, req.body.acceptability, req.user)
+    }
+
+    // Auto-evaluate based on calculator snapshot stored in deal.details
+    // If evaluation exists and decision = REJECT, mark needs_override and log immediately.
+    try {
+      const det = deal.details || {}
+      const evalObj = det?.calculator?.generatedPlan?.evaluation || null
+      if (evalObj && evalObj.decision === 'REJECT') {
+        const updOverride = await pool.query(
+          `UPDATE deals
+           SET needs_override=TRUE,
+               override_requested_by=$1,
+               override_requested_at=now(),
+               updated_at=now()
+           WHERE id=$2 RETURNING *`,
+          [req.user.id, id]
+        )
+        const overrideNote = {
+          event: 'override_requested',
+          by: { id: req.user.id, role: req.user.role },
+          reason: 'auto: evaluation REJECT at submission',
+          evaluation: evalObj,
+          at: new Date().toISOString()
+        }
+        await logHistory(id, req.user.id, 'override_requested', JSON.stringify(overrideNote))
+      }
+    } catch (autoErr) {
+      // Do not block submission if evaluation parsing fails
+      console.warn('Auto-override on submit warning:', autoErr?.message || autoErr)
     }
 
     const upd = await pool.query('UPDATE deals SET status=$1 WHERE id=$2 RETURNING *', ['pending_approval', id])
@@ -529,8 +576,9 @@ router.post('/:id/request-override', authMiddleware, validate(overrideRequestSch
   try {
     const id = Number(req.params.id)
     const role = req.user.role
-    if (!['sales_manager', 'financial_manager', 'admin', 'superadmin'].includes(role)) {
-      return res.status(403).json({ error: { message: 'Sales Manager or Financial Manager role required' } })
+    // Property Consultant can initiate; Sales Manager and Financial Manager can also initiate if needed
+    if (!['property_consultant', 'sales_manager', 'financial_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Property Consultant, Sales Manager or Financial Manager role required' } })
     }
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
@@ -557,6 +605,166 @@ router.post('/:id/request-override', authMiddleware, validate(overrideRequestSch
     return res.json({ ok: true, deal: upd.rows[0] })
   } catch (e) {
     console.error('POST /api/deals/:id/request-override error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Sales Manager approve stage (escalate to FM)
+router.post('/:id/override-sm-approve', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['sales_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Sales Manager role required' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET manager_review_by=$1,
+           manager_review_at=now(),
+           updated_at=now()
+       WHERE id=$2 RETURNING *`,
+      [req.user.id, id]
+    )
+
+    const note = {
+      event: 'override_sm_approved',
+      by: { id: req.user.id, role },
+      notes: typeof req.body?.notes === 'string' ? req.body.notes : null,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_sm_approved', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-sm-approve error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Sales Manager reject stage
+router.post('/:id/override-sm-reject', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['sales_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Sales Manager role required' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes : null
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET needs_override=FALSE,
+           manager_review_by=$1,
+           manager_review_at=now(),
+           override_notes=$2,
+           updated_at=now()
+       WHERE id=$3 RETURNING *`,
+      [req.user.id, notes, id]
+    )
+
+    const note = {
+      event: 'override_sm_rejected',
+      by: { id: req.user.id, role },
+      notes,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_sm_rejected', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-sm-reject error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Financial Manager approve stage (blocks unit)
+router.post('/:id/override-fm-approve', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['financial_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Financial Manager role required' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+    const deal = q.rows[0]
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET fm_review_by=$1,
+           fm_review_at=now(),
+           updated_at=now()
+       WHERE id=$2 RETURNING *`,
+      [req.user.id, id]
+    )
+
+    // Attempt to block unit upon FM approval
+    try {
+      const det = deal.details || {}
+      const unitId = det?.calculator?.unitInfo?.unit_id
+      if (Number.isFinite(Number(unitId)) && Number(unitId) > 0) {
+        await pool.query('UPDATE units SET available=FALSE, updated_at=now() WHERE id=$1', [Number(unitId)])
+      }
+    } catch (blkErr) {
+      console.warn('Unit block warning:', blkErr?.message || blkErr)
+    }
+
+    const note = {
+      event: 'override_fm_approved',
+      by: { id: req.user.id, role },
+      notes: typeof req.body?.notes === 'string' ? req.body.notes : null,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_fm_approved', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-fm-approve error', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+// Financial Manager reject stage
+router.post('/:id/override-fm-reject', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const role = req.user.role
+    if (!['financial_manager', 'admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Financial Manager role required' } })
+    }
+    const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
+    if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes : null
+
+    const upd = await pool.query(
+      `UPDATE deals
+       SET needs_override=FALSE,
+           fm_review_by=$1,
+           fm_review_at=now(),
+           override_notes=$2,
+           updated_at=now()
+       WHERE id=$3 RETURNING *`,
+      [req.user.id, notes, id]
+    )
+
+    const note = {
+      event: 'override_fm_rejected',
+      by: { id: req.user.id, role },
+      notes,
+      at: new Date().toISOString()
+    }
+    await logHistory(id, req.user.id, 'override_fm_rejected', JSON.stringify(note))
+
+    return res.json({ ok: true, deal: upd.rows[0] })
+  } catch (e) {
+    console.error('POST /api/deals/:id/override-fm-reject error', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
   }
 })
@@ -610,11 +818,13 @@ router.post('/:id/override-reject', authMiddleware, validate(overrideApproveSche
   try {
     const id = Number(req.params.id)
     const role = req.user.role
-    if (!['ceo', 'chairman', 'vice_chairman', 'top_management', 'superadmin'].includes(role)) {
-      return res.status(403).json({ error: { message: 'Top-Management role required to reject override' } })
+    // Allow Sales Manager, Financial Manager and Top-Management to reject (deny) with reasons
+    if (!['sales_manager', 'financial_manager', 'ceo', 'chairman', 'vice_chairman', 'top_management', 'superadmin'].includes(role)) {
+      return res.status(403).json({ error: { message: 'Role not permitted to reject override' } })
     }
     const q = await pool.query('SELECT * FROM deals WHERE id=$1', [id])
     if (q.rows.length === 0) return res.status(404).json({ error: { message: 'Deal not found' } })
+    const deal = q.rows[0]
 
     const notes = typeof req.body?.notes === 'string' ? req.body.notes : null
 

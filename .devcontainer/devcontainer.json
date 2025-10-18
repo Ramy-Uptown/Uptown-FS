@@ -1,0 +1,30 @@
+{
+  "name": "Uptown-FS",
+  "forwardPorts": [3001, 5173],
+  "portsAttributes": {
+    "3001": {
+      "label": "API (Express)",
+      "onAutoForward": "openBrowser",
+      "protocol": "http",
+      "visibility": "public"
+    },
+    "5173": {
+      "label": "Client (Vite)",
+      "onAutoForward": "openBrowser",
+      "protocol": "http",
+      "visibility": "public"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "remote.autoForwardPorts": true,
+        "remote.portsAttributes": {
+          "3001": { "label": "API (Express)", "visibility": "public" },
+          "5173": { "label": "Client (Vite)", "visibility": "public" }
+        }
+      }
+    }
+  },
+  "postStartCommand": "docker compose up -d"
+}

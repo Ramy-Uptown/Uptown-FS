@@ -150,7 +150,7 @@ const SalesRepDashboard = () => {
                 </Button>
               </Col>
               <Col span={12}>
-                <Button block size="large" onClick={() => window.location.href = '/calculator'}>
+                <Button block size="large" onClick={() => window.location.href = '/deals/create'}>
                   NPV Calculator
                 </Button>
               </Col>

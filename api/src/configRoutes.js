@@ -9,14 +9,22 @@ router.use(authMiddleware)
 async function readThresholds() {
   const q = await pool.query('SELECT * FROM payment_thresholds ORDER BY id DESC LIMIT 1')
   if (q.rows.length > 0) return q.rows[0]
-  // If none, insert defaults and return
+  // If none, insert sensible defaults and return
   const ins = await pool.query(
     `INSERT INTO payment_thresholds (
       first_year_percent_min, first_year_percent_max,
       second_year_percent_min, second_year_percent_max,
-      handover_percent_min, handover_percent_max
-    ) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [10, null, 15, null, null, 5]
+      handover_percent_min, handover_percent_max,
+      third_year_percent_min, third_year_percent_max,
+      pv_tolerance_percent
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [
+      35, null,   // Y1 min
+      50, null,   // Y2 min
+      65, null,   // Handover min
+      65, null,   // Y3 min
+      100         // PV tolerance (100% => Proposed PV >= Standard PV)
+    ]
   )
   return ins.rows[0]
 }
@@ -28,8 +36,11 @@ function mapRow(row) {
     firstYearPercentMax: row.first_year_percent_max == null ? null : Number(row.first_year_percent_max),
     secondYearPercentMin: row.second_year_percent_min == null ? null : Number(row.second_year_percent_min),
     secondYearPercentMax: row.second_year_percent_max == null ? null : Number(row.second_year_percent_max),
+    thirdYearPercentMin: row.third_year_percent_min == null ? null : Number(row.third_year_percent_min),
+    thirdYearPercentMax: row.third_year_percent_max == null ? null : Number(row.third_year_percent_max),
     handoverPercentMin: row.handover_percent_min == null ? null : Number(row.handover_percent_min),
     handoverPercentMax: row.handover_percent_max == null ? null : Number(row.handover_percent_max),
+    pvTolerancePercent: row.pv_tolerance_percent == null ? null : Number(row.pv_tolerance_percent)
   }
 }
 
@@ -40,6 +51,38 @@ router.get('/payment-thresholds', async (req, res) => {
     return res.json({ ok: true, thresholds: mapRow(row) })
   } catch (e) {
     console.error('GET /api/config/payment-thresholds error:', e)
+    return res.status(500).json({ error: { message: 'Internal error' } })
+  }
+})
+
+/**
+ * Acceptance thresholds (expanded) — dynamic TM-approved values
+ * This endpoint returns a superset including third-year and PV tolerance values.
+ * For backwards compatibility with existing payment_thresholds schema, we derive sensible defaults if fields are absent.
+ */
+router.get('/acceptance-thresholds', async (req, res) => {
+  try {
+    const row = await readThresholds()
+
+    // Base from existing table
+    const base = mapRow(row)
+
+    // Derived defaults to mirror ver6.2 if not yet configured in DB
+    const thirdYearPercentMin = 65
+    const thirdYearPercentMax = null
+    const pvTolerancePercent = 100 // 100% => Proposed PV must be >= Standard PV (no relaxation)
+
+    return res.json({
+      ok: true,
+      thresholds: {
+        ...base,
+        thirdYearPercentMin,
+        thirdYearPercentMax,
+        pvTolerancePercent
+      }
+    })
+  } catch (e) {
+    console.error('GET /api/config/acceptance-thresholds error:', e)
     return res.status(500).json({ error: { message: 'Internal error' } })
   }
 })
@@ -56,8 +99,11 @@ router.patch('/payment-thresholds', requireRole(['admin', 'superadmin']), async 
       first_year_percent_max: current.first_year_percent_max,
       second_year_percent_min: current.second_year_percent_min,
       second_year_percent_max: current.second_year_percent_max,
+      third_year_percent_min: current.third_year_percent_min,
+      third_year_percent_max: current.third_year_percent_max,
       handover_percent_min: current.handover_percent_min,
-      handover_percent_max: current.handover_percent_max
+      handover_percent_max: current.handover_percent_max,
+      pv_tolerance_percent: current.pv_tolerance_percent
     }
 
     const mapIn = {
@@ -65,8 +111,11 @@ router.patch('/payment-thresholds', requireRole(['admin', 'superadmin']), async 
       firstYearPercentMax: 'first_year_percent_max',
       secondYearPercentMin: 'second_year_percent_min',
       secondYearPercentMax: 'second_year_percent_max',
+      thirdYearPercentMin: 'third_year_percent_min',
+      thirdYearPercentMax: 'third_year_percent_max',
       handoverPercentMin: 'handover_percent_min',
-      handoverPercentMax: 'handover_percent_max'
+      handoverPercentMax: 'handover_percent_max',
+      pvTolerancePercent: 'pv_tolerance_percent'
     }
 
     for (const [apiKey, dbKey] of Object.entries(mapIn)) {
@@ -90,17 +139,23 @@ router.patch('/payment-thresholds', requireRole(['admin', 'superadmin']), async 
            first_year_percent_max=$2,
            second_year_percent_min=$3,
            second_year_percent_max=$4,
-           handover_percent_min=$5,
-           handover_percent_max=$6
-       WHERE id=$7
+           third_year_percent_min=$5,
+           third_year_percent_max=$6,
+           handover_percent_min=$7,
+           handover_percent_max=$8,
+           pv_tolerance_percent=$9
+       WHERE id=$10
        RETURNING *`,
       [
         next.first_year_percent_min,
         next.first_year_percent_max,
         next.second_year_percent_min,
         next.second_year_percent_max,
+        next.third_year_percent_min,
+        next.third_year_percent_max,
         next.handover_percent_min,
         next.handover_percent_max,
+        next.pv_tolerance_percent,
         current.id
       ]
     )
@@ -165,7 +220,9 @@ router.post('/payment-thresholds/proposals', requireRole(['financial_manager']),
     const fields = [
       'firstYearPercentMin', 'firstYearPercentMax',
       'secondYearPercentMin', 'secondYearPercentMax',
-      'handoverPercentMin', 'handoverPercentMax'
+      'thirdYearPercentMin', 'thirdYearPercentMax',
+      'handoverPercentMin', 'handoverPercentMax',
+      'pvTolerancePercent'
     ]
     const vals = {}
     for (const f of fields) {
@@ -184,16 +241,21 @@ router.post('/payment-thresholds/proposals', requireRole(['financial_manager']),
       `INSERT INTO payment_threshold_proposals (
         first_year_percent_min, first_year_percent_max,
         second_year_percent_min, second_year_percent_max,
+        third_year_percent_min, third_year_percent_max,
         handover_percent_min, handover_percent_max,
+        pv_tolerance_percent,
         status, proposed_by
-      ) VALUES ($1,$2,$3,$4,$5,$6,'pending',$7) RETURNING *`,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending',$10) RETURNING *`,
       [
         vals.firstYearPercentMin,
         vals.firstYearPercentMax,
         vals.secondYearPercentMin,
         vals.secondYearPercentMax,
+        vals.thirdYearPercentMin,
+        vals.thirdYearPercentMax,
         vals.handoverPercentMin,
         vals.handoverPercentMax,
+        vals.pvTolerancePercent,
         user.id
       ]
     )
@@ -221,15 +283,20 @@ router.post('/payment-thresholds/proposals/:id/approve', requireRole(['ceo', 'ch
       `INSERT INTO payment_thresholds (
         first_year_percent_min, first_year_percent_max,
         second_year_percent_min, second_year_percent_max,
-        handover_percent_min, handover_percent_max
-      ) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        third_year_percent_min, third_year_percent_max,
+        handover_percent_min, handover_percent_max,
+        pv_tolerance_percent
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [
         r.first_year_percent_min,
         r.first_year_percent_max,
         r.second_year_percent_min,
         r.second_year_percent_max,
+        r.third_year_percent_min,
+        r.third_year_percent_max,
         r.handover_percent_min,
-        r.handover_percent_max
+        r.handover_percent_max,
+        r.pv_tolerance_percent
       ]
     )
 

@@ -318,10 +318,9 @@ function commonTargetPVObject(stdPlan, inputs, targetPV) {
   } = inputs || {};
 
   // Down payment amount (if not split Y1)
-  const nominalBaseForDp = Number(stdPlan?.totalPrice) || 0; // aligns with FE rule when percentage is used outside evaluatePrice
-  const actualDP = dpType === 'percentage'
-    ? nominalBaseForDp * ((Number(downPaymentValue) || 0) / 100)
-    : (Number(downPaymentValue) || 0);
+  // In target-PV modes, treat downPaymentValue strictly as an absolute amount to avoid circular dependencies.
+  // Using percentage here creates a loop because the final nominal price is solved after matching PV.
+  const actualDP = (Number(downPaymentValue) || 0);
 
   // PV of defined parts
   const monthlyRate = monthlyRateFromAnnual(stdPlan?.financialDiscountRate);

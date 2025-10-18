@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { fetchWithAuth } from '../lib/apiClient.js';
 import { notifyError, notifySuccess } from '../lib/notifications.js';
 import LoadingButton from '../components/LoadingButton.jsx';
@@ -8,57 +8,14 @@ import BrandHeader from '../lib/BrandHeader.jsx';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-function getPaymentMonths(numberOfInstallments, frequency) {
-  const out = [];
-  if (!numberOfInstallments) return out;
-  let period;
-  let first = 1;
-  switch (frequency) {
-    case 'monthly': period = 1; first = 1; break;
-    case 'quarterly': period = 3; first = 3; break;
-    case 'bi-annually': period = 6; first = 6; break;
-    case 'annually': period = 12; first = 12; break;
-    default: period = 1; first = 1;
-  }
-  out.push(first);
-  for (let i = 1; i < numberOfInstallments; i++) {
-    out.push(out[i - 1] + period);
-  }
-  return out;
-}
 
-function calculatePV(totalPrice, dpPercent, years, frequency, annualRate) {
-  const n = Number(totalPrice) || 0;
-  const dpPerc = Number(dpPercent) / 100 || 0;
-  const rate = Number(annualRate) / 100 || 0;
-  const downPayment = n * dpPerc;
-  const loan = n - downPayment;
-
-  let installments = 0;
-  if (years > 0) {
-    if (frequency === 'monthly') installments = years * 12;
-    else if (frequency === 'quarterly') installments = years * 4;
-    else if (frequency === 'bi-annually') installments = years * 2;
-    else if (frequency === 'annually') installments = years * 1;
-  }
-
-  if (installments <= 0) return downPayment;
-
-  const perInstallment = loan / installments;
-  const months = getPaymentMonths(installments, frequency);
-  const monthlyRate = Math.pow(1 + rate, 1 / 12) - 1;
-  let pv = downPayment;
-  for (const m of months) {
-    pv += perInstallment / Math.pow(1 + monthlyRate, m);
-  }
-  return pv;
-}
 
 export default function StandardPricing() {
   const [models, setModels] = useState([]);
   const [pricings, setPricings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [stdPlanCfg, setStdPlanCfg] = useState(null);
 
   const user = JSON.parse(localStorage.getItem('auth_user') || '{}');
   const role = user?.role;
@@ -87,10 +44,14 @@ export default function StandardPricing() {
     async function fetchData() {
       try {
         setLoading(true);
-        const reqs = [fetchWithAuth(`${API_URL}/api/pricing/unit-model`)];
-        // Allow both FM and Top-Management to view models (endpoint updated to allow read)
-        reqs.push(fetchWithAuth(`${API_URL}/api/inventory/unit-models`));
-        const [pricingRes, modelsRes] = await Promise.all(reqs);
+        const reqs = [
+          fetchWithAuth(`${API_URL}/api/pricing/unit-model`),
+          // Allow both FM and Top-Management to view models (endpoint updated to allow read)
+          fetchWithAuth(`${API_URL}/api/inventory/unit-models`),
+          // Active global standard plan (for rate/duration/frequency used in PV)
+          fetchWithAuth(`${API_URL}/api/standard-plan/latest`)
+        ];
+        const [pricingRes, modelsRes, stdPlanRes] = await Promise.all(reqs);
         const pricingData = await pricingRes.json();
         if (!pricingRes.ok) throw new Error(pricingData?.error?.message || 'Failed to fetch pricing');
 
@@ -100,6 +61,11 @@ export default function StandardPricing() {
         if (!modelsRes.ok) throw new Error(modelsData?.error?.message || 'Failed to fetch models');
         const items = modelsData.items || modelsData.models || [];
         setModels(items);
+
+        const stdPlanData = await stdPlanRes.json();
+        if (stdPlanRes.ok) {
+          setStdPlanCfg(stdPlanData.standardPlan || null);
+        }
       } catch (e) {
         setError(e.message || 'An error occurred');
         notifyError(e, 'Failed to load standard pricing');
@@ -171,7 +137,11 @@ export default function StandardPricing() {
           garage_price: garagePrice === '' ? 0 : Number(garagePrice),
           garden_price: gardenPrice === '' ? 0 : Number(gardenPrice),
           roof_price: roofPrice === '' ? 0 : Number(roofPrice),
-          storage_price: storagePrice === '' ? 0 : Number(storagePrice)
+          storage_price: storagePrice === '' ? 0 : Number(storagePrice),
+          std_financial_rate_percent: Number(annualRate),
+          plan_duration_years: Number(years),
+          installment_frequency: String(frequency),
+          calculated_pv: Number(pv)
         })
       });
       const data = await res.json();
@@ -189,6 +159,8 @@ export default function StandardPricing() {
   };
 
   const [rowLoading, setRowLoading] = useState({});
+  // Map of pricingId -> authoritative PV from backend
+  const [rowPv, setRowPv] = useState({});
   const handleApproveStatus = async (id, status, reason) => {
     try {
       setRowLoading(s => ({ ...s, [id]: true }));
@@ -210,16 +182,179 @@ export default function StandardPricing() {
     }
   };
 
+  // Fetch authoritative PV for each pricing row using backend engine
+  useEffect(() => {
+    let abort = false;
+
+    const normalizeFreq = (f) => {
+      const v = String(f || '').toLowerCase().trim();
+      if (v === 'biannually') return 'bi-annually';
+      return v || 'monthly';
+    };
+
+    async function computeAllPVs() {
+      try {
+        const entries = await Promise.all((pricings || []).map(async (p) => {
+          try {
+            const totalNominal =
+              (Number(p.price || 0)) +
+              (Number(p.garden_price || 0)) +
+              (Number(p.roof_price || 0)) +
+              (Number(p.storage_price || 0)) +
+              (Number(p.garage_price || 0));
+
+            // Derive row-specific years/frequency/rate with same precedence as the table
+            const rowYears =
+              (p.plan_duration_years != null ? Number(p.plan_duration_years) : null)
+              ?? (stdPlanCfg?.plan_duration_years != null ? Number(stdPlanCfg.plan_duration_years) : null)
+              ?? 5;
+
+            const rowFreq =
+              (p.installment_frequency ? normalizeFreq(p.installment_frequency) : null)
+              ?? (stdPlanCfg?.installment_frequency ? normalizeFreq(stdPlanCfg.installment_frequency) : null)
+              ?? 'monthly';
+
+            const rowRate =
+              (p.std_financial_rate_percent != null ? Number(p.std_financial_rate_percent) : null)
+              ?? (stdPlanCfg?.std_financial_rate_percent != null ? Number(stdPlanCfg.std_financial_rate_percent) : null)
+              ?? 0;
+
+            if (!(totalNominal > 0) || !(Number.isInteger(rowYears) && rowYears > 0)) {
+              return [p.id, 0];
+            }
+
+            const body = {
+              mode: 'evaluateCustomPrice',
+              stdPlan: {
+                totalPrice: totalNominal,
+                financialDiscountRate: Number(rowRate) || 0,
+                calculatedPV: 0
+              },
+              inputs: {
+                salesDiscountPercent: 0,
+                dpType: 'percentage',
+                downPaymentValue: 0, // baseline standard PV (no DP)
+                planDurationYears: rowYears,
+                installmentFrequency: rowFreq,
+                additionalHandoverPayment: 0,
+                handoverYear: 1,
+                splitFirstYearPayments: false,
+                firstYearPayments: [],
+                subsequentYears: []
+              }
+            };
+
+            const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+            const data = await resp.json().catch(() => null);
+            if (!resp.ok || !data) {
+              return [p.id, 0];
+            }
+            const calcPv = Number(data?.data?.calculatedPV) || 0;
+            return [p.id, calcPv];
+          } catch {
+            return [p.id, 0];
+          }
+        }));
+
+        if (abort) return;
+        const next = {};
+        for (const [id, val] of entries) next[id] = val;
+        setRowPv(next);
+      } catch {
+        if (!abort) setRowPv({});
+      }
+    }
+
+    computeAllPVs();
+    return () => { abort = true; };
+  }, [pricings, stdPlanCfg]);
+
   // Pricing history modal state
   const [historyPricingId, setHistoryPricingId] = useState(null);
   const [historyItems, setHistoryItems] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [rejectReasons, setRejectReasons] = useState({});
 
-  const pv = useMemo(() => {
-    const total = Number(stdPrice) || 0;
-    return calculatePV(total, dpPercent, Number(years), frequency, annualRate);
-  }, [stdPrice, dpPercent, years, frequency, annualRate]);
+  const [pv, setPv] = useState(0);
+  const [pvError, setPvError] = useState('');
+  const pvDebounce = useRef(null);
+
+  useEffect(() => {
+    if (pvDebounce.current) clearTimeout(pvDebounce.current);
+
+    pvDebounce.current = setTimeout(async () => {
+      try {
+        const total =
+          (Number(stdPrice || 0)) +
+          (selectedModel?.has_garden ? Number(gardenPrice || 0) : 0) +
+          (selectedModel?.has_roof ? Number(roofPrice || 0) : 0) +
+          (Number(storagePrice || 0)) +
+          (Number(garagePrice || 0));
+
+        const yrs = Number(years) || 0;
+        const rate = Number(annualRate);
+        const freq = String(frequency || 'monthly');
+
+        // Basic guards
+        if (!(total > 0) || !(yrs > 0) || !['monthly','quarterly','bi-annually','annually'].includes(freq)) {
+          setPv(0);
+          setPvError('');
+          return;
+        }
+
+        // Build request mirroring LivePreview pattern, using authoritative backend engine
+        const body = {
+          mode: 'evaluateCustomPrice',
+          stdPlan: {
+            totalPrice: total,
+            financialDiscountRate: rate,
+            calculatedPV: 0
+          },
+          inputs: {
+            salesDiscountPercent: 0,
+            dpType: 'percentage',
+            downPaymentValue: Number(dpPercent) || 0,
+            planDurationYears: yrs,
+            installmentFrequency: freq,
+            additionalHandoverPayment: 0,
+            handoverYear: 1,
+            splitFirstYearPayments: false,
+            firstYearPayments: [],
+            subsequentYears: []
+          }
+        };
+
+        const resp = await fetchWithAuth(`${API_URL}/api/calculate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await resp.json().catch(() => null);
+
+        if (!resp.ok || !data) {
+          setPv(0);
+          setPvError(data?.error?.message || 'Failed to calculate PV');
+          return;
+        }
+
+        const calcPv = Number(data?.data?.calculatedPV) || 0;
+        setPv(calcPv);
+        setPvError('');
+      } catch (e) {
+        setPv(0);
+        setPvError('Failed to calculate PV');
+      }
+    }, 400);
+
+    return () => {
+      if (pvDebounce.current) clearTimeout(pvDebounce.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stdPrice, gardenPrice, roofPrice, storagePrice, garagePrice, dpPercent, years, frequency, annualRate, selectedModel]);
 
   const installmentsCount = useMemo(() => {
     const y = Number(years) || 0;
@@ -514,6 +649,10 @@ export default function StandardPricing() {
                 <th style={th}>Storage</th>
                 <th style={th}>Garage</th>
                 <th style={th}>Maintenance</th>
+                <th style={th}>Calculated PV</th>
+                <th style={th}>Annual Financial Rate (%)</th>
+                <th style={th}>Plan Duration (years)</th>
+                <th style={th}>Installment Frequency</th>
                 <th style={th}>Status</th>
                 <th style={th}>Created By</th>
                 <th style={th}>Approved By</th>
@@ -521,85 +660,114 @@ export default function StandardPricing() {
               </tr>
             </thead>
             <tbody>
-              {pricings.map(p => (
-                <tr key={p.id}>
-                  <td style={td}>{p.model_name}</td>
-                  <td style={td}>{p.model_code || ''}</td>
-                  <td style={td}>{Number(p.area || 0).toLocaleString()}</td>
-                  <td style={td}>{Number(p.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{
-                    (() => {
-                      const hasGarden = p.has_garden ?? (p.garden_area != null ? Number(p.garden_area) > 0 : null);
-                      const val = Number(p.garden_price || 0);
-                      if (hasGarden === false) return 'N.A';
-                      return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasGarden === false ? 'N.A' : '0.00');
-                    })()
-                  }</td>
-                  <td style={td}>{
-                    (() => {
-                      const hasRoof = p.has_roof ?? (p.roof_area != null ? Number(p.roof_area) > 0 : null);
-                      const val = Number(p.roof_price || 0);
-                      if (hasRoof === false) return 'N.A';
-                      return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasRoof === false ? 'N.A' : '0.00');
-                    })()
-                  }</td>
-                  <td style={td}>{Number(p.storage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{Number(p.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{Number(p.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{p.status}</td>
-                  <td style={td}>{p.created_by_email || ''}</td>
-                  <td style={td}>{p.approved_by_email || ''}</td>
-                  <td style={td}>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <LoadingButton onClick={() => openPricingHistory(p.id)}>History</LoadingButton>
-                      {(role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval' ? (
-                        <>
-                          <LoadingButton onClick={() => handleApproveStatus(p.id, 'approved')} loading={rowLoading[p.id]} style={btnSuccess}>Approve</LoadingButton>
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                            <input
-                              placeholder="Reason (for rejection)"
-                              value={rejectReasons[p.id] || ''}
-                              onChange={e => setRejectReasons(s => ({ ...s, [p.id]: e.target.value }))}
-                              style={ctrl}
-                            />
-                            <LoadingButton onClick={() => handleApproveStatus(p.id, 'rejected', rejectReasons[p.id])} loading={rowLoading[p.id]} style={btnDanger}>Reject</LoadingButton>
-                          </div>
-                        </>
-                      ) : null}
-                      {(role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id) ? (
-                        <LoadingButton
-                          onClick={async () => {
-                            if (!window.confirm('Cancel this pending pricing request?')) return
-                            try {
-                              const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model/${p.id}`, { method: 'DELETE' })
-                              const data = await res.json()
-                              if (!res.ok) throw new Error(data?.error?.message || 'Cancel failed')
-                              notifySuccess('Request cancelled')
-                              // refresh list
-                              const listRes = await fetchWithAuth(`${API_URL}/api/pricing/unit-model`)
-                              const listData = await listRes.json()
-                              if (listRes.ok) setPricings(listData.pricings || [])
-                            } catch (e) {
-                              const msg = e.message || String(e)
-                              setError(msg)
-                              notifyError(e, 'Cancel failed')
-                            }
-                          }}
-                          style={btn}
-                        >
-                          Cancel Request
-                        </LoadingButton>
-                      ) : null}
-                      {!( (role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval') && !((role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id)) ? (
-                        <span style={metaText}>—</span>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {pricings.map(p => {
+                const totalNominal = Number(p.price || 0)
+                  + (Number(p.garden_price || 0))
+                  + (Number(p.roof_price || 0))
+                  + (Number(p.storage_price || 0))
+                  + (Number(p.garage_price || 0));
+
+                // Prefer per-pricing financial settings when available; fall back to active Standard Plan; then local form defaults
+                const rowYears = (p.plan_duration_years != null ? Number(p.plan_duration_years) : null)
+                  ?? (stdPlanCfg?.plan_duration_years != null ? Number(stdPlanCfg.plan_duration_years) : null)
+                  ?? (Number(years) || 5);
+                const normalizeFreq = (f) => {
+                  const v = String(f || '').toLowerCase().trim();
+                  if (v === 'biannually') return 'bi-annually';
+                  return v || 'monthly';
+                };
+                const rowFreq = (p.installment_frequency ? normalizeFreq(p.installment_frequency) : null)
+                  ?? (stdPlanCfg?.installment_frequency ? normalizeFreq(stdPlanCfg.installment_frequency) : null)
+                  ?? normalizeFreq(frequency || 'monthly');
+                const rowRate = (p.std_financial_rate_percent != null ? Number(p.std_financial_rate_percent) : null)
+                  ?? (stdPlanCfg?.std_financial_rate_percent != null ? Number(stdPlanCfg.std_financial_rate_percent) : null)
+                  ?? (Number(annualRate) || 0);
+
+                const rowPvValue = rowPv[p.id];
+                return (
+                 <tr key={p.id}>
+                    <td style={td}>{p.model_name}</td>
+                    <td style={td}>{p.model_code || ''}</td>
+                    <td style={td}>{Number(p.area || 0).toLocaleString()}</td>
+                    <td style={td}>{Number(p.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{
+                      (() => {
+                        const hasGarden = p.has_garden ?? (p.garden_area != null ? Number(p.garden_area) > 0 : null);
+                        const val = Number(p.garden_price || 0);
+                        if (hasGarden === false) return 'N.A';
+                        return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasGarden === false ? 'N.A' : '0.00');
+                      })()
+                    }</td>
+                    <td style={td}>{
+                      (() => {
+                        const hasRoof = p.has_roof ?? (p.roof_area != null ? Number(p.roof_area) > 0 : null);
+                        const val = Number(p.roof_price || 0);
+                        if (hasRoof === false) return 'N.A';
+                        return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasRoof === false ? 'N.A' : '0.00');
+                      })()
+                    }</td>
+                    <td style={td}>{Number(p.storage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{Number(p.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{Number(p.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{Number(rowPvValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{Number(rowRate || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                    <td style={td}>{rowYears}</td>
+                    <td style={td}>{rowFreq}</td>
+                    <td style={td}>{p.status}</td>
+                    <td style={td}>{p.created_by_email || ''}</td>
+                    <td style={td}>{p.approved_by_email || ''}</td>
+                    <td style={td}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <LoadingButton onClick={() => openPricingHistory(p.id)}>History</LoadingButton>
+                        {(role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval' ? (
+                          <>
+                            <LoadingButton onClick={() => handleApproveStatus(p.id, 'approved')} loading={rowLoading[p.id]} style={btnSuccess}>Approve</LoadingButton>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <input
+                                placeholder="Reason (for rejection)"
+                                value={rejectReasons[p.id] || ''}
+                                onChange={e => setRejectReasons(s => ({ ...s, [p.id]: e.target.value }))}
+                                style={ctrl}
+                              />
+                              <LoadingButton onClick={() => handleApproveStatus(p.id, 'rejected', rejectReasons[p.id])} loading={rowLoading[p.id]} style={btnDanger}>Reject</LoadingButton>
+                            </div>
+                          </>
+                        ) : null}
+                        {(role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id) ? (
+                          <LoadingButton
+                            onClick={async () => {
+                              if (!window.confirm('Cancel this pending pricing request?')) return
+                              try {
+                                const res = await fetchWithAuth(`${API_URL}/api/pricing/unit-model/${p.id}`, { method: 'DELETE' })
+                                const data = await res.json()
+                                if (!res.ok) throw new Error(data?.error?.message || 'Cancel failed')
+                                notifySuccess('Request cancelled')
+                                // refresh list
+                                const listRes = await fetchWithAuth(`${API_URL}/api/pricing/unit-model`)
+                                const listData = await listRes.json()
+                                if (listRes.ok) setPricings(listData.pricings || [])
+                              } catch (e) {
+                                const msg = e.message || String(e)
+                                setError(msg)
+                                notifyError(e, 'Cancel failed')
+                              }
+                            }}
+                            style={btn}
+                          >
+                            Cancel Request
+                          </LoadingButton>
+                        ) : null}
+                        {!( (role === 'ceo' || role === 'chairman' || role === 'vice_chairman') && p.status === 'pending_approval') && !((role === 'financial_manager') && p.status === 'pending_approval' && p.created_by === (JSON.parse(localStorage.getItem('auth_user') || '{}').id)) ? (
+                          <span style={metaText}>—</span>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {pricings.length === 0 && (
                 <tr>
-                  <td style={td} colSpan={8}>No unit model pricing entries.</td>
+                  <td style={td} colSpan={15}><span style={metaText}>No unit model pricing entries.</span></td>
                 </tr>
               )}
             </tbody>
