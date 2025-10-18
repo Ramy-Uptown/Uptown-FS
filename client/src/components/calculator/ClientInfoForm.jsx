@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import ClientIdScanner from './ClientIdScanner.jsx'
+import ClientIdScanner from '../ocr/ClientIdScanner.jsx'
 import { t, isRTL } from '../../lib/i18n.js'
 
 function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language = 'en' }) {
