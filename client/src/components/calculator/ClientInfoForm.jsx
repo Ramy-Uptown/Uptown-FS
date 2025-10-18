@@ -94,7 +94,7 @@ function ClientInfoFormInner({ role, clientInfo, setClientInfo, styles, language
           onFocus={() => setFocusedKey('id_issue_date')}
           onBlur={() => { commit('id_issue_date'); setFocusedKey(null) }}
         />
-    </</div</   </div>
+      </div> {/* Corrected closing tag for this div */}
       <div>
         <label htmlFor="birth_date" style={styles.label}>{t('birth_date', language)} (<span style={styles.arInline}>[[تاريخ الميلاد]]</span>)</label>
         <input
