@@ -317,14 +317,10 @@ function commonTargetPVObject(stdPlan, inputs, targetPV) {
     subsequentYears = []
   } = inputs || {};
 
-  // Down payment amount (if not split Y1)
-  // In target-PV modes, treat downPaymentValue strictly as an absolute amount to avoid circular dependencies.
-  // Using percentage here creates a loop because the final nominal price is solved after matching PV.
-  const actualDP = (Number(downPaymentValue) || 0);
-
   // PV of defined parts
   const monthlyRate = monthlyRateFromAnnual(stdPlan?.financialDiscountRate);
 
+  // First-year split block PV and nominal
   let pvFirstYear = 0;
   let sumFirstYearNominal = 0;
   if (splitFirstYearPayments) {
@@ -336,6 +332,7 @@ function commonTargetPVObject(stdPlan, inputs, targetPV) {
     }
   }
 
+  // Subsequent years PV and nominal
   let pvSubsequent = 0;
   let sumSubsequentNominal = 0;
   const normalizedYears = normalizeSubsequentYears(subsequentYears, splitFirstYearPayments, installmentFrequency);
@@ -358,60 +355,111 @@ function commonTargetPVObject(stdPlan, inputs, targetPV) {
     }
   }
 
+  // Handover PV and nominal
   let pvHandover = 0;
-  if ((Number(additionalHandoverPayment) || 0) > 0 && (Number(handoverYear) || 0) > 0) {
-    pvHandover = Number(additionalHandoverPayment) / Math.pow(1 + monthlyRate, Number(handoverYear) * 12);
+  const handoverNominal = Number(additionalHandoverPayment) || 0;
+  const handoverYearNum = Number(handoverYear) || 0;
+  if (handoverNominal > 0 && handoverYearNum > 0) {
+    pvHandover = handoverNominal / Math.pow(1 + monthlyRate, handoverYearNum * 12);
   }
 
-  const dpForPV = splitFirstYearPayments ? 0 : actualDP;
-  const pvDefined = dpForPV + pvFirstYear + pvSubsequent + pvHandover;
+  // Sum of nominal parts that are fixed regardless of equal installments or DP
+  const Snom = sumFirstYearNominal + sumSubsequentNominal + handoverNominal;
+  const PV_fixed = pvFirstYear + pvSubsequent + pvHandover;
 
   const { effectiveStartYears, numEqualInstallments } = computeEqualInstallmentsMeta({
     planDurationYears, installmentFrequency, splitFirstYearPayments,
     numCustomSubsequentYears: (subsequentYears || []).length
   });
 
+  const pvaf = numEqualInstallments > 0
+    ? calculatePVAF(numEqualInstallments, installmentFrequency, monthlyRate, effectiveStartYears)
+    : 0;
+
   let equalInstallmentAmount = 0;
   let totalNominalPrice = 0;
+  let downPaymentAmount = 0;
 
-  const pvToHit = (Number(targetPV) || 0) - pvDefined;
+  const targetPVNum = Number(targetPV) || 0;
 
-  if (pvToHit < -1e-9) {
-    // Upfront PV already exceeds target -> no equal installments
-    equalInstallmentAmount = 0;
-    totalNominalPrice = (splitFirstYearPayments ? sumFirstYearNominal : (sumFirstYearNominal + actualDP))
-                      + sumSubsequentNominal
-                      + (Number(additionalHandoverPayment) || 0);
-  } else if (Math.abs(pvToHit) <= 1e-9) {
-    equalInstallmentAmount = 0;
-    totalNominalPrice = (splitFirstYearPayments ? sumFirstYearNominal : (sumFirstYearNominal + actualDP))
-                      + sumSubsequentNominal
-                      + (Number(additionalHandoverPayment) || 0);
-  } else if (numEqualInstallments > 0) {
-    const pvaf = calculatePVAF(numEqualInstallments, installmentFrequency, monthlyRate, effectiveStartYears);
-    if (pvaf <= 1e-9) {
-      equalInstallmentAmount = 0; // cannot compute
-      totalNominalPrice = (splitFirstYearPayments ? sumFirstYearNominal : (sumFirstYearNominal + actualDP))
-                        + sumSubsequentNominal
-                        + (Number(additionalHandoverPayment) || 0);
+  if (splitFirstYearPayments) {
+    // DP is considered part of first-year payments when split; treat DP as 0 at t=0 and not part of Snom.
+    const pvToHit = targetPVNum - PV_fixed;
+    if (pvToHit < -1e-9 || pvaf <= 1e-12 || numEqualInstallments <= 0) {
+      equalInstallmentAmount = 0;
+      totalNominalPrice = Snom; // no DP, only defined parts
+      downPaymentAmount = 0;
     } else {
       equalInstallmentAmount = pvToHit / pvaf;
-      totalNominalPrice = (splitFirstYearPayments ? sumFirstYearNominal : (sumFirstYearNominal + actualDP))
-                        + sumSubsequentNominal
-                        + (Number(additionalHandoverPayment) || 0)
-                        + (equalInstallmentAmount * numEqualInstallments);
+      totalNominalPrice = Snom + (equalInstallmentAmount * numEqualInstallments);
+      downPaymentAmount = 0;
     }
   } else {
-    // No room for equal installments
-    equalInstallmentAmount = 0;
-    totalNominalPrice = (splitFirstYearPayments ? sumFirstYearNominal : (sumFirstYearNominal + actualDP))
-                      + sumSubsequentNominal
-                      + (Number(additionalHandoverPayment) || 0);
+    // Not split: include DP at t=0 and in nominal. Support both amount and percentage.
+    const dpTypeNorm = (dpType || 'amount').toLowerCase();
+    const dpAmountInput = Number(downPaymentValue) || 0;
+
+    if (dpTypeNorm === 'percentage') {
+      // Solve with DP as a percentage of the final total.
+      const dpPct = Math.max(0, Math.min(1, dpAmountInput / 100)); // clamp to [0,1]
+      // If dpPct ~ 1, installments would be 0 and T collapses to Snom/(1-dpPct) which is infinite -> guard.
+      if (dpPct >= 1 - 1e-12) {
+        equalInstallmentAmount = 0;
+        totalNominalPrice = Infinity;
+        downPaymentAmount = Infinity;
+      } else if (numEqualInstallments > 0 && pvaf > 1e-12) {
+        // Algebra:
+        // T = (Snom + N*A) / (1 - dpPct)
+        // targetPV = PV_fixed + pvaf*A + (dpPct * T)
+        // Let K = dpPct / (1 - dpPct), then targetPV - PV_fixed - K*Snom = A * (pvaf + K*N)
+        const N = numEqualInstallments;
+        const K = dpPct / (1 - dpPct);
+        const numerator = targetPVNum - PV_fixed - K * Snom;
+        const denominator = pvaf + K * N;
+        if (Math.abs(denominator) <= 1e-12) {
+          equalInstallmentAmount = 0;
+          totalNominalPrice = Snom / (1 - dpPct);
+        } else {
+          equalInstallmentAmount = numerator / denominator;
+          if (equalInstallmentAmount < 0) equalInstallmentAmount = 0;
+          totalNominalPrice = (Snom + N * equalInstallmentAmount) / (1 - dpPct);
+        }
+        downPaymentAmount = dpPct * totalNominalPrice;
+      } else {
+        // No equal installments possible; DP is just dpPct of T, but with N=0, T = Snom / (1 - dpPct)
+        equalInstallmentAmount = 0;
+        totalNominalPrice = Snom / (1 - dpPct);
+        downPaymentAmount = dpPct * totalNominalPrice;
+      }
+    } else {
+      // Amount mode (existing behavior)
+      const actualDP = dpAmountInput;
+
+      const dpForPV = actualDP; // at t=0
+      const pvDefined = dpForPV + PV_fixed;
+      const pvToHit = targetPVNum - pvDefined;
+
+      if (pvToHit < -1e-9) {
+        equalInstallmentAmount = 0;
+        totalNominalPrice = actualDP + Snom;
+      } else if (Math.abs(pvToHit) <= 1e-9) {
+        equalInstallmentAmount = 0;
+        totalNominalPrice = actualDP + Snom;
+      } else if (numEqualInstallments > 0 && pvaf > 1e-12) {
+        equalInstallmentAmount = pvToHit / pvaf;
+        if (equalInstallmentAmount < 0) equalInstallmentAmount = 0;
+        totalNominalPrice = actualDP + Snom + (equalInstallmentAmount * numEqualInstallments);
+      } else {
+        equalInstallmentAmount = 0;
+        totalNominalPrice = actualDP + Snom;
+      }
+      downPaymentAmount = actualDP;
+    }
   }
 
   const equalMonths = getPaymentMonths(numEqualInstallments, installmentFrequency, effectiveStartYears);
   const pv = calculatePV({
-    downPayment: dpForPV,
+    downPayment: splitFirstYearPayments ? 0 : downPaymentAmount,
     equalInstallmentAmount,
     equalInstallmentMonths: equalMonths,
     monthlyRate,
@@ -423,7 +471,7 @@ function commonTargetPVObject(stdPlan, inputs, targetPV) {
 
   return {
     totalNominalPrice,
-    downPaymentAmount: actualDP,
+    downPaymentAmount,
     numEqualInstallments,
     equalInstallmentAmount,
     equalInstallmentMonths: equalMonths,
