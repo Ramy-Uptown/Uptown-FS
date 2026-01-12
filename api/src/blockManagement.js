@@ -211,6 +211,17 @@ router.post(
       )
 
       // Notifications
+      // Notify Financial Managers
+      try {
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
+           SELECT u.id, 'block_request_pending', 'blocks', $1, 'New block request created for unit ' || (SELECT code FROM units WHERE id=$2)
+           FROM users u
+           WHERE u.role = 'financial_manager' AND u.active = TRUE`,
+          [ins.rows[0].id, unitId]
+        )
+      } catch (_) {}
+
       if (decision !== 'ACCEPT') {
         await createNotification('block_override_requested', req.user.id, 'blocks', ins.rows[0].id, 'Block override requested (pending Sales Manager).')
         try {

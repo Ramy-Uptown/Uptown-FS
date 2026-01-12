@@ -524,7 +524,7 @@ export default function CreateDeal() {
         <button onClick={saveAsDraft} disabled={loading || submitting} className="px-6 py-3 rounded-xl border border-primary bg-primary text-white font-bold text-lg shadow-sm hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[160px]">
           {loading ? 'Saving…' : 'Save as Draft'}
         </button>
-        <button onClick={saveAndSubmit} disabled={loading || submitting} className="px-6 py-3 rounded-xl border border-primary-dark bg-primary-dark text-white font-bold text-lg shadow-sm hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[160px]">
+        <button onClick={saveAndSubmit} disabled={loading || submitting} className="px-6 py-3 rounded-xl border border-primary bg-primary text-white font-bold text-lg shadow-sm hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[160px]">
           {submitting ? 'Submitting…' : 'Save and Submit'}
         </button>
       </div>
