@@ -8,7 +8,7 @@ import { useLoader } from '../lib/loaderContext.jsx'
 import CalculatorApp from '../App.jsx'
 import * as XLSX from 'xlsx'
 import { generateClientOfferPdf } from '../lib/docExports.js'
-import { generateClientOfferPdf } from '../lib/docExports.js'
+
 import DealHeaderSection from './components/DealHeaderSection.jsx'
 import DealAuditTrail from './components/DealAuditTrail.jsx'
 import DealActionsBar from './components/DealActionsBar.jsx'
