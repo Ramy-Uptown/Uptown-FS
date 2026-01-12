@@ -136,12 +136,7 @@ export default function BrandHeader({ title, onLogout }) {
       case 'superadmin':
         return [
           { label: 'Users', href: '/admin/users' },
-          { label: 'Bulk Units', href: '/admin/units/bulk-create' },
-          { label: 'Unit History', href: '/admin/unit-history' },
-          { label: 'Sales Team', href: '/admin/sales-team' },
-          { label: 'Team Proposals', href: '/deals/team-proposals' },
-          { label: 'Holds', href: '/admin/holds' },
-          { label: 'Workflow Logs', href: '/admin/workflow-logs' }
+          { label: 'Teams', href: '/admin/teams' }
         ]
       case 'admin':
         return [

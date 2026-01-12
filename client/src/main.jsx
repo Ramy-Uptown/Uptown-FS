@@ -37,6 +37,8 @@ import ReservationFormDetail from './deals/ReservationFormDetail.jsx'
 import SettingsUnlockRequests from './deals/SettingsUnlockRequests.jsx'
 import BulkUnitCreation from './units/BulkUnitCreation.jsx'
 import DraftUnits from './admin/DraftUnits.jsx'
+import SuperAdminHome from './admin/SuperAdminHome.jsx'
+import TeamsHub from './admin/TeamsHub.jsx'
 
 function RoleBasedRoute({ children, allowedRoles }) {
   const token = localStorage.getItem('auth_token');
@@ -71,7 +73,7 @@ function HomeRedirect() {
   }
   const role = user?.role
   // Role-based landing
-  if (role === 'superadmin') return <Navigate to="/admin/users" replace />
+  if (role === 'superadmin') return <Navigate to="/admin/superadmin-home" replace />
   if (role === 'admin') return <Navigate to="/admin/users" replace />
   if (role === 'property_consultant') return <Navigate to="/deals/create" replace />
   if (role === 'sales_manager') return <Navigate to="/deals/queues" replace />
@@ -101,6 +103,14 @@ createRoot(document.getElementById('root')).render(
               </PrivateRoute>
             }
           />
+          <Route
+            path="/admin/superadmin-home"
+            element={
+              <RoleBasedRoute allowedRoles={['superadmin']}>
+                <SuperAdminHome />
+              </RoleBasedRoute>
+            }
+          />
           <Route
             path="/admin/users"
             element={
@@ -318,6 +328,14 @@ createRoot(document.getElementById('root')).render(
             element={
               <RoleBasedRoute allowedRoles={['crm_admin', 'superadmin', 'admin', 'financial_manager', 'ceo', 'chairman', 'vice_chairman']}>
                 <BulkUnitCreation />
+              </RoleBasedRoute>
+            }
+          />
+          <Route
+            path="/admin/teams"
+            element={
+              <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                <TeamsHub />
               </RoleBasedRoute>
             }
           />
