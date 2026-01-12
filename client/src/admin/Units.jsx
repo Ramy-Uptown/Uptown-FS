@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import AdminSidebar from '../components/AdminSidebar.jsx'
 import LoadingButton from '../components/LoadingButton.jsx'
@@ -8,6 +9,7 @@ import ConfirmModal from '../components/ConfirmModal.jsx'
 import UnitDetailsDrawer from '../components/UnitDetailsDrawer.jsx'
 
 export default function Units() {
+  const navigate = useNavigate()
   const [units, setUnits] = useState([])
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -294,6 +296,14 @@ export default function Units() {
                     <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Units Catalog</h2>
                     <p className="text-sm text-gray-500 mt-1">Manage inventory, pricing, and unit details.</p>
                 </div>
+                {isCrmInventoryAdmin && (
+                  <LoadingButton 
+                    onClick={() => navigate('/admin/units/bulk-create')}
+                    variant="primary"
+                  >
+                    Bulk Create Drafts
+                  </LoadingButton>
+                )}
             </div>
 
             {/* Input Form */}
