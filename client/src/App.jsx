@@ -609,10 +609,10 @@ export default function App(props) {
   const onChange = (setter) => (e) => setter(e.target.value)
 
   return (
-    <div style={styles.page}>
-      <div style={styles.container}>
+    <div className={styles.page}>
+      <div className={styles.container}>
         {!embedded && (
-          <div style={{ marginBottom: 16 }}>
+          <div className="mb-4">
             <BrandHeader
               title={import.meta.env.VITE_APP_TITLE || 'Uptown Financial System — Calculator'}
               onLogout={async () => {
@@ -679,8 +679,8 @@ export default function App(props) {
 
         {/* Evaluation from server (PV-based decision + five conditions) */}
         {genResult?.evaluation && (
-          <section style={styles.section} dir={isRTL(language) ? 'rtl' : 'ltr'}>
-            <h2 style={{ ...styles.sectionTitle, textAlign: isRTL(language) ? 'right' : 'left' }}>{t('acceptance_evaluation', language)}</h2>
+          <section className={styles.section} dir={isRTL(language) ? 'rtl' : 'ltr'}>
+            <h2 className={`${styles.sectionTitle} ${isRTL(language) ? 'text-right' : 'text-left'}`}>{t('acceptance_evaluation', language)}</h2>
             <EvaluationPanel
               evaluation={genResult.evaluation}
               role={role}
@@ -730,7 +730,7 @@ export default function App(props) {
                 }
               }}
             />
-            <small style={styles.metaText}>
+            <small className={styles.metaText}>
               {/* Keep this note in English for now as it is managerial guidance */}
               Thresholds are set by the Financial Manager and approved by Top Management. The evaluation above is computed server-side.
             </small>
@@ -796,28 +796,29 @@ export default function App(props) {
         />
 
         {/* Results Table */}
-        <section style={styles.section} dir={isRTL(language) ? 'rtl' : 'ltr'}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ ...styles.sectionTitle, textAlign: isRTL(language) ? 'right' : 'left' }}>{t('payment_schedule', language)}</h2>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <section className={styles.section} dir={isRTL(language) ? 'rtl' : 'ltr'}>
+          <div className="flex justify-between items-center">
+            <h2 className={`${styles.sectionTitle} ${isRTL(language) ? 'text-right' : 'text-left'}`}>{t('payment_schedule', language)}</h2>
+            <div className="flex gap-2 flex-wrap">
               {/* Client Offer PDF — Property Consultant only */}
               {authUser?.role === 'property_consultant' && (
                 <>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span className="inline-flex items-center gap-2">
                     <LoadingButton
                       variant="primary"
                       loading={docLoading}
                       onClick={exportClientOfferPdf}
-                      style={{ ...(styles.btnPrimary || {}), minWidth: 220 }}
+                      className={styles.btnPrimary}
+                      style={{ minWidth: 220 }}
                     >
                       {isRTL(language) ? 'تصدير عرض العميل (PDF)' : 'Export Client Offer (PDF)'}
                     </LoadingButton>
                     {docLoading && (
-                      <div style={{ width: 160 }}>
-                        <div style={{ height: 6, background: '#ead9bd', borderRadius: 8, overflow: 'hidden' }}>
+                      <div className="w-40">
+                        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                           <div style={{ width: `${Math.min(100, Math.max(0, Math.round(docProgress)))}%`, height: '100%', background: '#A97E34', transition: 'width 300ms ease' }} />
                         </div>
-                        <small style={{ color: '#6b7280' }}>{Math.round(docProgress)}%</small>
+                        <small className="text-gray-500">{Math.round(docProgress)}%</small>
                       </div>
                     )}
                   </span>
@@ -853,7 +854,7 @@ export default function App(props) {
                       setDocLoading(false)
                     }
                   }}
-                  style={styles.btnPrimary}
+                  className={styles.btnPrimary}
                 >
                   {t('generate_reservation_form', language)}
                 </button>
@@ -888,7 +889,7 @@ export default function App(props) {
                       setDocLoading(false)
                     }
                   }}
-                  style={styles.btnPrimary}
+                  className={styles.btnPrimary}
                 >
                   {t('generate_contract', language)}
                 </button>
@@ -896,13 +897,13 @@ export default function App(props) {
               {/* Exports (CSV/XLSX/Checks) — Financial Admin only */}
               {authUser?.role === 'financial_admin' && (
                 <>
-                  <button type="button" onClick={() => exportScheduleXLSX(genResult, language)} disabled={!schedule.length} style={styles.btn}>
+                  <button type="button" onClick={() => exportScheduleXLSX(genResult, language)} disabled={!schedule.length} className={styles.btn}>
                     {t('export_xlsx', language)}
                   </button>
-                  <button type="button" onClick={() => generateChecksSheetXLSX(genResult, clientInfo, unitInfo, currency, language)} disabled={!schedule.length} style={styles.btn}>
+                  <button type="button" onClick={() => generateChecksSheetXLSX(genResult, clientInfo, unitInfo, currency, language)} disabled={!schedule.length} className={styles.btn}>
                     {t('generate_checks_sheet', language)}
                   </button>
-                  <button type="button" onClick={() => exportScheduleCSV(genResult, language)} disabled={!schedule.length} style={styles.btn}>
+                  <button type="button" onClick={() => exportScheduleCSV(genResult, language)} disabled={!schedule.length} className={styles.btn}>
                     {t('export_csv', language)}
                   </button>
                 </>
@@ -915,21 +916,21 @@ export default function App(props) {
             const needsPerPricing = uid > 0 && typeof genError === 'string' && genError.toLowerCase().includes('per-pricing financial settings are required');
             if (!needsPerPricing) return null;
             return (
-              <div style={{ border: '1px solid #dc2626', background: '#fff4f4', color: '#991b1b', padding: '8px 12px', borderRadius: 8, marginBottom: 8 }}>
+              <div className="border border-red-600 bg-red-50 text-red-900 px-3 py-2 rounded-lg mb-2 text-sm">
                 Per-pricing financial settings are required for this unit/model. Please ensure the Financial Manager has configured and Top Management has approved:
                 {' '}Annual Financial Rate (%), Plan Duration (years), and Installment Frequency in Standard Pricing for this unit model.
               </div>
             );
           })()}
-          {genError ? <p style={styles.error}>{genError}</p> : null}
-          {docError ? <p style={styles.error}>{docError}</p> : null}
+          {genError ? <p className={styles.error}>{genError}</p> : null}
+          {docError ? <p className={styles.error}>{docError}</p> : null}
           {/* Dates summary above schedule for visibility */}
-          <div style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 8, background: '#fbfaf7', border: '1px solid #ead9bd', display: 'inline-flex', gap: 16, flexWrap: 'wrap' }}>
+          <div className="mb-2 p-3 rounded-lg bg-gray-50 border border-gray-200 inline-flex gap-4 flex-wrap text-sm text-gray-700">
             <div><strong>{t('offer_date_short', language)}</strong> {inputs.offerDate || new Date().toISOString().slice(0, 10)}</div>
             <div><strong>{t('first_payment_date_short', language)}</strong> {inputs.firstPaymentDate || inputs.offerDate || new Date().toISOString().slice(0, 10)}</div>
           </div>
           {schedule.length === 0 ? (
-            <p style={styles.metaText}>{t('no_schedule_yet', language)}</p>
+            <p className={styles.metaText}>{t('no_schedule_yet', language)}</p>
           ) : (
             <PaymentSchedule
               schedule={schedule}

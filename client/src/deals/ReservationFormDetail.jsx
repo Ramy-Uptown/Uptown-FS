@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
-import { th, td } from '../lib/ui.js'
+import AdminSidebar from '../components/AdminSidebar.jsx'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
 import { generateReservationFormPdf } from '../lib/docExports.js'
 
 export default function ReservationFormDetail() {
@@ -12,6 +14,14 @@ export default function ReservationFormDetail() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [role, setRole] = useState('')
+
+  useEffect(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('auth_user') || '{}')
+      setRole(u?.role || 'user')
+    } catch {}
+  }, [])
 
   async function load() {
     try {
@@ -32,24 +42,48 @@ export default function ReservationFormDetail() {
     }
   }
 
-  useEffect(() => {
-    load()
-  }, [id])
+  useEffect(() => { load() }, [id])
 
-  if (loading && !rf) return <p>Loading…</p>
-  if (error && !rf) return <p style={{ color: '#e11d48' }}>{error}</p>
-  if (!rf) return <p>No reservation form found.</p>
+  if (loading && !rf) {
+    return (
+      <div className="flex h-screen bg-gray-50">
+        <AdminSidebar role={role} />
+        <div className="flex-1 p-6">
+          <SkeletonRow />
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !rf) {
+    return (
+        <div className="flex h-screen bg-gray-50">
+          <AdminSidebar role={role} />
+          <div className="flex-1 p-6 text-red-600">
+            {error}
+          </div>
+        </div>
+      )
+  }
+
+  if (!rf) {
+    return (
+        <div className="flex h-screen bg-gray-50">
+          <AdminSidebar role={role} />
+          <div className="flex-1 p-6">
+            No reservation form found.
+          </div>
+        </div>
+      )
+  }
 
   const status = String(rf.status || '').toUpperCase()
   const dealId = rf.deal_id || rf.details?.deal_id || null
   const unitCode = rf.unit_code || rf.details?.unit_code || '-'
   const buyerName = rf.buyer_name || rf.details?.clientInfo?.buyer_name || '-'
-  const reservationDate =
-    rf.reservation_date || rf.details?.reservation_date || null
-  const prelimAmount =
-    rf.preliminary_payment != null
-      ? rf.preliminary_payment
-      : rf.details?.preliminary_payment ?? null
+  const reservationDate = rf.reservation_date || rf.details?.reservation_date || null
+  const prelimAmount = rf.preliminary_payment != null ? rf.preliminary_payment : rf.details?.preliminary_payment ?? null
+  
   const dp = rf.details?.dp || {}
   const dpTotal = dp.total
   const dpPrelim = dp.preliminary_amount
@@ -58,215 +92,147 @@ export default function ReservationFormDetail() {
   const dpPaidDate = dp.paid_date
   const dpRemaining = dp.remaining
 
-  function statusColor() {
-    const s = status.toLowerCase()
-    if (s === 'approved') return '#16a34a'
-    if (s === 'pending_approval') return '#2563eb'
-    if (s === 'rejected' || s === 'cancelled') return '#dc2626'
-    return '#64748b'
-  }
-
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        style={{
-          marginBottom: 12,
-          padding: '6px 10px',
-          borderRadius: 8,
-          border: '1px solid #d1d9e6',
-          background: '#fff',
-          cursor: 'pointer'
-        }}
-      >
-        ← Back
-      </button>
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-7xl mx-auto space-y-6">
+          
+          {/* Header */}
+          <div className="flex items-center gap-4">
+             <button
+                onClick={() => navigate(-1)}
+                className="bg-white border border-gray-300 rounded-full p-2 hover:bg-gray-50 text-gray-500 transition-colors"
+             >
+                <span className="material-symbols-outlined text-lg">arrow_back</span>
+             </button>
+             <div>
+                 <div className="flex items-center gap-3">
+                    <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Reservation Form #{rf.id}</h2>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize 
+                        ${status === 'APPROVED' ? 'bg-green-100 text-green-800' : 
+                          status.includes('PENDING') ? 'bg-blue-100 text-blue-800' : 
+                          status === 'REJECTED' || status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 
+                          'bg-gray-100 text-gray-800'}`}>
+                        {status.replace('_', ' ')}
+                    </span>
+                 </div>
+                 <p className="text-sm text-gray-500 mt-1">
+                    {reservationDate ? `Reserved on ${new Date(reservationDate).toLocaleDateString()}` : 'Date unknown'}
+                 </p>
+             </div>
+             <div className="ml-auto">
+                <LoadingButton
+                    loading={pdfLoading}
+                    onClick={async () => {
+                        try {
+                            setPdfLoading(true)
+                            const body = { deal_id: dealId ? Number(dealId) : undefined, reservation_form_id: Number(rf.id) }
+                            const { blob, filename } = await generateReservationFormPdf(body, API_URL)
+                            const url = URL.createObjectURL(blob)
+                            const a = document.createElement('a')
+                            a.href = url
+                            a.download = filename
+                            document.body.appendChild(a)
+                            a.click()
+                            document.body.removeChild(a)
+                            URL.revokeObjectURL(url)
+                            notifySuccess('Reservation Form PDF generated successfully.')
+                        } catch (e) {
+                            notifyError(e, 'Failed to generate PDF')
+                        } finally {
+                            setPdfLoading(false)
+                        }
+                    }}
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-hover focus:outline-none"
+                >
+                    <span className="material-symbols-outlined mr-2 -ml-1 text-lg">picture_as_pdf</span>
+                    Download PDF
+                </LoadingButton>
+             </div>
+          </div>
 
-      <h2 style={{ marginTop: 0 }}>Reservation Form #{rf.id}</h2>
+          {/* Quick Info Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Deal Reference</span>
+                {dealId ? <Link to={`/deals/${dealId}`} className="text-lg font-semibold text-primary hover:underline">#{dealId}</Link> : <span className="text-lg font-semibold text-gray-900">-</span>}
+             </div>
+             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                 <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Unit Code</span>
+                 <span className="block text-lg font-semibold text-gray-900">{unitCode}</span>
+             </div>
+             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                 <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Buyer Name</span>
+                 <span className="block text-lg font-semibold text-gray-900 truncate" title={buyerName}>{buyerName}</span>
+             </div>
+             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                 <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Reservation Date</span>
+                 <span className="block text-lg font-semibold text-gray-900">
+                    {reservationDate ? new Date(reservationDate).toLocaleDateString() : '-'}
+                 </span>
+             </div>
+          </div>
 
-      {/* Header summary */}
-      <div
-        style={{
-          margin: '8px 0 12px 0',
-          padding: '10px 12px',
-          borderRadius: 10,
-          background: '#f9fafb',
-          border: '1px solid #e5e7eb',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 16
-        }}
-      >
-        <div>
-          <strong>Status:</strong>{' '}
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              padding: '2px 8px',
-              borderRadius: 999,
-              fontSize: 12,
-              fontWeight: 500,
-              background: '#fff',
-              color: statusColor()
-            }}
-          >
-            {status || '-'}
-          </span>
-        </div>
-        <div>
-          <strong>Deal:</strong>{' '}
-          {dealId ? (
-            <Link to={`/deals/${dealId}`}>#{dealId}</Link>
-          ) : (
-            '-'
-          )}
-        </div>
-        <div>
-          <strong>Unit:</strong> {unitCode}
-        </div>
-        <div>
-          <strong>Buyer:</strong> {buyerName}
-        </div>
-        <div>
-          <strong>Reservation Date:</strong>{' '}
-          {reservationDate
-            ? new Date(reservationDate).toISOString().slice(0, 10)
-            : '-'}
-        </div>
-      </div>
+          {/* Down Payment Breakdown */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+             <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">Down Payment Breakdown</h3>
+             </div>
+             <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-4">
+                        <div>
+                            <span className="block text-sm text-gray-500">Total Down Payment</span>
+                            <span className="block text-xl font-bold text-gray-900">{dpTotal != null ? Number(dpTotal).toLocaleString() : '-'}</span>
+                        </div>
+                        <div>
+                            <span className="block text-sm text-gray-500">Remaining</span>
+                            <span className="block text-xl font-bold text-red-600">{dpRemaining != null ? Number(dpRemaining).toLocaleString() : '-'}</span>
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-4 border-l border-gray-100 pl-6">
+                        <div>
+                            <span className="block text-sm text-gray-500">Preliminary Payment</span>
+                            <span className="block text-lg font-medium text-gray-900">
+                                {dpPrelim != null ? Number(dpPrelim).toLocaleString() : (prelimAmount != null ? Number(prelimAmount).toLocaleString() : '-')}
+                            </span>
+                            <span className="block text-xs text-gray-400 mt-1">
+                                Date: {dpPrelimDate ? new Date(dpPrelimDate).toLocaleDateString() : '-'}
+                            </span>
+                        </div>
+                    </div>
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-        <button
-          type="button"
-          onClick={async () => {
-            try {
-              setPdfLoading(true)
-              const body = {
-                deal_id: dealId ? Number(dealId) : undefined,
-                reservation_form_id: Number(rf.id)
-              }
-              const { blob, filename } = await generateReservationFormPdf(body, API_URL)
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = filename
-              document.body.appendChild(a)
-              a.click()
-              document.body.removeChild(a)
-              URL.revokeObjectURL(url)
-              notifySuccess('Reservation Form PDF generated successfully.')
-            } catch (e) {
-              notifyError(e, 'Failed to generate Reservation Form PDF')
-            } finally {
-              setPdfLoading(false)
-            }
-          }}
-          disabled={pdfLoading}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            border: '1px solid #4b5563',
-            background: '#fff',
-            color: '#111827',
-            cursor: 'pointer'
-          }}
-        >
-          {pdfLoading ? 'Generating…' : 'View Reservation Form PDF'}
-        </button>
-      </div>
+                    <div className="space-y-4 border-l border-gray-100 pl-6">
+                         <div>
+                            <span className="block text-sm text-gray-500">Paid Amount</span>
+                            <span className="block text-lg font-medium text-gray-900">{dpPaidAmount != null ? Number(dpPaidAmount).toLocaleString() : '-'}</span>
+                             <span className="block text-xs text-gray-400 mt-1">
+                                Date: {dpPaidDate ? new Date(dpPaidDate).toLocaleDateString() : '-'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+             </div>
+          </div>
 
-      {/* Down payment breakdown */}
-      <h3>Down Payment Breakdown</h3>
-      <div
-        style={{
-          margin: '6px 0 16px 0',
-          padding: '10px 12px',
-          borderRadius: 10,
-          border: '1px solid #e5e7eb',
-          background: '#fefce8',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 16
-        }}
-      >
-        <div>
-          <strong>Total Down Payment:</strong>{' '}
-          {dpTotal != null
-            ? Number(dpTotal).toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              })
-            : '-'}
-        </div>
-        <div>
-          <strong>Preliminary Payment:</strong>{' '}
-          {dpPrelim != null
-            ? Number(dpPrelim).toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              })
-            : prelimAmount != null
-            ? Number(prelimAmount).toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              })
-            : '-'}
-        </div>
-        <div>
-          <strong>Preliminary Payment Date:</strong>{' '}
-          {dpPrelimDate
-            ? new Date(dpPrelimDate).toISOString().slice(0, 10)
-            : '-'}
-        </div>
-        <div>
-          <strong>Paid from Down Payment:</strong>{' '}
-          {dpPaidAmount != null
-            ? Number(dpPaidAmount).toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              })
-            : '-'}
-        </div>
-        <div>
-          <strong>Paid Down Payment Date:</strong>{' '}
-          {dpPaidDate
-            ? new Date(dpPaidDate).toISOString().slice(0, 10)
-            : '-'}
-        </div>
-        <div>
-          <strong>Remaining Down Payment:</strong>{' '}
-          {dpRemaining != null
-            ? Number(dpRemaining).toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              })
-            : '-'}
-        </div>
-      </div>
+          {/* Raw JSON Toggle (Collapsed by default) */}
+          <details className="group bg-gray-50 rounded-lg border border-gray-200">
+              <summary className="flex items-center justify-between cursor-pointer p-4">
+                  <span className="text-sm font-medium text-gray-700">Debug: Raw Data Snapshot</span>
+                  <span className="material-symbols-outlined text-gray-500 group-open:rotate-180 transition-transform">expand_more</span>
+              </summary>
+              <div className="p-4 pt-0 border-t border-gray-200 mt-2">
+                  <pre className="text-xs text-gray-600 overflow-x-auto bg-gray-100 p-2 rounded">
+                      {JSON.stringify(rf, null, 2)}
+                  </pre>
+              </div>
+          </details>
 
-      {/* Raw JSON snapshot */}
-      <h3>Raw Snapshot</h3>
-      <p style={{ fontSize: 13, color: '#6b7280', marginTop: 0 }}>
-        Full reservation_form row as returned by /api/workflow/reservation-forms/:id.
-        This is kept for debugging and will be refined over time.
-      </p>
-      <div
-        style={{
-          border: '1px solid #e5e7eb',
-          borderRadius: 10,
-          padding: 12,
-          background: '#111827',
-          color: '#e5e7eb',
-          overflow: 'auto'
-        }}
-      >
-        <pre style={{ margin: 0, fontSize: 12 }}>
-{JSON.stringify(rf, null, 2)}
-        </pre>
-      </div>
+        </div>
+      </main>
     </div>
   )
 }

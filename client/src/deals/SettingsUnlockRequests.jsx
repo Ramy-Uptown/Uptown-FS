@@ -2,33 +2,23 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
-import BrandHeader from '../lib/BrandHeader.jsx'
-
-const APP_TITLE = import.meta.env.VITE_APP_TITLE || 'Uptown Financial System'
-
-async function handleLogout() {
-  try {
-    const rt = localStorage.getItem('refresh_token')
-    if (rt) {
-      await fetch(`${API_URL}/api/auth/logout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: rt })
-      }).catch(() => {})
-    }
-  } finally {
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('auth_user')
-    window.location.href = '/login'
-  }
-}
+import AdminSidebar from '../components/AdminSidebar.jsx'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
 
 export default function SettingsUnlockRequests() {
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('pending')
+  const [role, setRole] = useState('')
+
+  useEffect(() => {
+    try {
+        const u = JSON.parse(localStorage.getItem('auth_user') || '{}')
+        setRole(u?.role || 'user')
+    } catch {}
+  }, [])
 
   async function loadRequests() {
     try {
@@ -94,120 +84,109 @@ export default function SettingsUnlockRequests() {
   }
 
   return (
-    <div>
-      <BrandHeader title={APP_TITLE} onLogout={handleLogout} />
-      <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 20 }}>Contract Settings Unlock Requests</h1>
-
-      {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {['pending', 'approved', 'rejected'].map(s => (
-          <button
-            key={s}
-            onClick={() => setFilter(s)}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 6,
-              border: filter === s ? '2px solid #2563eb' : '1px solid #d1d5db',
-              background: filter === s ? '#eff6ff' : '#fff',
-              fontWeight: filter === s ? 600 : 400,
-              cursor: 'pointer',
-              textTransform: 'capitalize'
-            }}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
-
-      {loading && <p>Loading...</p>}
-      {error && <p style={{ color: '#e11d48' }}>{error}</p>}
-
-      {!loading && requests.length === 0 && (
-        <p style={{ color: '#6b7280' }}>No {filter} requests found.</p>
-      )}
-
-      {!loading && requests.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {requests.map(req => (
-            <div 
-              key={req.id} 
-              style={{
-                background: '#fff',
-                border: '1px solid #e5e7eb',
-                borderRadius: 8,
-                padding: 16
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                    <Link to={`/contracts/${req.deal_id}`} style={{ color: '#2563eb' }}>
-                      Deal #{req.deal_id}: {req.deal_title || 'Untitled'}
-                    </Link>
-                  </div>
-                  <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-                    Requested by: <strong>{req.requested_by_name || req.requested_by_email}</strong>
-                    <span style={{ marginLeft: 12 }}>on {formatDate(req.created_at)}</span>
-                  </div>
-                  {req.reason && (
-                    <div style={{ fontSize: 13, padding: 8, background: '#f9fafb', borderRadius: 6, marginBottom: 8 }}>
-                      <strong>Reason:</strong> {req.reason}
-                    </div>
-                  )}
-                </div>
-                
-                {filter === 'pending' && (
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button
-                      onClick={() => handleApprove(req.id)}
-                      style={{
-                        padding: '8px 16px',
-                        borderRadius: 6,
-                        border: 'none',
-                        background: '#10b981',
-                        color: '#fff',
-                        fontWeight: 600,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ✓ Approve
-                    </button>
-                    <button
-                      onClick={() => handleReject(req.id)}
-                      style={{
-                        padding: '8px 16px',
-                        borderRadius: 6,
-                        border: '1px solid #ef4444',
-                        background: '#fff',
-                        color: '#ef4444',
-                        fontWeight: 600,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ✕ Reject
-                    </button>
-                  </div>
-                )}
-                
-                {filter !== 'pending' && (
-                  <div style={{ 
-                    padding: '4px 10px', 
-                    borderRadius: 12, 
-                    fontSize: 12, 
-                    fontWeight: 600,
-                    background: filter === 'approved' ? '#d1fae5' : '#fee2e2',
-                    color: filter === 'approved' ? '#065f46' : '#b91c1c'
-                  }}>
-                    {filter === 'approved' ? '✓ Approved' : '✕ Rejected'}
-                  </div>
-                )}
-              </div>
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-7xl mx-auto space-y-6">
+          
+          <div className="flex items-center justify-between">
+            <div>
+               <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Contract Unlock Requests</h2>
+               <p className="text-sm text-gray-500 mt-1">Manage requests to unlock confidential contract settings.</p>
             </div>
-          ))}
+          </div>
+
+          {/* Filter Tabs */}
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+               {['pending', 'approved', 'rejected'].map(s => (
+                  <button
+                     key={s}
+                     onClick={() => setFilter(s)}
+                     className={`
+                        whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm capitalize
+                        ${filter === s
+                           ? 'border-primary text-primary'
+                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
+                     `}
+                  >
+                     {s} Requests
+                  </button>
+               ))}
+            </nav>
+          </div>
+
+          {loading && <SkeletonRow widths={['w-full', 'w-full', 'w-3/4']} />}
+          {error && <p className="text-red-600 bg-red-50 p-4 rounded-md border border-red-200">{error}</p>}
+
+          {!loading && requests.length === 0 && (
+            <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
+                <p className="text-gray-500">No {filter} requests found.</p>
+            </div>
+          )}
+
+          {!loading && requests.length > 0 && (
+            <div className="space-y-4">
+               {requests.map(req => (
+                  <div 
+                     key={req.id} 
+                     className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col sm:flex-row justify-between items-start gap-4 transition-shadow hover:shadow-md"
+                  >
+                     <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 uppercase tracking-wide">
+                              Deal #{req.deal_id}
+                           </span>
+                           <h3 className="text-lg font-medium text-gray-900">
+                              <Link to={`/contracts/${req.deal_id}`} className="hover:text-primary transition-colors">
+                                 {req.deal_title || 'Untitled Deal'}
+                              </Link>
+                           </h3>
+                        </div>
+                        
+                        <div className="text-sm text-gray-500 mb-2">
+                           Requested by <span className="font-medium text-gray-900">{req.requested_by_name || req.requested_by_email}</span> on {formatDate(req.created_at)}
+                        </div>
+                        
+                        {req.reason && (
+                           <div className="bg-gray-50 p-3 rounded-md border border-gray-100 text-sm text-gray-700 mt-2">
+                              <span className="font-medium text-gray-900">Reason:</span> {req.reason}
+                           </div>
+                        )}
+                     </div>
+
+                     <div className="flex-shrink-0 flex gap-2">
+                        {filter === 'pending' && (
+                           <>
+                              <button
+                                 onClick={() => handleApprove(req.id)}
+                                 className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                              >
+                                 Approve
+                              </button>
+                              <button
+                                 onClick={() => handleReject(req.id)}
+                                 className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                              >
+                                 Reject
+                              </button>
+                           </>
+                        )}
+                        {filter !== 'pending' && (
+                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize 
+                              ${filter === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                              {filter}
+                           </span>
+                        )}
+                     </div>
+                  </div>
+               ))}
+            </div>
+          )}
+
         </div>
-      )}
-      </div>
+      </main>
     </div>
   )
 }

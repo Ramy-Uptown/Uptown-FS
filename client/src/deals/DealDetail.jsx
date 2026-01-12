@@ -8,7 +8,7 @@ import { useLoader } from '../lib/loaderContext.jsx'
 import CalculatorApp from '../App.jsx'
 import * as XLSX from 'xlsx'
 import { generateClientOfferPdf } from '../lib/docExports.js'
-import { th, td } from '../lib/ui.js'
+import { generateClientOfferPdf } from '../lib/docExports.js'
 import DealHeaderSection from './components/DealHeaderSection.jsx'
 import DealAuditTrail from './components/DealAuditTrail.jsx'
 import DealActionsBar from './components/DealActionsBar.jsx'
@@ -447,21 +447,21 @@ export default function DealDetail() {
     if (!win) return
     const rows = schedule.map((r, i) => `
       <tr>
-        <td style="padding:6px;border:1px solid #e5e7eb;">${i + 1}</td>
-        <td style="padding:6px;border:1px solid #e5e7eb;">${r.month}</td>
-        <td style="padding:6px;border:1px solid #e5e7eb;">${r.label}</td>
-        <td style="padding:6px;border:1px solid #e5e7eb;text-align:right;">${Number(r.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-        <td style="padding:6px;border:1px solid #e5e7eb;">${r.writtenAmount || ''}</td>
+        <td class="p-2 border border-gray-200">${i + 1}</td>
+        <td class="p-2 border border-gray-200">${r.month}</td>
+        <td class="p-2 border border-gray-200">${r.label}</td>
+        <td class="p-2 border border-gray-200 text-right">${Number(r.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td class="p-2 border border-gray-200">${r.writtenAmount || ''}</td>
       </tr>
     `).join('')
     const totalHtml = totals ? `
       <tfoot>
         <tr>
-          <td colspan="3" style="padding:8px;border:1px solid #e5e7eb;text-align:right;font-weight:700;">Total</td>
-          <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;font-weight:700;">
+          <td colspan="3" class="p-2 border border-gray-200 text-right font-bold">Total</td>
+          <td class="p-2 border border-gray-200 text-right font-bold">
             ${Number(totals.totalNominal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </td>
-          <td style="padding:8px;border:1px solid #e5e7eb;"></td>
+          <td class="p-2 border border-gray-200"></td>
         </tr>
       </tfoot>
     ` : ''
@@ -470,20 +470,18 @@ export default function DealDetail() {
       <head>
         <title>Deal #${deal?.id} — Payment Schedule</title>
         <meta charset="utf-8"/>
+        <script src="https://cdn.tailwindcss.com"></script>
         <style>
-          body { font-family: Arial, sans-serif; padding: 16px; color: #111827; }
-          h1 { font-size: 18px; margin: 0 0 10px 0; }
-          table { width: 100%; border-collapse: collapse; }
-          thead th { background: #f3f4f6; text-align: left; padding: 8px; border: 1px solid #e5e7eb; }
+          body { font-family: Inter, sans-serif; padding: 16px; color: #111827; }
         </style>
       </head>
       <body>
-        <h1>Deal #${deal?.id} — ${deal?.title || ''}</h1>
-        <p><strong>Status:</strong> ${deal?.status || ''} &nbsp; <strong>Unit Type:</strong> ${deal?.unit_type || '-'}</p>
-        <table>
+        <h1 class="text-xl font-bold mb-4">Deal #${deal?.id} — ${deal?.title || ''}</h1>
+        <p class="mb-4"><strong>Status:</strong> ${deal?.status || ''} &nbsp; <strong>Unit Type:</strong> ${deal?.unit_type || '-'}</p>
+        <table class="w-full border-collapse text-sm">
           <thead>
-            <tr>
-              <th>#</th><th>Month</th><th>Label</th><th>Amount</th><th>Written Amount</th>
+            <tr class="bg-gray-50 text-left">
+              <th class="p-2 border border-gray-200">#</th><th class="p-2 border border-gray-200">Month</th><th class="p-2 border border-gray-200">Label</th><th class="p-2 border border-gray-200 text-right">Amount</th><th class="p-2 border border-gray-200">Written Amount</th>
             </tr>
           </thead>
           <tbody>
@@ -610,12 +608,12 @@ export default function DealDetail() {
       />
 
       {!editCalc ? (
-        <div style={{ marginBottom: 16 }}>
+        <div className="mb-4">
           {/* Property Consultant (offer creator) -- previously labeled "Sales Rep" */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
-            <strong>Property Consultant:</strong>
+          <div className="flex gap-2 items-center my-2">
+            <strong className="text-gray-900">Property Consultant:</strong>
             {role !== 'admin' && role !== 'superadmin' ? (
-              <span>
+              <span className="text-gray-700">
                 {deal.created_by_email || deal.created_by}
                 {!deal.sales_rep_id && ' (used for commission by default)'}
               </span>
@@ -647,7 +645,7 @@ export default function DealDetail() {
                     setAssigning(false)
                   }
                 }}
-                style={{ padding: 8, borderRadius: 8, border: '1px solid #d1d9e6' }}
+                className="p-2 rounded-lg border border-gray-300 bg-white text-sm focus:border-primary focus:ring focus:ring-primary/20 outline-none"
               >
                 <option value="">— Use Offer Creator (default) —</option>
                 {salesList.map(s => (
@@ -657,11 +655,11 @@ export default function DealDetail() {
                 ))}
               </select>
             )}
-            {salesError ? <small style={{ color: '#e11d48' }}>{salesError}</small> : null}
+            {salesError ? <small className="text-red-600">{salesError}</small> : null}
           </div>
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
-            <strong>Commission Policy:</strong>
+          <div className="flex gap-2 items-center my-2">
+            <strong className="text-gray-900">Commission Policy:</strong>
             <select
               disabled={!canEdit || settingPolicy}
               value={deal.policy_id || ''}
@@ -689,7 +687,7 @@ export default function DealDetail() {
                   setSettingPolicy(false)
                 }
               }}
-              style={{ padding: 8, borderRadius: 8, border: '1px solid #d1d9e6' }}
+              className="p-2 rounded-lg border border-gray-300 bg-white text-sm focus:border-primary focus:ring focus:ring-primary/20 outline-none"
             >
               <option value="">— Use Active Policy —</option>
               {policies.map(p => (
@@ -698,29 +696,18 @@ export default function DealDetail() {
                 </option>
               ))}
             </select>
-            {policiesError ? <small style={{ color: '#e11d48' }}>{policiesError}</small> : null}
+            {policiesError ? <small className="text-red-600">{policiesError}</small> : null}
           </div>
 
-          <h3>Payment Schedule</h3>
-          <div
-            style={{
-              margin: '6px 0 10px 0',
-              padding: '8px 10px',
-              borderRadius: 8,
-              background: '#fbfaf7',
-              border: '1px solid #ead9bd',
-              display: 'inline-flex',
-              gap: 16,
-              flexWrap: 'wrap'
-            }}
-          >
+          <h3 className="text-lg font-bold text-gray-900 mt-4 mb-2">Payment Schedule</h3>
+          <div className="flex flex-wrap gap-4 p-3 bg-stone-50 border border-stone-200 rounded-lg mb-4 text-sm">
             <div>
-              <strong>Offer Date:</strong>{' '}
+              <strong className="text-gray-900">Offer Date:</strong>{' '}
               {deal?.details?.calculator?.inputs?.offerDate ||
                 new Date().toISOString().slice(0, 10)}
             </div>
             <div>
-              <strong>First Payment Date:</strong>{' '}
+              <strong className="text-gray-900">First Payment Date:</strong>{' '}
               {deal?.details?.calculator?.inputs?.firstPaymentDate ||
                 deal?.details?.calculator?.inputs?.offerDate ||
                 new Date().toISOString().slice(0, 10)}
@@ -728,107 +715,90 @@ export default function DealDetail() {
           </div>
 
           {dpSummary && (
-            <div
-              style={{
-                margin: '0 0 12px 0',
-                padding: '10px 12px',
-                borderRadius: 8,
-                background: '#f0f4ff',
-                border: '1px solid #c7d2fe',
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 16
-              }}
-            >
+            <div className="flex flex-wrap gap-4 p-3 mb-4 bg-indigo-50 border border-indigo-100 rounded-lg text-sm text-indigo-900">
               <div>
-                <strong>Total Price (excl. maintenance):</strong>{' '}
+                <strong className="font-semibold">Total Price (excl. maintenance):</strong>{' '}
                 {Number(dpSummary.total_excl || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP
               </div>
               <div>
-                <strong>Maintenance Deposit:</strong>{' '}
+                <strong className="font-semibold">Maintenance Deposit:</strong>{' '}
                 {Number(dpSummary.maintenance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP
               </div>
               <div>
-                <strong>Total Price (incl. maintenance):</strong>{' '}
+                <strong className="font-semibold">Total Price (incl. maintenance):</strong>{' '}
                 {Number(dpSummary.total_incl || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP
               </div>
               <div>
-                <strong>Total Down Payment:</strong>{' '}
+                <strong className="font-semibold">Total Down Payment:</strong>{' '}
                 {Number(dpSummary.dp_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP
               </div>
               <div>
-                <strong>Preliminary Payment:</strong>{' '}
+                <strong className="font-semibold">Preliminary Payment:</strong>{' '}
                 {Number(dpSummary.dp_preliminary_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP
                 {dpSummary.dp_preliminary_date && (
                   <> ({new Date(dpSummary.dp_preliminary_date).toLocaleDateString()})</>
                 )}
               </div>
               <div>
-                <strong>Paid from Down Payment:</strong>{' '}
+                <strong className="font-semibold">Paid from Down Payment:</strong>{' '}
                 {Number(dpSummary.dp_paid_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP
                 {dpSummary.dp_paid_date && (
                   <> ({new Date(dpSummary.dp_paid_date).toLocaleDateString()})</>
                 )}
               </div>
               <div>
-                <strong>Remaining Down Payment:</strong>{' '}
+                <strong className="font-semibold">Remaining Down Payment:</strong>{' '}
                 {Number(dpSummary.dp_remaining || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP
               </div>
               <div>
-                <strong>Remaining Price after Down Payment:</strong>{' '}
+                <strong className="font-semibold">Remaining Price after Down Payment:</strong>{' '}
                 {Number(dpSummary.remaining_after_dp || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP
               </div>
             </div>
           )}
 
           {schedule.length === 0 ? (
-            <p style={{ color: '#64748b' }}>
+            <p className="text-gray-500 italic">
               No saved schedule. Use Edit Offer to generate and save one.
             </p>
           ) : (
-            <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
+            <div className="overflow-x-auto border border-gray-200 rounded-xl mb-4">
+              <table className="w-full border-collapse text-sm text-left">
+                <thead className="bg-gray-50 text-gray-700 font-semibold border-b border-gray-200">
                   <tr>
-                    <th style={th}>#</th>
-                    <th style={th}>Month</th>
-                    <th style={th}>Label</th>
-                    <th style={{ ...th, textAlign: 'right' }}>Amount</th>
-                    <th style={th}>Written Amount</th>
+                    <th className="px-4 py-3 border-r border-gray-100">#</th>
+                    <th className="px-4 py-3 border-r border-gray-100">Month</th>
+                    <th className="px-4 py-3 border-r border-gray-100">Label</th>
+                    <th className="px-4 py-3 text-right border-r border-gray-100">Amount</th>
+                    <th className="px-4 py-3">Written Amount</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-100">
                   {schedule.map((row, idx) => (
-                    <tr key={idx}>
-                      <td style={td}>{idx + 1}</td>
-                      <td style={td}>{row.month}</td>
-                      <td style={td}>{row.label}</td>
-                      <td style={{ ...td, textAlign: 'right' }}>
+                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-2 border-r border-gray-100">{idx + 1}</td>
+                      <td className="px-4 py-2 border-r border-gray-100">{row.month}</td>
+                      <td className="px-4 py-2 border-r border-gray-100">{row.label}</td>
+                      <td className="px-4 py-2 text-right border-r border-gray-100 font-mono text-gray-800">
                         {Number(row.amount || 0).toLocaleString(undefined, {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2
                         })}
                       </td>
-                      <td style={td}>{row.writtenAmount}</td>
+                      <td className="px-4 py-2 text-gray-500">{row.writtenAmount}</td>
                     </tr>
                   ))}
                 </tbody>
                 {totals && (
-                  <tfoot>
+                  <tfoot className="bg-gray-50 font-bold text-gray-900 border-t border-gray-200">
                     <tr>
                       <td
                         colSpan={3}
-                        style={{ ...td, textAlign: 'right', fontWeight: 700 }}
+                        className="px-4 py-3 text-right border-r border-gray-100"
                       >
                         Total
                       </td>
-                      <td
-                        style={{
-                          ...td,
-                          textAlign: 'right',
-                          fontWeight: 700
-                        }}
-                      >
+                      <td className="px-4 py-3 text-right border-r border-gray-100">
                         {Number(totals.totalNominal || 0).toLocaleString(
                           undefined,
                           { minimumFractionDigits: 2 }
@@ -843,28 +813,15 @@ export default function DealDetail() {
           )}
 
           {evaluation && (
-            <div
-              style={{
-                marginTop: 16,
-                border: '1px solid #e6eaf0',
-                borderRadius: 12,
-                padding: 12
-              }}
-            >
-              <h3 style={{ marginTop: 0 }}>Acceptance Evaluation</h3>
+            <div className="mt-6 border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
+              <h3 className="text-lg font-bold text-gray-900 mt-0 mb-4">Acceptance Evaluation</h3>
               {(() => {
                 const ok = evaluation.decision === 'ACCEPT'
-                const box = {
-                  marginBottom: 12,
-                  padding: '10px 12px',
-                  borderRadius: 10,
-                  border: `1px solid ${ok ? '#10b981' : '#ef4444'}`,
-                  background: ok ? '#ecfdf5' : '#fef2f2',
-                  color: ok ? '#065f46' : '#7f1d1d',
-                  fontWeight: 600
-                }
+                const boxClass = `mb-4 px-4 py-3 rounded-lg border font-semibold ${
+                  ok ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'
+                }`
                 return (
-                  <div style={box}>
+                  <div className={boxClass}>
                     NPV-based Decision: {evaluation.decision}
                   </div>
                 )
@@ -874,7 +831,7 @@ export default function DealDetail() {
               {(() => {
                 const badges = []
                 const badge = (bg, color, text) => (
-                  <span key={text} style={{ padding: '4px 8px', borderRadius: 999, fontSize: 12, background: bg, color, marginRight: 6 }}>{text}</span>
+                  <span key={text} className={`px-2.5 py-1 rounded-full text-xs font-semibold mr-2 bg-[${bg}] text-[${color}]`} style={{ backgroundColor: bg, color: color }}>{text}</span>
                 )
                 const fin = String(evaluation?.decision || '').toUpperCase()
                 if (fin === 'ACCEPT') badges.push(badge('#ecfdf5', '#065f46', 'Financial: ACCEPT'))
@@ -885,37 +842,40 @@ export default function DealDetail() {
                 if (ovApproved) badges.push(badge('#ecfdf5', '#065f46', 'Override: Approved (TM)'))
                 else if (needsOv) badges.push(badge('#eff6ff', '#1e40af', 'Override: Pending'))
 
-                return badges.length ? <div style={{ marginBottom: 10 }}>{badges}</div> : null
+                return badges.length ? <div className="mb-4">{badges}</div> : null
               })()}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div style={{ border: '1px dashed #d1d9e6', borderRadius: 10, padding: 10 }}>
-                  <strong>PV Comparison</strong>
-                  <ul style={{ margin: 0, paddingLeft: 16 }}>
-                    <li>Proposed PV: {Number(evaluation.pv?.proposedPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
-                    <li>Standard PV: {Number(evaluation.pv?.standardPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
-                    <li>Difference (Std - Prop): {Number(evaluation.pv?.difference || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</li>
-                    <li>Status: {evaluation.pv?.pass ? 'PASS' : 'FAIL'}</li>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="border border-dashed border-gray-300 rounded-lg p-3 bg-gray-50/50">
+                  <strong className="block mb-2 text-gray-700">PV Comparison</strong>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    <li>Proposed PV: <span className="font-mono text-gray-800">{Number(evaluation.pv?.proposedPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></li>
+                    <li>Standard PV: <span className="font-mono text-gray-800">{Number(evaluation.pv?.standardPV || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></li>
+                    <li>Difference (Std - Prop): <span className={`font-mono font-medium ${evaluation.pv?.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>{Number(evaluation.pv?.difference || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></li>
+                    <li>Status: <span className={`font-bold ${evaluation.pv?.pass ? 'text-green-700' : 'text-red-700'}`}>{evaluation.pv?.pass ? 'PASS' : 'FAIL'}</span></li>
                   </ul>
                 </div>
-                <div style={{ border: '1px dashed #d1d9e6', borderRadius: 10, padding: 10 }}>
-                  <strong>Conditions</strong>
-                  <ul style={{ margin: 0, paddingLeft: 16 }}>
+                <div className="border border-dashed border-gray-300 rounded-lg p-3 bg-gray-50/50">
+                  <strong className="block mb-2 text-gray-700">Conditions</strong>
+                  <ul className="list-none m-0 pl-0 space-y-2 text-sm">
                     {evaluation.conditions?.map((c, idx) => (
-                      <li key={idx} style={{ marginBottom: 6 }}>
-                        <div><strong>{c.label}</strong> — <span style={{ color: c.status === 'PASS' ? '#065f46' : '#7f1d1d' }}>{c.status}</span></div>
-                        {'required' in c && typeof c.required === 'number' && <div>Required: {Number(c.required).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>}
+                      <li key={idx}>
+                        <div className="flex justify-between items-baseline border-b border-dashed border-gray-200 pb-1 mb-1">
+                          <strong className="text-gray-800 mr-2">{c.label}</strong>
+                          <span className={`font-bold text-xs px-1.5 py-0.5 rounded ${c.status === 'PASS' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{c.status}</span>
+                        </div>
+                        {'required' in c && typeof c.required === 'number' && <div className="text-gray-500 text-xs">Required: {Number(c.required).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>}
                         {'required' in c && typeof c.required === 'object' && (
-                          <div>
+                          <div className="text-gray-500 text-xs">
                             Required: {c.required.min != null ? `Min ${Number(c.required.min).toLocaleString()}% ` : ''}{c.required.max != null ? `Max ${Number(c.required.max).toLocaleString()}%` : ''}
                           </div>
                         )}
-                        {'actual' in c && typeof c.actual === 'number' && <div>Actual: {Number(c.actual).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>}
+                        {'actual' in c && typeof c.actual === 'number' && <div className="text-gray-500 text-xs">Actual: {Number(c.actual).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>}
                         {'actual' in c && typeof c.actual === 'object' && (
-                          <div>
+                          <div className="text-gray-500 text-xs">
                             Actual: {c.actual.amount != null ? `${Number(c.actual.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : ''}{c.actual.percent != null ? ` (${Number(c.actual.percent).toLocaleString(undefined, { maximumFractionDigits: 2 })}%)` : ''}
                           </div>
                         )}
-                        {c.handoverYear != null && <div>Handover Year: {c.handoverYear}</div>}
+                        {c.handoverYear != null && <div className="text-gray-500 text-xs">Handover Year: {c.handoverYear}</div>}
                       </li>
                     ))}
                   </ul>
@@ -924,8 +884,8 @@ export default function DealDetail() {
 
               {/* Override Workflow — visible when evaluation REJECT */}
               {evaluation.decision === 'REJECT' && (
-                <div style={{ marginTop: 12, padding: '10px 12px', border: '1px dashed #d1d9e6', borderRadius: 10 }}>
-                  <strong>Override Workflow</strong>
+                <div className="mt-4 p-4 border border-dashed border-gray-300 rounded-xl bg-gray-50/50">
+                  <strong className="block mb-4 text-gray-900">Override Workflow</strong>
 
                   {/* Stage timeline: Request → SM → FM → TM */}
                   {(() => {
@@ -935,36 +895,28 @@ export default function DealDetail() {
                       { key: 'fm', label: 'Financial Manager', ts: deal?.fm_review_at, title: deal?.fm_review_at ? `FM reviewed at ${new Date(deal.fm_review_at).toLocaleString()} by ${deal?.fm_review_by_name || ''} (${deal?.fm_review_by_role || ''})` : 'Financial Manager (pending)' },
                       { key: 'tm', label: 'Top Management', ts: deal?.override_approved_at, title: deal?.override_approved_at ? `TM decision at ${new Date(deal.override_approved_at).toLocaleString()} by ${deal?.override_approved_by_name || ''} (${deal?.override_approved_by_role || ''})` : 'Top Management (pending)' }
                     ]
-                    const circle = (active) => ({
-                      width: 16, height: 16, borderRadius: 9999,
-                      background: active ? '#A97E34' : '#e5e7eb',
-                      border: `2px solid ${active ? '#A97E34' : '#d1d5db'}`
-                    })
-                    const line = (active) => ({
-                      height: 2, flex: 1, background: active ? '#A97E34' : '#e5e7eb'
-                    })
                     const activeIdx = stages.findIndex(s => !!s.ts)
                     return (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                      <div className="flex items-center gap-2 mt-2 w-full">
                         {stages.map((s, i) => (
                           <React.Fragment key={s.key}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <div style={circle(i <= activeIdx)} title={s.title} />
-                              <div style={{ fontSize: 12, color: i <= activeIdx ? '#A97E34' : '#6b7280' }} title={s.title}>
-                                {s.label}{s.ts ? ` (${new Date(s.ts).toLocaleString()})` : ''}
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              <div className={`w-4 h-4 rounded-full border-2 ${i <= activeIdx ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`} title={s.title} />
+                              <div className={`text-xs ${i <= activeIdx ? 'text-primary font-semibold' : 'text-gray-500'}`} title={s.title}>
+                                {s.label}{s.ts ? ` (${new Date(s.ts).toLocaleDateString()})` : ''}
                               </div>
                             </div>
-                            {i < stages.length - 1 && <div style={line(i < activeIdx)} />}
+                            {i < stages.length - 1 && <div className={`h-0.5 flex-1 ${i < activeIdx ? 'bg-primary' : 'bg-gray-200'}`} />}
                           </React.Fragment>
                         ))}
                       </div>
                     )
                   })()}
 
-                  <div style={{ marginTop: 8, color: '#6b7280' }}>
+                  <div className="mt-2 text-xs text-gray-500">
                     Request → Sales Manager review → Financial Manager review → Top Management decision
                   </div>
-                  <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <div className="flex gap-2 flex-wrap mt-3">
                     {(role === 'property_consultant' || role === 'admin' || role === 'superadmin') && (
                       <LoadingButton
                         onClick={async () => {
@@ -1108,24 +1060,25 @@ export default function DealDetail() {
             </div>
           )}
 
-          <p style={{ marginTop: 16 }}><strong>Created By:</strong> {deal.created_by_email || deal.created_by}</p>
-          <p><strong>Created At:</strong> {deal.created_at ? new Date(deal.created_at).toLocaleString() : ''}</p>
+          <p className="mt-4 text-sm text-gray-500"><strong>Created By:</strong> {deal.created_by_email || deal.created_by}</p>
+          <p className="text-sm text-gray-500"><strong>Created At:</strong> {deal.created_at ? new Date(deal.created_at).toLocaleString() : ''}</p>
         </div>
       ) : (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-            <h3 style={{ margin: 0 }}>Edit Offer</h3>
-            <div style={{ display: 'flex', gap: 8 }}>
+        <div className="mb-4">
+          <div className="flex justify-between items-baseline mb-2">
+            <h3 className="text-lg font-bold text-gray-800 m-0">Edit Offer</h3>
+            <div className="flex gap-2">
               <LoadingButton onClick={saveCalculator} loading={savingCalc} variant="primary">Save</LoadingButton>
               <LoadingButton onClick={() => setEditCalc(false)} disabled={savingCalc}>Cancel</LoadingButton>
             </div>
           </div>
-          <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
+          <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
             <CalculatorApp embedded dealId={deal.id} />
           </div>
         </div>
       )}
 
+      {/* Outstanding edit request banner */}
       {/* Outstanding edit request banner */}
       {(() => {
         // Find last request_edits and last edits_addressed in history
@@ -1134,16 +1087,16 @@ export default function DealDetail() {
         const outstanding = lastReqIdx !== -1 && (lastAddrIdx === -1 || lastAddrIdx > lastReqIdx)
         if (!outstanding) return null
         const isConsultant = role === 'property_consultant' || role === 'sales_manager'
-        const bannerStyle = {
-          border: '1px solid #f59e0b', background: '#fffbeb', color: '#92400e',
-          padding: '10px 12px', borderRadius: 10, marginBottom: 12
-        }
+        
         return (
-          <div style={bannerStyle}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>Edits Requested</div>
-            <div>Financial team has requested edits to this deal. Please review and update the allowed fields (payment plan, address, etc.). Identity and unit data remain locked.</div>
+          <div className="border border-amber-300 bg-amber-50 text-amber-900 rounded-xl p-4 mb-6 shadow-sm">
+            <div className="font-bold mb-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-amber-600">edit_note</span>
+              Edits Requested
+            </div>
+            <div className="text-sm">Financial team has requested edits to this deal. Please review and update the allowed fields (payment plan, address, etc.). Identity and unit data remain locked.</div>
             {isConsultant && (
-              <div style={{ marginTop: 8 }}>
+              <div className="mt-3">
                 <LoadingButton
                   onClick={async () => {
                     const notes = window.prompt('Optional note to confirm edits addressed:', '')
@@ -1164,6 +1117,7 @@ export default function DealDetail() {
                       notifyError(err, 'Failed to mark edits addressed')
                     }
                   }}
+                  className="bg-amber-600 hover:bg-amber-700 text-white border-transparent"
                 >
                   Mark Edits Addressed
                 </LoadingButton>
@@ -1244,83 +1198,7 @@ export default function DealDetail() {
             setSubmitting(false)
           }
         }}
-        onGenerateClientOfferPdf={async () => {
-          try {
-            setClientOfferGenerating(true)
-            const snap = deal?.details?.calculator
-            if (!snap || !snap.generatedPlan || !Array.isArray(snap.generatedPlan.schedule)) {
-              notifyError('No generated plan found. Please calculate the plan first.')
-              return
-            }
-            const scheduleLocal = snap.generatedPlan.schedule
-            const totalsLocal = snap.generatedPlan.totals || {}
-            const ci = snap.clientInfo || {}
-            const numBuyers = Number(ci.num_buyers || 1)
-            const buyers = []
-            for (let i = 1; i <= numBuyers; i++) {
-              const sfx = i === 1 ? '' : `_${i}`
-              buyers.push({
-                buyer_name: ci[`buyer_name${sfx}`] || '',
-                phone_primary: ci[`phone_primary${sfx}`] || '',
-                phone_secondary: ci[`phone_secondary${sfx}`] || '',
-                email: ci[`email${sfx}`] || ''
-              })
-            }
 
-            const snapBreakdownLocal = snap?.unitPricingBreakdown
-            const body = {
-              language: snap?.language || 'en',
-              currency: snap?.currency || 'EGP',
-              buyers,
-              schedule: scheduleLocal,
-              totals: totalsLocal,
-              offer_date:
-                snap?.inputs?.offerDate ||
-                new Date().toISOString().slice(0, 10),
-              first_payment_date:
-                snap?.inputs?.firstPaymentDate ||
-                snap?.inputs?.offerDate ||
-                new Date().toISOString().slice(0, 10),
-              unit: {
-                unit_code: snap?.unitInfo?.unit_code || '',
-                unit_type: snap?.unitInfo?.unit_type || '',
-                unit_id: Number(snap?.unitInfo?.unit_id) || null
-              }
-            }
-
-            if (snapBreakdownLocal) {
-              body.unit_pricing_breakdown = {
-                base: Number(snapBreakdownLocal.base || 0),
-                garden: Number(snapBreakdownLocal.garden || 0),
-                roof: Number(snapBreakdownLocal.roof || 0),
-                storage: Number(snapBreakdownLocal.storage || 0),
-                garage: Number(snapBreakdownLocal.garage || 0),
-                maintenance: Number(snapBreakdownLocal.maintenance || 0),
-                totalExclMaintenance: Number(
-                  snapBreakdownLocal.totalExclMaintenance || 0
-                )
-              }
-            }
-
-            const { blob, filename } = await generateClientOfferPdf(
-              body,
-              API_URL
-            )
-            const url = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = filename
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            URL.revokeObjectURL(url)
-            notifySuccess('Client Offer PDF exported successfully.')
-          } catch (e) {
-            notifyError(e, 'Failed to export Client Offer PDF')
-          } finally {
-            setClientOfferGenerating(false)
-          }
-        }}
         onGenerateClientOfferPdf={async () => {
           try {
             const snap = deal?.details?.calculator

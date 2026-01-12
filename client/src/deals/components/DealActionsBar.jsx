@@ -33,7 +33,7 @@ export default function DealActionsBar({
   if (!deal) return null
 
   return (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+    <div className="flex flex-wrap gap-2 mb-5">
       {canEdit && !editCalc && (
         <LoadingButton onClick={onToggleEditCalc}>Edit Offer</LoadingButton>
       )}
@@ -52,7 +52,7 @@ export default function DealActionsBar({
         <LoadingButton
           onClick={onApproveDealAsSM}
           variant="primary"
-          style={{ background: '#10b981', borderColor: '#10b981' }}
+          className="bg-emerald-500 border-emerald-500 hover:bg-emerald-600 hover:border-emerald-600"
         >
           Approve Deal
         </LoadingButton>

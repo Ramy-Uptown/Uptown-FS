@@ -1,99 +1,28 @@
 const styles = {
-  page: {
-    fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-    background: '#f7f6f3',
-    minHeight: '100vh',
-    color: '#222'
-  },
-  container: {
-    maxWidth: 1200,
-    margin: '0 auto',
-    padding: '24px 20px 48px'
-  },
-  header: {
-    background: '#fff',
-    border: '1px solid #ead9bd',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    boxShadow: '0 2px 6px rgba(169, 126, 52, 0.08)'
-  },
-  h1: { margin: 0, fontSize: 22, fontWeight: 700, color: '#A97E34' },
-  sub: { color: '#6b7280', marginTop: 6, fontSize: 13 },
-  section: {
-    background: '#fff',
-    border: '1px solid #ead9bd',
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 16,
-    boxShadow: '0 2px 6px rgba(169, 126, 52, 0.06)'
-  },
-  sectionTitle: { margin: '0 0 12px 0', fontSize: 18, fontWeight: 700, color: '#A97E34' },
-  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
-  blockFull: { gridColumn: '1 / span 2' },
-  label: { display: 'block', fontSize: 12, fontWeight: 600, color: '#4b5563', marginBottom: 6 },
-  input: (err) => ({
-    padding: '10px 12px',
-    borderRadius: 10,
-    border: `1px solid ${err ? '#e11d48' : '#ead9bd'}`,
-    outline: 'none',
-    width: '100%',
-    fontSize: 14,
-    background: '#fbfaf7'
-  }),
-  select: (err) => ({
-    padding: '10px 12px',
-    borderRadius: 10,
-    border: `1px solid ${err ? '#e11d48' : '#ead9bd'}`,
-    outline: 'none',
-    width: '100%',
-    fontSize: 14,
-    background: '#fbfaf7'
-  }),
-  textarea: (err) => ({
-    padding: '10px 12px',
-    borderRadius: 10,
-    border: `1px solid ${err ? '#e11d48' : '#ead9bd'}`,
-    outline: 'none',
-    width: '100%',
-    fontSize: 14,
-    background: '#fbfaf7',
-    minHeight: 80,
-    resize: 'vertical'
-  }),
-  metaText: { color: '#6b7280', fontSize: 12, marginTop: 4 },
-  btn: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '10px 14px',
-    borderRadius: 10,
-    border: '1px solid #ead9bd',
-    background: '#fff',
-    color: '#111827',
-    cursor: 'pointer'
-  },
-  btnPrimary: {
-    padding: '10px 14px',
-    borderRadius: 10,
-    border: '1px solid #A97E34',
-    background: '#A97E34',
-    color: '#fff',
-    cursor: 'pointer',
-    fontWeight: 600
-  },
-  tableWrap: {
-    maxWidth: 1200,
-    overflow: 'auto',
-    border: '1px solid #ead9bd',
-    borderRadius: 12
-  },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  th: { textAlign: 'left', padding: 12, borderBottom: '1px solid #ead9bd', fontSize: 13, color: '#5b4630', background: '#f6efe3' },
-  td: { padding: 12, borderBottom: '1px solid #f2e8d6', fontSize: 14 },
-  tFootCell: { padding: 12, fontWeight: 700, background: '#fbfaf7' },
-  error: { color: '#e11d48' },
-  arInline: { fontWeight: 600, color: '#5b4630' }
+  page: "min-h-screen bg-gray-50 text-gray-900 font-sans",
+  container: "max-w-7xl mx-auto px-4 py-8 md:px-6 md:py-12",
+  header: "bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm",
+  h1: "text-2xl font-display font-bold text-primary mb-1",
+  sub: "text-sm text-gray-500 mt-1",
+  section: "bg-white border border-gray-200 rounded-xl p-6 mt-6 shadow-sm",
+  sectionTitle: "text-lg font-bold text-primary mb-4 border-b border-gray-100 pb-2",
+  grid2: "grid grid-cols-1 md:grid-cols-2 gap-6",
+  blockFull: "col-span-1 md:col-span-2",
+  label: "block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2",
+  // Base input classes (error state handling must be done in component via template literal)
+  input: "w-full px-4 py-2.5 rounded-lg border bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all",
+  select: "w-full px-4 py-2.5 rounded-lg border bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none bg-no-repeat bg-[right_1rem_center]",
+  textarea: "w-full px-4 py-2.5 rounded-lg border bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all min-h-[80px]",
+  metaText: "text-xs text-gray-500 mt-1",
+  btn: "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-900 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+  btnPrimary: "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-white font-semibold hover:bg-primary-hover shadow-sm shadow-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+  tableWrap: "overflow-x-auto border border-gray-200 rounded-lg",
+  table: "w-full border-collapse text-left",
+  th: "px-4 py-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider",
+  td: "px-4 py-3 border-b border-gray-100 text-sm",
+  tFootCell: "px-4 py-3 bg-gray-50 font-bold text-gray-900",
+  error: "text-red-600 text-sm mt-1",
+  arInline: "font-semibold text-primary"
 }
 
 export default styles

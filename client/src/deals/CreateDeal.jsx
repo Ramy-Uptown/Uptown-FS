@@ -423,47 +423,47 @@ export default function CreateDeal() {
   return (
     <div>
       {calcLoading && <FullPageLoader text="Calculating…" />}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-        <h2 style={{ marginTop: 0 }}>Create Deal</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={saveAsDraft} disabled={loading || submitting} style={btnPrimary}>{loading ? 'Saving…' : 'Save as Draft'}</button>
-          <button onClick={saveAndSubmit} disabled={loading || submitting} style={btnPrimaryAlt}>{submitting ? 'Submitting…' : 'Save and Submit'}</button>
+      <div className="flex justify-between items-baseline mb-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+        <h2 className="text-2xl font-bold text-gray-900 m-0">Create Deal</h2>
+        <div className="flex gap-2">
+          <button onClick={saveAsDraft} disabled={loading || submitting} className="px-4 py-2 rounded-lg border border-primary bg-primary text-white font-semibold hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Saving…' : 'Save as Draft'}</button>
+          <button onClick={saveAndSubmit} disabled={loading || submitting} className="px-4 py-2 rounded-lg border border-primary-dark bg-primary-dark text-white font-semibold hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{submitting ? 'Submitting…' : 'Save and Submit'}</button>
         </div>
       </div>
-      {error && <p style={{ color: '#e11d48' }}>{error}</p>}
+      {error && <p className="text-red-600 mb-4 font-medium">{error}</p>}
       
-      {loading && !error && <p style={{ color: '#64748b', fontSize: 14 }}>Loading unit data...</p>}
+      {loading && !error && <p className="text-gray-500 text-sm mb-4">Loading unit data...</p>}
 
       {/* Selected Unit Summary */}
       {selectedUnit && (
-        <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 12, marginBottom: 12, background: '#fff' }}>
+        <div className="border border-gray-200 rounded-xl p-4 mb-4 bg-white shadow-sm">
           {/* Conflict banner: other deals on this unit */}
           {Array.isArray(unitDeals) && unitDeals.length > 0 && (
-            <div style={{ marginBottom: 10, padding: '8px 10px', borderRadius: 8, border: '1px solid #fed7aa', background: '#fffbeb', color: '#9a3412', fontSize: 13 }}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>
+            <div className="mb-3 p-3 rounded-lg border border-orange-200 bg-orange-50 text-orange-800 text-sm">
+              <div className="font-semibold mb-1">
                 There are {unitDeals.length} existing deal(s) for this unit.
               </div>
-              <div>
+              <div className="flex flex-wrap gap-2">
                 {unitDeals.slice(0, 3).map(d => (
-                  <span key={d.id} style={{ marginRight: 8 }}>
+                  <span key={d.id} className="bg-white px-1.5 py-0.5 rounded border border-orange-100">
                     #{d.id} ({d.status || 'unknown'})
                   </span>
                 ))}
                 {unitDeals.length > 3 && <span>…</span>}
               </div>
-              <div style={{ marginTop: 4, fontSize: 12 }}>
+              <div className="mt-1 text-xs opacity-75">
                 This does not block creating a new offer, but consult your Sales Manager if there are conflicting offers.
               </div>
             </div>
           )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Selected Unit</h3>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => navigate('/deals/inventory')} style={btnPlain}>Change Unit</button>
+          <div className="flex justify-between items-baseline mb-4">
+            <h3 className="text-lg font-bold text-gray-800 m-0">Selected Unit</h3>
+            <div className="flex gap-2">
+              <button onClick={() => navigate('/deals/inventory')} className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm font-semibold hover:bg-gray-50 transition-colors">Change Unit</button>
               {selectedUnit?.id && (
                 <button
                   onClick={() => navigate(`/deals?unitId=${Number(selectedUnit.id)}`)}
-                  style={btnPlain}
+                  className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm font-semibold hover:bg-gray-50 transition-colors"
                   title="View all deals created for this unit"
                 >
                   View Deals for This Unit
@@ -491,7 +491,7 @@ export default function CreateDeal() {
                     return (
                       <button
                         onClick={requestUnitBlock}
-                        style={{ ...btnPrimary, opacity: canBlock ? 1 : 0.6, cursor: canBlock ? 'pointer' : 'not-allowed' }}
+                        className={`px-3 py-1.5 rounded-lg border font-semibold text-white text-sm transition-colors ${canBlock ? 'bg-primary border-primary hover:bg-primary-hover cursor-pointer' : 'bg-gray-400 border-gray-400 cursor-not-allowed opacity-60'}`}
                         disabled={!canBlock}
                         title={canBlock ? 'Request a temporary block on this unit' : 'Available after plan is ACCEPTED (or override approved)'}
                       >
@@ -504,17 +504,17 @@ export default function CreateDeal() {
               })()}
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-            <div><strong>Code:</strong> {selectedUnit.code || '-'}</div>
-            <div><strong>Model:</strong> {selectedUnit.model_code ? `${selectedUnit.model_code} — ${selectedUnit.model_name || ''}`.trim() : (selectedUnit.model_name || selectedUnit.unit_type || selectedUnit.unit_type_name || '-')}</div>
-            <div><strong>Number:</strong> {selectedUnit.unit_number || '-'}</div>
-            <div><strong>Floor:</strong> {selectedUnit.floor || '-'}</div>
-            <div><strong>Building:</strong> {selectedUnit.building_number || '-'}</div>
-            <div><strong>Block / Sector:</strong> {selectedUnit.block_sector || '-'}</div>
-            <div><strong>Zone:</strong> {selectedUnit.zone || '-'}</div>
+          <div className="grid grid-cols-3 gap-y-2 gap-x-4 text-sm text-gray-700">
+            <div><strong className="font-semibold text-gray-900">Code:</strong> {selectedUnit.code || '-'}</div>
+            <div><strong className="font-semibold text-gray-900">Model:</strong> {selectedUnit.model_code ? `${selectedUnit.model_code} — ${selectedUnit.model_name || ''}`.trim() : (selectedUnit.model_name || selectedUnit.unit_type || selectedUnit.unit_type_name || '-')}</div>
+            <div><strong className="font-semibold text-gray-900">Number:</strong> {selectedUnit.unit_number || '-'}</div>
+            <div><strong className="font-semibold text-gray-900">Floor:</strong> {selectedUnit.floor || '-'}</div>
+            <div><strong className="font-semibold text-gray-900">Building:</strong> {selectedUnit.building_number || '-'}</div>
+            <div><strong className="font-semibold text-gray-900">Block / Sector:</strong> {selectedUnit.block_sector || '-'}</div>
+            <div><strong className="font-semibold text-gray-900">Zone:</strong> {selectedUnit.zone || '-'}</div>
           </div>
-          <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #eef2f7' }}>
-            <h4 style={{ margin: 0, fontSize: 14, color: '#374151' }}>Price Breakdown (excl. maintenance)</h4>
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <h4 className="text-sm font-semibold text-gray-800 mb-2">Price Breakdown (excl. maintenance)</h4>
             {(() => {
               const u = selectedUnit || {}
               const sp = u.approved_standard_pricing || {}
@@ -529,15 +529,16 @@ export default function CreateDeal() {
               const curr = u.currency || 'EGP'
               const fmt = (x) => Number(x || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginTop: 6 }}>
-                  <div><small>Base</small><div>{fmt(base)} {curr}</div></div>
-                  <div><small>Garden</small><div>{fmt(garden)} {curr}</div></div>
-                  <div><small>Roof</small><div>{fmt(roof)} {curr}</div></div>
-                  <div><small>Storage</small><div>{fmt(storage)} {curr}</div></div>
-                  <div><small>Garage</small><div>{fmt(garage)} {curr}</div></div>
-                  <div><small>Maintenance</small><div>{fmt(maintenance)} {curr}</div></div>
-                  <div style={{ gridColumn: '1 / span 6', marginTop: 6, padding: 8, border: '1px dashed #dfe5ee', borderRadius: 8, background: '#fbfdff' }}>
-                    <strong>Total excl. maintenance:</strong> {fmt(total)} {curr}
+                <div className="grid grid-cols-6 gap-2 text-xs">
+                  <div><span className="text-gray-500 block">Base</span><div className="font-medium text-gray-900">{fmt(base)} {curr}</div></div>
+                  <div><span className="text-gray-500 block">Garden</span><div className="font-medium text-gray-900">{fmt(garden)} {curr}</div></div>
+                  <div><span className="text-gray-500 block">Roof</span><div className="font-medium text-gray-900">{fmt(roof)} {curr}</div></div>
+                  <div><span className="text-gray-500 block">Storage</span><div className="font-medium text-gray-900">{fmt(storage)} {curr}</div></div>
+                  <div><span className="text-gray-500 block">Garage</span><div className="font-medium text-gray-900">{fmt(garage)} {curr}</div></div>
+                  <div><span className="text-gray-500 block">Maintenance</span><div className="font-medium text-gray-900">{fmt(maintenance)} {curr}</div></div>
+                  <div className="col-span-6 mt-2 p-2 border border-dashed border-gray-300 rounded bg-gray-50 flex justify-between items-center text-sm">
+                    <strong className="text-gray-900">Total excl. maintenance:</strong> 
+                    <span className="font-bold text-primary-dark">{fmt(total)} {curr}</span>
                   </div>
                 </div>
               )
@@ -550,7 +551,7 @@ export default function CreateDeal() {
 
       
 
-      <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, overflow: 'hidden' }}>
+      <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white">
         <CalculatorApp embedded />
       </div>
 
@@ -559,8 +560,3 @@ export default function CreateDeal() {
   )
 }
 
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
-const btnPrimary = { padding: '10px 14px', borderRadius: 10, border: '1px solid #A97E34', background: '#A97E34', color: '#fff', fontWeight: 600, cursor: 'pointer' }
-const btnPrimaryAlt = { padding: '10px 14px', borderRadius: 10, border: '1px solid #8B672C', background: '#8B672C', color: '#fff', fontWeight: 600, cursor: 'pointer' }
-const btnPlain = { padding: '10px 14px', borderRadius: 10, border: '1px solid #d1d9e6', background: '#fff', color: '#111827', fontWeight: 600, cursor: 'pointer' }

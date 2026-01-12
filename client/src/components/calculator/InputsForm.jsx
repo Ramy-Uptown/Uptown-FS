@@ -39,8 +39,7 @@ export default function InputsForm({
   feeSchedule,
   setFeeSchedule
 }) {
-  const input = (err) => styles.input ? styles.input(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
-  const select = (err) => styles.select ? styles.select(err) : { padding: '10px 12px', borderRadius: 10, border: '1px solid #dfe5ee', outline: 'none', width: '100%', fontSize: 14, background: '#fbfdff' }
+
   const todayStr = new Date().toISOString().slice(0, 10)
   const isStandardMode = mode === 'standardMode'
 
@@ -50,20 +49,20 @@ export default function InputsForm({
   }, [language])
 
   return (
-    <section style={{ ...styles.section }} dir={isRTL(language) ? 'rtl' : 'ltr'}>
-      <h2 style={{ ...styles.sectionTitle, textAlign: isRTL(language) ? 'right' : 'left' }}>{t('inputs', language)}</h2>
-      <form onSubmit={(e) => { e.preventDefault(); onGeneratePlan(e) }} style={{ ...styles.grid2 }}>
+    <section className={styles.section} dir={isRTL(language) ? 'rtl' : 'ltr'}>
+      <h2 className={`${styles.sectionTitle} ${isRTL(language) ? 'text-right' : 'text-left'}`}>{t('inputs', language)}</h2>
+      <form onSubmit={(e) => { e.preventDefault(); onGeneratePlan(e) }} className={styles.grid2}>
         <div>
-          <label style={styles.label}>{t('language_for_written_amounts', language)}</label>
-          <select value={language} onChange={e => setLanguage(e.target.value)} style={select()}>
+          <label className={styles.label}>{t('language_for_written_amounts', language)}</label>
+          <select value={language} onChange={e => setLanguage(e.target.value)} className={styles.select}>
             <option value="en">{t('english', language)}</option>
             <option value="ar">{t('arabic', language)}</option>
           </select>
         </div>
 
         <div>
-          <label style={styles.label}>{t('currency', language)}</label>
-          <select value={currency} onChange={e => setCurrency(e.target.value)} style={select()}>
+          <label className={styles.label}>{t('currency', language)}</label>
+          <select value={currency} onChange={e => setCurrency(e.target.value)} className={styles.select}>
             <option value="EGP">EGP (Egyptian Pounds)</option>
             <option value="USD">USD (US Dollars)</option>
             <option value="SAR">SAR (Saudi Riyals)</option>
@@ -74,32 +73,32 @@ export default function InputsForm({
         </div>
 
         <div>
-          <label style={styles.label}>{t('offer_date', language)}<span style={{ color: '#ef4444' }}> *</span></label>
+          <label className={styles.label}>{t('offer_date', language)}<span className="text-red-500"> *</span></label>
           <input
             type="date"
             value={inputs.offerDate || todayStr}
             onChange={e => setInputs(s => ({ ...s, offerDate: e.target.value, firstPaymentDate: s.firstPaymentDate || e.target.value }))}
-            style={input(errors.offerDate)}
+            className={`${styles.input} ${errors.offerDate ? 'border-red-500' : ''}`}
             required
           />
-          {errors.offerDate && <small style={styles.error}>{errors.offerDate}</small>}
+          {errors.offerDate && <small className={styles.error}>{errors.offerDate}</small>}
         </div>
 
         <div>
-          <label style={styles.label}>{t('first_payment_date', language)}<span style={{ color: '#ef4444' }}> *</span></label>
+          <label className={styles.label}>{t('first_payment_date', language)}<span className="text-red-500"> *</span></label>
           <input
             type="date"
             value={inputs.firstPaymentDate || inputs.offerDate || todayStr}
             onChange={e => setInputs(s => ({ ...s, firstPaymentDate: e.target.value }))}
-            style={input(errors.firstPaymentDate)}
+            className={`${styles.input} ${errors.firstPaymentDate ? 'border-red-500' : ''}`}
             required
           />
-          {errors.firstPaymentDate && <small style={styles.error}>{errors.firstPaymentDate}</small>}
+          {errors.firstPaymentDate && <small className={styles.error}>{errors.firstPaymentDate}</small>}
         </div>
 
         <div>
-          <label style={styles.label}>{t('mode', language)}</label>
-          <select value={mode} onChange={e => setMode(e.target.value)} style={select()}>
+          <label className={styles.label}>{t('mode', language)}</label>
+          <select value={mode} onChange={e => setMode(e.target.value)} className={styles.select}>
             <option value="standardMode">{isRTL(language) ? 'الوضع القياسي (سياسة التمويل الافتراضية)' : 'Standard Mode (Default Financing Policy)'}</option>
             <option value="evaluateCustomPrice">{isRTL(language) ? 'سعر القائمة بعد الخصم (مقارنة بالقياسي)' : 'Discounted List Price (Compare to Standard)'}</option>
             <option value="calculateForTargetPV">{isRTL(language) ? 'سعر مستهدف: مطابقة القيمة الحالية القياسية' : 'Target Price: Match Standard PV'}</option>
@@ -162,20 +161,20 @@ export default function InputsForm({
             const l = isRTL(language) ? 'ar' : 'en'
             const m = info[mode] || info.standardMode
             return (
-              <div style={{ marginTop: 8, background: '#fbfaf7', border: '1px dashed #ead9bd', borderRadius: 8, padding: 10 }}>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>{m[l].name}</div>
-                <div style={{ fontSize: 13, color: '#4b5563' }}>{m[l].desc}</div>
+              <div className="mt-2 bg-gray-50 border border-dashed border-gray-300 rounded-lg p-3">
+                <div className="font-bold mb-1">{m[l].name}</div>
+                <div className="text-xs text-gray-600">{m[l].desc}</div>
               </div>
             )
           })()}
         </div>
 
         <div>
-          <label style={styles.label}>{t('installment_frequency', language)}</label>
+          <label className={styles.label}>{t('installment_frequency', language)}</label>
           <select
             value={isStandardMode ? 'quarterly' : inputs.installmentFrequency}
             onChange={e => !isStandardMode && setInputs(s => ({ ...s, installmentFrequency: e.target.value }))}
-            style={select(errors.installmentFrequency)}
+            className={`${styles.select} ${errors.installmentFrequency ? 'border-red-500' : ''}`}
             disabled={isStandardMode}
             title={isStandardMode ? (isRTL(language) ? 'الوضع القياسي يستخدم ربع سنوي ثابتاً' : 'Standard Mode uses fixed quarterly installments') : undefined}
           >
@@ -184,88 +183,88 @@ export default function InputsForm({
             <option value="bi-annually">{t('bi_annually', language)}</option>
             <option value="annually">{t('annually', language)}</option>
           </select>
-          {errors.installmentFrequency && <small style={styles.error}>{errors.installmentFrequency}</small>}
+          {errors.installmentFrequency && <small className={styles.error}>{errors.installmentFrequency}</small>}
         </div>
 
         <div>
-          <label style={styles.label}>{t('std_total_price', language)}</label>
+          <label className={styles.label}>{t('std_total_price', language)}</label>
           <input
             type="number"
             value={stdPlan.totalPrice}
             onChange={e => setStdPlan(s => ({ ...s, totalPrice: e.target.value }))}
-            style={input(errors.std_totalPrice)}
+            className={`${styles.input} ${errors.std_totalPrice ? 'border-red-500' : ''}`}
             disabled={rateLocked}
             title={rateLocked ? 'Locked to server-approved standard for selected unit' : undefined}
           />
-          {errors.std_totalPrice && <small style={styles.error}>{errors.std_totalPrice}</small>}
-          <div style={{ marginTop: 6, fontSize: 12, color: '#4b5563', background: '#fbfaf7', border: '1px dashed #ead9bd', borderRadius: 8, padding: 8 }}>
+          {errors.std_totalPrice && <small className={styles.error}>{errors.std_totalPrice}</small>}
+          <div className="mt-2 text-xs text-gray-600 bg-gray-50 border border-dashed border-gray-300 rounded-lg p-2">
             <div><strong>{t('unit_breakdown', language)}</strong></div>
             <div>{t('base', language)}: {Number(unitPricingBreakdown.base || 0).toLocaleString()}</div>
             <div>{t('garden', language)}: {Number(unitPricingBreakdown.garden || 0).toLocaleString()}</div>
             <div>{t('roof', language)}: {Number(unitPricingBreakdown.roof || 0).toLocaleString()}</div>
             <div>{t('storage', language)}: {Number(unitPricingBreakdown.storage || 0).toLocaleString()}</div>
             <div>{t('garage', language)}: {Number(unitPricingBreakdown.garage || 0).toLocaleString()}</div>
-            <div style={{ marginTop: 4 }}><strong>{t('total_excl_maint', language)}: {Number(unitPricingBreakdown.totalExclMaintenance || 0).toLocaleString()}</strong></div>
+            <div className="mt-1"><strong>{t('total_excl_maint', language)}: {Number(unitPricingBreakdown.totalExclMaintenance || 0).toLocaleString()}</strong></div>
             <div>{t('maintenance', language)}: {Number(unitPricingBreakdown.maintenance || 0).toLocaleString()}</div>
           </div>
         </div>
         {role !== 'property_consultant' && (
           <div>
-            <label style={styles.label}>{t('std_financial_rate', language)}</label>
+            <label className={styles.label}>{t('std_financial_rate', language)}</label>
             <input
               type="number"
               value={stdPlan.financialDiscountRate}
               onChange={e => setStdPlan(s => ({ ...s, financialDiscountRate: e.target.value }))}
-              style={input(errors.std_financialDiscountRate)}
+              className={`${styles.input} ${errors.std_financialDiscountRate ? 'border-red-500' : ''}`}
               disabled={rateLocked}
               title={rateLocked ? 'Locked to server-approved standard for selected unit' : undefined}
             />
-            {errors.std_financialDiscountRate && <small style={styles.error}>{errors.std_financialDiscountRate}</small>}
+            {errors.std_financialDiscountRate && <small className={styles.error}>{errors.std_financialDiscountRate}</small>}
           </div>
         )}
         <div>
-          <label style={styles.label}>{t('std_calculated_pv', language)}</label>
+          <label className={styles.label}>{t('std_calculated_pv', language)}</label>
           <input
             type="number"
             value={stdPlan.calculatedPV}
             onChange={() => {}}
-            style={input(errors.std_calculatedPV)}
+            className={`${styles.input} ${errors.std_calculatedPV ? 'border-red-500' : ''}`}
             disabled={true}
             title={'Read-only. Computed from Standard Total Price, rate, duration and frequency.'}
           />
-          {errors.std_calculatedPV && <small style={styles.error}>{errors.std_calculatedPV}</small>}
+          {errors.std_calculatedPV && <small className={styles.error}>{errors.std_calculatedPV}</small>}
         </div>
 
         <div>
-          <label style={styles.label}>{t('sales_discount', language)}</label>
+          <label className={styles.label}>{t('sales_discount', language)}</label>
           <input
             type="number"
             value={inputs.salesDiscountPercent}
             onChange={e => setInputs(s => ({ ...s, salesDiscountPercent: e.target.value }))}
-            style={input()}
+            className={styles.input}
           />
           {DiscountHint && <DiscountHint role={undefined} value={inputs.salesDiscountPercent} />}
         </div>
 
         <div>
-          <label style={styles.label}>{t('dp_type', language)}</label>
+          <label className={styles.label}>{t('dp_type', language)}</label>
           {isStandardMode ? (
-            <select value="percentage" disabled style={select(errors.dpType)}>
+            <select value="percentage" disabled className={`${styles.select} ${errors.dpType ? 'border-red-500' : ''}`}>
               <option value="percentage">{t('percentage', language)} (fixed)</option>
             </select>
           ) : ['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) ? (
-            <select value="amount" disabled style={select(errors.dpType)}>
+            <select value="amount" disabled className={`${styles.select} ${errors.dpType ? 'border-red-500' : ''}`}>
               <option value="amount">{t('amount', language)} (fixed)</option>
             </select>
           ) : (
-            <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} style={select(errors.dpType)}>
+            <select value={inputs.dpType} onChange={e => setInputs(s => ({ ...s, dpType: e.target.value }))} className={`${styles.select} ${errors.dpType ? 'border-red-500' : ''}`}>
               <option value="amount">{t('amount', language)}</option>
               <option value="percentage">{t('percentage', language)}</option>
             </select>
           )}
-          {errors.dpType && <small style={styles.error}>{errors.dpType}</small>}
+          {errors.dpType && <small className={styles.error}>{errors.dpType}</small>}
           {['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) && !isStandardMode && (
-            <small style={{ ...styles.metaText, display: 'block', marginTop: 6 }}>
+            <small className={`${styles.metaText} block mt-1`}>
               {isRTL(language)
                 ? 'تم تعطيل الدفعة المقدمة كنسبة مئوية في أوضاع مطابقة القيمة الحالية لتجنب الحلقة عند حل السعر من القيمة الحالية. الرجاء استخدام قيمة ثابتة.'
                 : 'Percentage down payment is disabled in PV-target modes to avoid circular dependency when solving price from PV. Please use a fixed amount.'}
@@ -273,7 +272,7 @@ export default function InputsForm({
           )}
         </div>
         <div>
-          <label style={styles.label}>
+          <label className={styles.label}>
             {isStandardMode
               ? `${t('down_payment_value', language)} (20%)`
               : ['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode)
@@ -281,7 +280,7 @@ export default function InputsForm({
                 : t('down_payment_value', language)}
           </label>
           {isStandardMode ? (
-            <div style={{ position: 'relative' }}>
+            <div className="relative">
               <input
                 type="number"
                 min="0"
@@ -289,12 +288,12 @@ export default function InputsForm({
                 step="0.01"
                 value={20}
                 disabled
-                style={{ ...input(errors.downPaymentValue), paddingRight: 36 }}
+                className={`${styles.input} ${errors.downPaymentValue ? 'border-red-500' : ''} pr-10`}
               />
-              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontWeight: 600 }}>%</span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold">%</span>
             </div>
           ) : inputs.dpType === 'percentage' && !['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) ? (
-            <div style={{ position: 'relative' }}>
+            <div className="relative">
               <input
                 type="number"
                 min="0"
@@ -302,10 +301,10 @@ export default function InputsForm({
                 step="0.01"
                 value={inputs.downPaymentValue}
                 onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value }))}
-                style={{ ...input(errors.downPaymentValue), paddingRight: 36 }}
+                className={`${styles.input} ${errors.downPaymentValue ? 'border-red-500' : ''} pr-10`}
                 placeholder="e.g., 20"
               />
-              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontWeight: 600 }}>%</span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold">%</span>
             </div>
           ) : (
             <input
@@ -314,82 +313,82 @@ export default function InputsForm({
               step="0.01"
               value={inputs.downPaymentValue}
               onChange={e => setInputs(s => ({ ...s, downPaymentValue: e.target.value, dpType: ['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) ? 'amount' : s.dpType }))}
-              style={input(errors.downPaymentValue)}
+              className={`${styles.input} ${errors.downPaymentValue ? 'border-red-500' : ''}`}
               placeholder="e.g., 100000"
             />
           )}
-          {errors.downPaymentValue && <small style={styles.error}>{errors.downPaymentValue}</small>}
+          {errors.downPaymentValue && <small className={styles.error}>{errors.downPaymentValue}</small>}
         </div>
 
         <div>
-          <label style={styles.label}>{t('plan_duration_years', language)}</label>
+          <label className={styles.label}>{t('plan_duration_years', language)}</label>
           <input
             type="number"
             value={isStandardMode ? 6 : inputs.planDurationYears}
             onChange={e => !isStandardMode && setInputs(s => ({ ...s, planDurationYears: e.target.value }))}
-            style={input(errors.planDurationYears)}
+            className={`${styles.input} ${errors.planDurationYears ? 'border-red-500' : ''}`}
             disabled={isStandardMode}
             title={isStandardMode ? (isRTL(language) ? 'مدة الخطة ثابتة ٦ سنوات في الوضع القياسي' : 'Plan duration is fixed to 6 years in Standard Mode') : undefined}
           />
-          {errors.planDurationYears && <small style={styles.error}>{errors.planDurationYears}</small>}
+          {errors.planDurationYears && <small className={styles.error}>{errors.planDurationYears}</small>}
         </div>
 
         <div>
-          <label style={styles.label}>{t('handover_year', language)}</label>
+          <label className={styles.label}>{t('handover_year', language)}</label>
           <input
             type="number"
             value={isStandardMode ? 3 : inputs.handoverYear}
             onChange={e => !isStandardMode && setInputs(s => ({ ...s, handoverYear: e.target.value }))}
-            style={input(errors.handoverYear)}
+            className={`${styles.input} ${errors.handoverYear ? 'border-red-500' : ''}`}
             disabled={isStandardMode}
             title={isStandardMode ? (isRTL(language) ? 'سنة التسليم ثابتة عند السنة الثالثة في الوضع القياسي' : 'Handover year is fixed to Year 3 in Standard Mode') : undefined}
           />
-          {errors.handoverYear && <small style={styles.error}>{errors.handoverYear}</small>}
+          {errors.handoverYear && <small className={styles.error}>{errors.handoverYear}</small>}
         </div>
         <div>
-          <label style={styles.label}>{t('additional_handover_payment', language)}</label>
+          <label className={styles.label}>{t('additional_handover_payment', language)}</label>
           <input
             type="number"
             value={isStandardMode ? 0 : inputs.additionalHandoverPayment}
             onChange={e => !isStandardMode && setInputs(s => ({ ...s, additionalHandoverPayment: e.target.value }))}
-            style={input(errors.additionalHandoverPayment)}
+            className={`${styles.input} ${errors.additionalHandoverPayment ? 'border-red-500' : ''}`}
             disabled={isStandardMode}
             title={isStandardMode ? (isRTL(language) ? 'لا توجد دفعة إضافية عند التسليم في الوضع القياسي' : 'No additional handover lump sum in Standard Mode') : undefined}
           />
-          {errors.additionalHandoverPayment && <small style={styles.error}>{errors.additionalHandoverPayment}</small>}
+          {errors.additionalHandoverPayment && <small className={styles.error}>{errors.additionalHandoverPayment}</small>}
         </div>
 
         {/* Maintenance Deposit controls (amount + optional calendar date) */}
-        <div style={styles.blockFull}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className={styles.blockFull}>
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label style={styles.label}>{isRTL(language) ? 'وديعة الصيانة (المبلغ)' : 'Maintenance Deposit (Amount)'}</label>
+              <label className={styles.label}>{isRTL(language) ? 'وديعة الصيانة (المبلغ)' : 'Maintenance Deposit (Amount)'}</label>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 value={feeSchedule?.maintenancePaymentAmount ?? ''}
                 onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentAmount: e.target.value }))}
-                style={input()}
+                className={styles.input}
                 placeholder={isRTL(language) ? 'مثال: 50000' : 'e.g., 50000'}
                 disabled={isStandardMode}
                 title={isStandardMode ? (isRTL(language) ? 'قيمة وديعة الصيانة مأخوذة من التسعير القياسي ولا يمكن تعديلها في الوضع القياسي.' : 'Maintenance Deposit amount comes from Standard Pricing and cannot be edited in Standard Mode.') : undefined}
               />
-              <small style={styles.metaText}>
+              <small className={styles.metaText}>
                 {isRTL(language)
                   ? 'لا تدخل نسبة مئوية. هذه الرسوم ليست جزءًا من حساب القيمة الحالية ولكن تُضاف في جدول السداد.'
                   : 'Enter a fixed amount. This fee is not part of PV calculation but is appended to the payment schedule.'}
               </small>
             </div>
             <div>
-              <label style={styles.label}>{isRTL(language) ? 'تاريخ وديعة الصيانة (اختياري)' : 'Maintenance Deposit Date (optional)'}</label>
+              <label className={styles.label}>{isRTL(language) ? 'تاريخ وديعة الصيانة (اختياري)' : 'Maintenance Deposit Date (optional)'}</label>
               <input
                 type="date"
                 value={feeSchedule?.maintenancePaymentDate || ''}
                 onChange={e => setFeeSchedule(s => ({ ...s, maintenancePaymentDate: e.target.value }))}
-                style={input()}
+                className={styles.input}
               />
-              <small style={styles.metaText}>
+              <small className={styles.metaText}>
                 {isRTL(language)
                   ? 'إذا تُرك فارغًا، يتم تحديد موعد وديعة الصيانة افتراضيًا عند التسليم.'
                   : 'If left empty, the maintenance deposit defaults to the Handover date.'}
@@ -398,8 +397,8 @@ export default function InputsForm({
           </div>
         </div>
 
-        <div style={styles.blockFull}>
-          <label style={{ ...styles.label, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <div className={styles.blockFull}>
+          <label className={`${styles.label} inline-flex items-center gap-2`}>
             <input
               type="checkbox"
               checked={isStandardMode ? false : inputs.splitFirstYearPayments}
@@ -436,16 +435,16 @@ export default function InputsForm({
 
         {/* Display solved New Price for target-PV modes when preview is available */}
         {['calculateForTargetPV','customYearlyThenEqual_targetPV'].includes(mode) && summaries?.totalNominalPrice != null && (
-          <div style={styles.blockFull}>
-            <label style={styles.label}>{isRTL(language) ? 'السعر الجديد (محسوب)' : 'Solved New Price (from PV target)'}</label>
+          <div className={styles.blockFull}>
+            <label className={styles.label}>{isRTL(language) ? 'السعر الجديد (محسوب)' : 'Solved New Price (from PV target)'}</label>
             <input
               type="number"
               value={Number(summaries.totalNominalPrice || 0).toFixed(2)}
               readOnly
-              style={input()}
+              className={styles.input}
               title="Derived from matching Standard PV using your current structure"
             />
-            <small style={styles.metaText}>
+            <small className={styles.metaText}>
               {isRTL(language)
                 ? 'القيمة محسوبة من مطابقة القيمة الحالية القياسية باستخدام الهيكل المختار.'
                 : 'This is the offer price that matches the Standard PV given your selected structure.'}

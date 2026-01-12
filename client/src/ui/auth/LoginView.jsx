@@ -99,7 +99,7 @@ export default function LoginView({
                   </label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                      <span className="material-icons text-gray-400 group-focus-within:text-primary transition-colors text-[20px]">
+                      <span className="material-symbols-outlined text-gray-400 group-focus-within:text-primary transition-colors text-[20px]">
                         mail
                       </span>
                     </div>
@@ -128,14 +128,14 @@ export default function LoginView({
                     <button
                       type="button"
                       onClick={onForgotPasswordClick}
-                      className="text-[11px] font-bold text-primary hover:text-[#94763b] transition-colors"
+                      className="text-[11px] font-bold text-primary hover:text-primary-hover transition-colors"
                     >
                       Forgot password?
                     </button>
                   </div>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                      <span className="material-icons text-gray-400 group-focus-within:text-primary transition-colors text-[20px]">
+                      <span className="material-symbols-outlined text-gray-400 group-focus-within:text-primary transition-colors text-[20px]">
                         lock
                       </span>
                     </div>
@@ -174,11 +174,11 @@ export default function LoginView({
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full flex justify-center items-center gap-2 py-3.5 px-4 border border-transparent rounded-lg shadow-sm text-[13px] font-bold text-white bg-primary hover:bg-[#94763b] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all duration-200 uppercase tracking-widest disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="w-full flex justify-center items-center gap-2 py-3.5 px-4 border border-transparent rounded-lg shadow-sm text-[13px] font-bold text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all duration-200 uppercase tracking-widest disabled:opacity-70 disabled:cursor-not-allowed"
                   >
                     {loading ? 'Signing in…' : 'Sign In'}
                     {!loading && (
-                      <span className="material-icons text-[18px]">
+                      <span className="material-symbols-outlined text-[18px]">
                         arrow_forward
                       </span>
                     )}
@@ -229,7 +229,7 @@ function InfoCard({ icon, title, subtitle }) {
   return (
     <div className="group flex items-start gap-4 p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-primary/30 transition-all duration-300">
       <div className="flex-shrink-0 p-2.5 bg-[#2A2D32] rounded-lg text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-        <span className="material-icons text-[20px]">
+        <span className="material-symbols-outlined text-[20px]">
           {icon}
         </span>
       </div>

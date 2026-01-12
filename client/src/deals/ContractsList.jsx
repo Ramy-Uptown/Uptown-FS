@@ -1,29 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { notifyError } from '../lib/notifications.js'
-import { th, td } from '../lib/ui.js'
-import BrandHeader from '../lib/BrandHeader.jsx'
-
-const APP_TITLE = import.meta.env.VITE_APP_TITLE || 'Uptown Financial System'
-
-async function handleLogout() {
-  try {
-    const rt = localStorage.getItem('refresh_token')
-    if (rt) {
-      await fetch(`${API_URL}/api/auth/logout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: rt })
-      }).catch(() => {})
-    }
-  } finally {
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('auth_user')
-    window.location.href = '/login'
-  }
-}
+import { notifyError, notifySuccess } from '../lib/notifications.js'
+import AdminSidebar from '../components/AdminSidebar.jsx'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
 
 export default function ContractsList() {
   const [rows, setRows] = useState([])
@@ -34,7 +15,18 @@ export default function ContractsList() {
   const [candidates, setCandidates] = useState([])
   const [candidatesLoading, setCandidatesLoading] = useState(false)
   const [candidatesError, setCandidatesError] = useState('')
+  const [role, setRole] = useState('')
   const navigate = useNavigate()
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('auth_user')
+      if (raw) {
+        const u = JSON.parse(raw)
+        setRole(u?.role || '')
+      }
+    } catch {}
+  }, [])
 
   async function load() {
     try {
@@ -56,9 +48,7 @@ export default function ContractsList() {
     }
   }
 
-  useEffect(() => {
-    load()
-  }, [])
+  useEffect(() => { load() }, [])
 
   async function loadCandidates() {
     try {
@@ -89,214 +79,180 @@ export default function ContractsList() {
     return s.charAt(0).toUpperCase() + s.slice(1)
   }
 
-  function statusColor(status) {
-    const s = String(status || '').toLowerCase()
-    if (s === 'approved' || s === 'executed') return '#16a34a'
-    if (s === 'pending_cm' || s === 'pending_tm') return '#2563eb'
-    if (s === 'rejected') return '#dc2626'
-    return '#64748b'
-  }
-
   return (
-    <div>
-      <BrandHeader title={APP_TITLE} onLogout={handleLogout} />
-      <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
-          <h2 style={{ marginTop: 0 }}>Contracts Queue</h2>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }}
-              onClick={load}
-              disabled={loading}
-            >
-              Refresh
-            </button>
-            <button
-              style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }}
-              onClick={async () => {
-                const nextSelecting = !selecting
-                setSelecting(nextSelecting)
-                if (nextSelecting && candidates.length === 0) {
-                  await loadCandidates()
-                }
-              }}
-            >
-              {selecting ? 'Hide Reservation Forms' : 'New Contract from Reservation'}
-            </button>
-          </div>
-        </div>
-        {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-7xl mx-auto space-y-6">
 
-        {selecting && (
-          <div
-            style={{
-              marginBottom: 16,
-              padding: 12,
-              borderRadius: 12,
-              border: '1px solid #e5e7eb',
-              background: '#f9fafb'
-            }}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Approved Reservation Forms (no contract yet)</h3>
-            {candidatesError && (
-              <p style={{ color: '#e11d48', fontSize: 13 }}>{candidatesError}</p>
-            )}
-            {!candidatesError && candidatesLoading && (
-              <p style={{ fontSize: 13, color: '#6b7280' }}>Loading reservation forms…</p>
-            )}
-            {!candidatesLoading && candidates.length === 0 && !candidatesError && (
-              <p style={{ fontSize: 13, color: '#6b7280' }}>
-                No approved reservation forms without contracts were found.
-              </p>
-            )}
-            {!candidatesLoading && candidates.length > 0 && (
-              <div style={{ overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: 10 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr>
-                      <th style={th}>RF #</th>
-                      <th style={th}>Deal #</th>
-                      <th style={th}>Unit</th>
-                      <th style={th}>Buyer</th>
-                      <th style={th}>Reservation Date</th>
-                      <th style={th}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {candidates.map(rf => (
-                      <tr key={rf.id}>
-                        <td style={td}>{rf.id}</td>
-                        <td style={td}>{rf.deal_id || '-'}</td>
-                        <td style={td}>{rf.unit_code || '-'}</td>
-                        <td style={td}>{rf.buyer_name || '-'}</td>
-                        <td style={td}>
-                          {rf.reservation_date
-                            ? new Date(rf.reservation_date).toISOString().slice(0, 10)
-                            : '-'}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Contracts Queue</h2>
+              <p className="text-sm text-gray-500 mt-1">Manage unit contracts, reviews, and sign-offs.</p>
+            </div>
+            <div className="flex gap-3">
+              <LoadingButton 
+                onClick={load} 
+                loading={loading}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+              >
+                Refresh
+              </LoadingButton>
+              <button
+                onClick={async () => {
+                  const nextSelecting = !selecting
+                  setSelecting(nextSelecting)
+                  if (nextSelecting && candidates.length === 0) {
+                    await loadCandidates()
+                  }
+                }}
+                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+              >
+                {selecting ? 'Hide Candidates' : 'New Contract'}
+              </button>
+            </div>
+          </div>
+
+          {error && <div className="p-4 bg-red-50 text-red-700 rounded-md border border-red-100">{error}</div>}
+
+          {/* Candidates Panel */}
+          {selecting && (
+            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 overflow-hidden mb-6 filter drop-shadow animate-fade-in-down">
+              <h3 className="text-lg font-medium text-gray-900 mb-4 border-b pb-2">Approved Reservation Forms (Ready for Contract)</h3>
+              
+              {candidatesError && <p className="text-sm text-red-600 mb-2">{candidatesError}</p>}
+              {candidatesLoading && <SkeletonRow widths={['w-full', 'w-full']} />}
+              
+              {!candidatesLoading && !candidatesError && candidates.length === 0 && (
+                <p className="text-sm text-gray-500 italic py-2">No approved reservation forms found without contracts.</p>
+              )}
+
+              {!candidatesLoading && candidates.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">RF #</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deal</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Buyer</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th className="relative px-6 py-3"><span className="sr-only">Create</span></th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {candidates.map(rf => (
+                        <tr key={rf.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{rf.id}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{rf.deal_id || '-'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500 font-medium">{rf.unit_code}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{rf.buyer_name}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{rf.reservation_date ? new Date(rf.reservation_date).toLocaleDateString() : '-'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-medium">
+                            <LoadingButton
+                              onClick={async () => {
+                                try {
+                                  setCreating(true)
+                                  const resp = await fetchWithAuth(`${API_URL}/api/contracts`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ reservation_form_id: rf.id })
+                                  })
+                                  const data = await resp.json().catch(() => ({}))
+                                  if (!resp.ok) throw new Error(data?.error?.message || 'Failed to create contract')
+                                  const created = data.contract
+                                  if (created && created.id) {
+                                    navigate(`/contracts/${created.id}`)
+                                  } else {
+                                    await load()
+                                  }
+                                } catch (e) {
+                                  notifyError(e, 'Failed to create contract')
+                                } finally {
+                                  setCreating(false)
+                                }
+                              }}
+                              disabled={creating}
+                              className="text-green-600 hover:text-green-900 bg-green-50 px-3 py-1 rounded-md border border-green-200 text-xs"
+                            >
+                              {creating ? 'Creating...' : 'Create Contract'}
+                            </LoadingButton>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Contracts Table */}
+          <div className="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-300">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="py-3.5 pl-4 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 sm:pl-6">ID</th>
+                    <th className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Deal #</th>
+                    <th className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Unit Code</th>
+                    <th className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Buyer</th>
+                    <th className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Status</th>
+                    <th className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Created</th>
+                    <th className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Action</span></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {loading && (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i}><td colSpan={7} className="px-3 py-4"><SkeletonRow widths={['sm', 'sm', 'md', 'lg', 'sm', 'md', 'xs']} /></td></tr>
+                    ))
+                  )}
+                  {!loading && rows.map(c => {
+                    const status = formatStatus(c.status)
+                    const unitCode = c.unit_code || c.unit?.unit_code || '-'
+                    const buyerName = c.buyer_name || c.buyer || c.client_name || '-'
+                    const createdAt = c.created_at ? new Date(c.created_at).toLocaleString() : '-'
+                    
+                    // Status Badge Logic
+                    let badgeClass = 'bg-gray-100 text-gray-800'
+                    if (status === 'Approved' || status === 'Executed') badgeClass = 'bg-green-100 text-green-800'
+                    else if (status.includes('Pending')) badgeClass = 'bg-blue-100 text-blue-800'
+                    else if (status === 'Rejected') badgeClass = 'bg-red-100 text-red-800'
+
+                    return (
+                      <tr 
+                        key={c.id} 
+                        onClick={() => navigate(`/contracts/${c.id}`)}
+                        className="hover:bg-gray-50 cursor-pointer transition-colors"
+                      >
+                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">#{c.id}</td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{c.deal_id || '-'}</td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-900">{unitCode}</td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{buyerName}</td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${badgeClass}`}>
+                            {status}
+                          </span>
                         </td>
-                        <td style={{ ...td, textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            style={{
-                              padding: '6px 10px',
-                              borderRadius: 8,
-                              border: '1px solid #10b981',
-                              background: '#10b981',
-                              color: '#fff',
-                              fontSize: 12,
-                              cursor: 'pointer'
-                            }}
-                            onClick={async () => {
-                              try {
-                                setCreating(true)
-                                const resp = await fetchWithAuth(`${API_URL}/api/contracts`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ reservation_form_id: rf.id })
-                                })
-                                const data = await resp.json().catch(() => ({}))
-                                if (!resp.ok) {
-                                  throw new Error(data?.error?.message || 'Failed to create contract')
-                                }
-                                const created = data.contract
-                                if (created && created.id) {
-                                  navigate(`/contracts/${created.id}`)
-                                } else {
-                                  await load()
-                                }
-                              } catch (e) {
-                                notifyError(e, 'Failed to create contract')
-                              } finally {
-                                setCreating(false)
-                              }
-                            }}
-                            disabled={creating}
-                          >
-                            {creating ? 'Creating…' : 'Create Contract'}
-                          </button>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{createdAt}</td>
+                        <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                          <span className="text-primary hover:text-primary-hover">View<span className="sr-only">, {c.id}</span></span>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    )
+                  })}
+                  {!loading && rows.length === 0 && (
+                    <tr><td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-500">No contracts found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        )}
 
-        <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={th}>Contract #</th>
-                <th style={th}>Deal #</th>
-                <th style={th}>Unit</th>
-                <th style={th}>Buyer</th>
-                <th style={th}>Status</th>
-                <th style={th}>Created At</th>
-                <th style={th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && <tr><td style={td} colSpan={7}>Loading…</td></tr>}
-              {!loading && rows.map(c => {
-                const status = formatStatus(c.status)
-                const color = statusColor(c.status)
-                const unitCode = c.unit_code || c.unit?.unit_code || '-'
-                const buyerName = c.buyer_name || c.buyer || c.client_name || '-'
-                const createdAt = c.created_at ? new Date(c.created_at).toLocaleString() : '-'
-                return (
-                  <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/contracts/${c.id}`)}>
-                    <td style={td}>{c.id}</td>
-                    <td style={td}>{c.deal_id || '-'}</td>
-                    <td style={td}>{unitCode}</td>
-                    <td style={td}>{buyerName}</td>
-                    <td style={td}>
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          padding: '2px 8px',
-                          borderRadius: 999,
-                          fontSize: 12,
-                          fontWeight: 500,
-                          background: '#f9fafb',
-                          color
-                        }}
-                      >
-                        {status}
-                      </span>
-                    </td>
-                    <td style={td}>{createdAt}</td>
-                    <td style={{ ...td, textAlign: 'right' }}>
-                      <button
-                        type="button"
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: 8,
-                          border: '1px solid #d1d9e6',
-                          background: '#fff',
-                          fontSize: 12,
-                          cursor: 'pointer'
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          navigate(`/contracts/${c.id}`)
-                        }}
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-              {!loading && rows.length === 0 && (
-                <tr><td style={td} colSpan={7}>No contracts found.</td></tr>
-              )}
-            </tbody>
-          </table>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

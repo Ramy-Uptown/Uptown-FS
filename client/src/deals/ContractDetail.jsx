@@ -2,40 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
-import { th, td } from '../lib/ui.js'
-import { generateReservationFormPdf } from '../lib/docExports.js'
-import BrandHeader from '../lib/BrandHeader.jsx'
-
-const APP_TITLE = import.meta.env.VITE_APP_TITLE || 'Uptown Financial System'
-
-async function handleLogout() {
-  try {
-    const rt = localStorage.getItem('refresh_token')
-    if (rt) {
-      await fetch(`${API_URL}/api/auth/logout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: rt })
-      }).catch(() => {})
-    }
-  } finally {
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('auth_user')
-    window.location.href = '/login'
-  }
-}
-
-function renderWithShell(content) {
-  return (
-    <div>
-      <BrandHeader title={APP_TITLE} onLogout={handleLogout} />
-      <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-        {content}
-      </div>
-    </div>
-  )
-}
+import AdminSidebar from '../components/AdminSidebar.jsx'
+import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
 
 export default function ContractDetail() {
   const { id } = useParams()
@@ -45,29 +14,29 @@ export default function ContractDetail() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
-  const [pdfLoading, setPdfLoading] = useState(false)
   const [dpSummary, setDpSummary] = useState(null)
   const [dpSummaryError, setDpSummaryError] = useState('')
-  const [viewingReservation, setViewingReservation] = useState(false)
-  const [viewingReservationError, setViewingReservationError] = useState('')
-  const [generatingContractPdf, setGeneratingContractPdf] = useState(false)
-  const [historyRows, setHistoryRows] = useState([])
+  
   // Preview feature state
   const [showDataPreview, setShowDataPreview] = useState(false)
-  const [showPdfPreview, setShowPdfPreview] = useState(false)
-  const [previewPdfUrl, setPreviewPdfUrl] = useState(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
 
-  const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
-  const role = user?.role || 'user'
+  const [role, setRole] = useState('')
+  useEffect(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('auth_user') || '{}')
+      setRole(u?.role || 'user')
+    } catch {}
+  }, [])
 
   // Contract configuration state
   const [contractDate, setContractDate] = useState(new Date().toISOString().split('T')[0])
+  
   // POA multi-field state (4 separate inputs)
   const [poaNumber, setPoaNumber] = useState('')
   const [poaLetter, setPoaLetter] = useState('')
   const [poaYear, setPoaYear] = useState('')
   const [poaOffice, setPoaOffice] = useState('')
+  
   // Unlock request state
   const [pendingUnlockRequest, setPendingUnlockRequest] = useState(null)
 
@@ -77,9 +46,8 @@ export default function ContractDetail() {
       setError('')
       const resp = await fetchWithAuth(`${API_URL}/api/contracts/${id}`)
       const data = await resp.json().catch(() => ({}))
-      if (!resp.ok) {
-        throw new Error(data?.error?.message || 'Failed to load contract')
-      }
+      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load contract')
+      
       const c = data.contract || data
       setContract(c)
 
@@ -105,19 +73,6 @@ export default function ContractDetail() {
         setDpSummaryError('')
       }
 
-      // Load contracts history
-      try {
-        const hResp = await fetchWithAuth(`${API_URL}/api/contracts/${c.id}/history`)
-        const hData = await hResp.json().catch(() => ({}))
-        if (hResp.ok && Array.isArray(hData.history)) {
-          setHistoryRows(hData.history)
-        } else {
-          setHistoryRows([])
-        }
-      } catch {
-        setHistoryRows([])
-      }
-
       // Load Deal details (for contract settings)
       if (dealIdNum) {
         try {
@@ -139,9 +94,7 @@ export default function ContractDetail() {
     }
   }
 
-  useEffect(() => {
-    load()
-  }, [id])
+  useEffect(() => { load() }, [id])
 
   // Sync state when deal is loaded (if existing settings found)
   useEffect(() => {
@@ -168,15 +121,15 @@ export default function ContractDetail() {
   }, [deal])
 
   if (loading && !contract) {
-    return renderWithShell(<p>Loading…</p>)
+    return <div className="flex h-screen bg-gray-50"><AdminSidebar role={role} /><div className="flex-1 p-6"><SkeletonRow /></div></div>
   }
 
   if (error && !contract) {
-    return renderWithShell(<p style={{ color: '#e11d48' }}>{error}</p>)
+    return <div className="flex h-screen bg-gray-50"><AdminSidebar role={role} /><div className="flex-1 p-6 text-red-600">{error}</div></div>
   }
 
   if (!contract) {
-    return renderWithShell(<p>No contract found.</p>)
+    return <div className="flex h-screen bg-gray-50"><AdminSidebar role={role} /><div className="flex-1 p-6">No contract found.</div></div>
   }
 
   const status = String(contract.status || '').toUpperCase()
@@ -187,69 +140,21 @@ export default function ContractDetail() {
   const createdAt = contract.created_at ? new Date(contract.created_at).toLocaleString() : '-'
   const updatedAt = contract.updated_at ? new Date(contract.updated_at).toLocaleString() : '-'
 
-  // Enriched snapshots from the originating offer/reservation to drive CM/TM review:
-  // - client_info carries buyer identity and contacts (imported from offer)
-  // - unit_info carries unit metadata (code, type, area, building, etc.)
-  // - handover_year carries the contractual delivery year used in the payment plan.
   const clientInfo = contract.client_info || contract.details?.clientInfo || {}
   const unitInfo = contract.unit_info || contract.details?.calculator?.unitInfo || {}
-  const handoverYear =
-    contract.handover_year ||
-    contract.details?.calculator?.inputs?.handoverYear ||
-    null
+  const handoverYear = contract.handover_year || contract.details?.calculator?.inputs?.handoverYear || null
 
-  function statusColor() {
-    const s = status.toLowerCase()
-    if (s === 'approved' || s === 'executed') return '#16a34a'
-    if (s === 'pending_cm' || s === 'pending_tm') return '#2563eb'
-    if (s === 'rejected') return '#dc2626'
-    return '#64748b'
-  }
-
-  // Workflow gates:
-  // - Contract Admin (contract_person) drafts and submits to CM.
-  // - Contract Manager reviews and forwards to TM.
-  // - Top Management gives final approval.
-  const canSubmitToCm =
-    role === 'contract_person' && status === 'DRAFT' && !!dealId
-
-  const canApproveAsCm =
-    role === 'contract_manager' && status === 'PENDING_CM'
-
-  const canApproveAsTm =
-    (role === 'ceo' ||
-      role === 'chairman' ||
-      role === 'vice_chairman' ||
-      role === 'top_management') &&
-    status === 'PENDING_TM'
-
-  const canRejectAsManager =
-    (role === 'contract_manager' && (status === 'PENDING_CM' || status === 'PENDING_TM')) ||
-    (canApproveAsTm && status === 'PENDING_TM')
-
-  const canExecute = role === 'contract_person' && status === 'APPROVED'
-
-  // Contract Admin can generate a draft/final contract PDF as long as the
-  // underlying deal is approved, regardless of the contract status.
-  const canGeneratePdf =
-    role === 'contract_person' &&
-    !!dealId &&
-    ['DRAFT', 'PENDING_CM', 'PENDING_TM', 'APPROVED', 'EXECUTED'].includes(status)
-
-  // Contract Admin can preview draft before submitting
-  const canPreviewDraft =
-    role === 'contract_person' &&
-    status === 'DRAFT' &&
-    !!dealId
+  const canSubmitToCm = role === 'contract_person' && status === 'DRAFT' && !!dealId
+  // const canPreviewDraft = role === 'contract_person' && status === 'DRAFT' && !!dealId
 
   // Build the contract data for preview panel
   const calculatorData = contract.details?.calculator || {}
   const generatedPlan = calculatorData.generatedPlan || {}
   const inputs = calculatorData.inputs || {}
-  // Get financial data from dpSummary (loaded from API) or fallback to calculator
   const totalPrice = dpSummary?.total_excl || dpSummary?.total_price || generatedPlan.totalNominal || contract.amount || null
   const planDuration = inputs.planDurationYears || dpSummary?.plan_duration_years || null
   const frequency = inputs.installmentFrequency || dpSummary?.installment_frequency || null
+
   const contractDataFields = [
     { label: 'Buyer Name', value: clientInfo.buyer_name || buyerName },
     { label: 'Nationality', value: clientInfo.nationality || '-' },
@@ -268,1025 +173,265 @@ export default function ContractDetail() {
     { label: 'Installment Frequency', value: frequency || '-' }
   ]
 
-  return renderWithShell(
-    <div>
-      <button
-        type="button"
-        onClick={() => navigate('/contracts')}
-        style={{ marginBottom: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }}
-      >
-        ← Back to Contracts
-      </button>
+  // Action handlers
+  const handleUpdateStatus = async (newStatus) => {
+    if (!confirm(`Are you sure you want to update status to ${newStatus}?`)) return
+    try {
+      setActionLoading(true)
+      const res = await fetchWithAuth(`${API_URL}/api/contracts/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      })
+      if (!res.ok) throw new Error('Failed to update status')
+      notifySuccess(`Status updated to ${newStatus}`)
+      load()
+    } catch (e) {
+      notifyError(e, 'Update failed')
+    } finally {
+      setActionLoading(false)
+    }
+  }
 
-      <h2 style={{ marginTop: 0 }}>Contract #{contract.id}</h2>
-
-      <div style={{
-        margin: '8px 0 12px 0',
-        padding: '10px 12px',
-        borderRadius: 10,
-        background: '#f9fafb',
-        border: '1px solid #e5e7eb',
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 16
-      }}>
-        <div>
-          <strong>Status:</strong>{' '}
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              padding: '2px 8px',
-              borderRadius: 999,
-              fontSize: 12,
-              fontWeight: 500,
-              background: '#fff',
-              color: statusColor()
-            }}
-          >
-            {status || '-'}
-          </span>
-        </div>
-        <div>
-          <strong>Deal:</strong>{' '}
-          {dealId ? (
-            <Link to={`/deals/${dealId}`}>
-              #{dealId}
-            </Link>
-          ) : (
-            '-'
-          )}
-        </div>
-        <div>
-          <strong>Reservation Form:</strong>{' '}
-          {reservationFormId ? (
-            <Link to={`/reservation-forms/${reservationFormId}`}>
-              #{reservationFormId}
-            </Link>
-          ) : (
-            '-'
-          )}
-        </div>
-        <div>
-          <strong>Unit:</strong> {unitCode}
-        </div>
-        <div>
-          <strong>Buyer:</strong> {buyerName}
-        </div>
-        <div>
-          <strong>Created:</strong> {createdAt}
-        </div>
-        <div>
-          <strong>Last Updated:</strong> {updatedAt}
-        </div>
-      </div>
-
-      {/* Buyer + Unit summaries to support CM/TM review */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
-        <div
-          style={{
-            flex: '1 1 260px',
-            borderRadius: 10,
-            border: '1px solid #e5e7eb',
-            background: '#fff',
-            padding: 12,
-            minWidth: 260
-          }}
-        >
-          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Buyer Summary</h3>
-          {buyerName === '-' && !clientInfo?.buyer_name ? (
-            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
-              No buyer details were found on the originating offer snapshot.
-            </p>
-          ) : (
-            <div style={{ fontSize: 13, color: '#111827', display: 'grid', rowGap: 4 }}>
-              <div>
-                <strong>Name:</strong>{' '}
-                {clientInfo?.buyer_name || buyerName || '-'}
-              </div>
-              <div>
-                <strong>ID No. / Passport:</strong>{' '}
-                {clientInfo?.id_or_passport || '-'}
-              </div>
-              <div>
-                <strong>Address:</strong>{' '}
-                {clientInfo?.address || '-'}
-              </div>
-              <div>
-                <strong>Telephone:</strong>{' '}
-                {clientInfo?.phone_primary || clientInfo?.phone_secondary || '-'}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div
-          style={{
-            flex: '1 1 260px',
-            borderRadius: 10,
-            border: '1px solid #e5e7eb',
-            background: '#fff',
-            padding: 12,
-            minWidth: 260
-          }}
-        >
-          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Unit Summary &amp; Delivery</h3>
-          <div style={{ fontSize: 13, color: '#111827', display: 'grid', rowGap: 4 }}>
-            <div>
-              <strong>Unit Code:</strong>{' '}
-              {unitCode || unitInfo?.unit_code || '-'}
-            </div>
-            <div>
-              <strong>Unit Type:</strong>{' '}
-              {unitInfo?.unit_type || '-'}
-            </div>
-            <div>
-              <strong>Area:</strong>{' '}
-              {unitInfo?.unit_area ||
-                unitInfo?.area ||
-                unitInfo?.net_area ||
-                unitInfo?.built_up_area ||
-                '-'}
-            </div>
-            <div>
-              <strong>Building / Block / Zone:</strong>{' '}
-              {unitInfo?.building_number || unitInfo?.building || '-'}
-              {' / '}
-              {unitInfo?.block_sector || unitInfo?.block || '-'}
-              {' / '}
-              {unitInfo?.zone || '-'}
-            </div>
-            <div>
-              <strong>Delivery (Handover) Year:</strong>{' '}
-              {handoverYear ? `Year ${handoverYear}` : '-'}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Contract Data Preview Panel - Collapsible */}
-      {canPreviewDraft && (
-        <div style={{ marginBottom: 16 }}>
-          <button
-            type="button"
-            onClick={() => setShowDataPreview(!showDataPreview)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #6366f1',
-              background: showDataPreview ? '#6366f1' : '#fff',
-              color: showDataPreview ? '#fff' : '#6366f1',
-              cursor: 'pointer',
-              fontWeight: 500,
-              marginBottom: showDataPreview ? 12 : 0
-            }}
-          >
-            {showDataPreview ? '▲ Hide Contract Data' : '▼ View Contract Data'}
-          </button>
-          {showDataPreview && (
-            <div
-              style={{
-                background: '#f9fafb',
-                border: '1px solid #e5e7eb',
-                borderRadius: 10,
-                padding: 16,
-                marginTop: 8
-              }}
-            >
-              <h4 style={{ margin: '0 0 12px 0', color: '#374151' }}>Contract Data Preview</h4>
-              <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
-                These values will be inserted into the contract template:
-              </p>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                  gap: 8
-                }}
-              >
-                {contractDataFields.map((field, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      display: 'flex',
-                      padding: '6px 10px',
-                      background: '#fff',
-                      borderRadius: 6,
-                      border: '1px solid #e5e7eb'
-                    }}
-                  >
-                    <span style={{ fontWeight: 500, color: '#374151', minWidth: 140 }}>
-                      {field.label}:
+  return (
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-7xl mx-auto space-y-6">
+          
+          {/* Header */}
+          <div className="flex items-center gap-4">
+             <button
+                onClick={() => navigate('/contracts')}
+                className="bg-white border border-gray-300 rounded-full p-2 hover:bg-gray-50 text-gray-500 transition-colors"
+             >
+                <span className="material-symbols-outlined text-lg">arrow_back</span>
+             </button>
+             <div>
+                 <div className="flex items-center gap-3">
+                    <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Contract #{contract.id}</h2>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize 
+                        ${status === 'APPROVED' || status === 'EXECUTED' ? 'bg-green-100 text-green-800' : 
+                          status.includes('PENDING') ? 'bg-blue-100 text-blue-800' : 
+                          status === 'REJECTED' ? 'bg-red-100 text-red-800' : 
+                          'bg-gray-100 text-gray-800'}`}>
+                        {status.replace('_', ' ')}
                     </span>
-                    <span style={{ color: '#111827' }}>{field.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+                 </div>
+                 <p className="text-sm text-gray-500 mt-1">Created on {createdAt} • Last updated {updatedAt}</p>
+             </div>
+             
+             <div className="ml-auto flex gap-3">
+                 {/* Workflow Actions */}
+                 {canSubmitToCm && (
+                     <LoadingButton 
+                        onClick={() => handleUpdateStatus('pending_cm')}
+                        loading={actionLoading}
+                        className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-md shadow-sm text-sm font-medium"
+                     >
+                        Submit to CM
+                     </LoadingButton>
+                 )}
+                 {/* Add other role-based actions as needed */}
+             </div>
+          </div>
 
-      {/* PDF Preview Modal */}
-      {showPdfPreview && previewPdfUrl && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.6)',
-            zIndex: 1000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 20
-          }}
-          onClick={() => {
-            setShowPdfPreview(false)
-            if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl)
-            setPreviewPdfUrl(null)
-          }}
-        >
-          <div
-            style={{
-              background: '#fff',
-              borderRadius: 12,
-              width: '90%',
-              maxWidth: 900,
-              height: '85vh',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '12px 16px',
-                borderBottom: '1px solid #e5e7eb',
-                background: '#f9fafb'
-              }}
-            >
-              <h3 style={{ margin: 0, fontSize: 16 }}>Contract Draft Preview</h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowPdfPreview(false)
-                  if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl)
-                  setPreviewPdfUrl(null)
-                }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: 20,
-                  cursor: 'pointer',
-                  color: '#6b7280'
-                }}
-              >
-                ✕
-              </button>
-            </div>
-            <iframe
-              src={previewPdfUrl}
-              title="Contract PDF Preview"
-              style={{
-                flex: 1,
-                border: 'none',
-                width: '100%'
-              }}
-            />
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: 8,
-                padding: '12px 16px',
-                borderTop: '1px solid #e5e7eb',
-                background: '#f9fafb'
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setShowPdfPreview(false)
-                  if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl)
-                  setPreviewPdfUrl(null)
-                }}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: '1px solid #d1d5db',
-                  background: '#fff',
-                  cursor: 'pointer'
-                }}
-              >
-                Close
-              </button>
-              {canSubmitToCm && (
+          {/* Quick Links Card */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex flex-wrap gap-6 text-sm">
+             <div>
+                <span className="block text-xs text-gray-500 uppercase tracking-wider font-semibold">Deal Reference</span>
+                {dealId ? <Link to={`/deals/${dealId}`} className="text-primary hover:underline font-medium">#{dealId}</Link> : '-'}
+             </div>
+             <div>
+                <span className="block text-xs text-gray-500 uppercase tracking-wider font-semibold">Reservation Form</span>
+                {reservationFormId ? <Link to={`/reservation-forms/${reservationFormId}`} className="text-primary hover:underline font-medium">#{reservationFormId}</Link> : '-'}
+             </div>
+             <div>
+                <span className="block text-xs text-gray-500 uppercase tracking-wider font-semibold">Unit</span>
+                <span className="font-medium text-gray-900">{unitCode}</span>
+             </div>
+             <div>
+                <span className="block text-xs text-gray-500 uppercase tracking-wider font-semibold">Buyer</span>
+                <span className="font-medium text-gray-900">{buyerName}</span>
+             </div>
+          </div>
+
+          {/* Summaries Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             {/* Buyer Summary */}
+             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4 border-b pb-2">Buyer Summary</h3>
+                <dl className="space-y-3 text-sm">
+                   <div className="flex justify-between">
+                      <dt className="text-gray-500">Name</dt>
+                      <dd className="font-medium text-gray-900">{clientInfo?.buyer_name || buyerName || '-'}</dd>
+                   </div>
+                   <div className="flex justify-between">
+                      <dt className="text-gray-500">ID / Passport</dt>
+                      <dd className="font-medium text-gray-900">{clientInfo?.id_or_passport || '-'}</dd>
+                   </div>
+                   <div className="flex justify-between">
+                      <dt className="text-gray-500">Phone</dt>
+                      <dd className="font-medium text-gray-900">{clientInfo?.phone_primary || '-'}</dd>
+                   </div>
+                   <div className="flex justify-between">
+                      <dt className="text-gray-500">Address</dt>
+                      <dd className="font-medium text-gray-900 text-right max-w-[200px] truncate" title={clientInfo?.address}>{clientInfo?.address || '-'}</dd>
+                   </div>
+                </dl>
+             </div>
+
+             {/* Unit Summary */}
+             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4 border-b pb-2">Unit Summary</h3>
+                <dl className="space-y-3 text-sm">
+                   <div className="flex justify-between">
+                      <dt className="text-gray-500">Unit Type</dt>
+                      <dd className="font-medium text-gray-900">{unitInfo?.unit_type || '-'}</dd>
+                   </div>
+                   <div className="flex justify-between">
+                      <dt className="text-gray-500">Area</dt>
+                      <dd className="font-medium text-gray-900">{unitInfo?.unit_area || unitInfo?.area || '-'} m²</dd>
+                   </div>
+                   <div className="flex justify-between">
+                      <dt className="text-gray-500">Location</dt>
+                      <dd className="font-medium text-gray-900 text-right">{unitInfo?.building_number || '-'} / {unitInfo?.block_sector || '-'} / {unitInfo?.zone || '-'}</dd>
+                   </div>
+                   <div className="flex justify-between">
+                      <dt className="text-gray-500">Handover</dt>
+                      <dd className="font-medium text-gray-900">{handoverYear ? `Year ${handoverYear}` : '-'}</dd>
+                   </div>
+                </dl>
+             </div>
+          </div>
+
+          {/* Contract Settings Panel */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+             <div className="flex items-center justify-between mb-4 border-b pb-2">
+                <h3 className="text-lg font-medium text-gray-900">Contract Settings (إعدادات العقد)</h3>
+                {deal?.contract_settings_locked && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                       <span className="material-symbols-outlined text-sm mr-1">lock</span> Locked
+                    </span>
+                )}
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                 <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Contract Date (تاريخ العقد)</label>
+                    <input 
+                      type="date"
+                      value={contractDate}
+                      onChange={e => setContractDate(e.target.value)}
+                      disabled={deal?.contract_settings_locked}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                 </div>
+             </div>
+
+             <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Power of Attorney (بيان التوكيل)</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                   {[
+                      { l: 'رقم التوكيل', v: poaNumber, s: setPoaNumber, p: '12345' },
+                      { l: 'حرف التوكيل', v: poaLetter, s: setPoaLetter, p: 'ك' },
+                      { l: 'سنة التوكيل', v: poaYear, s: setPoaYear, p: '2025' },
+                      { l: 'مكتب توثيق', v: poaOffice, s: setPoaOffice, p: 'الدقي' },
+                   ].map((f, i) => (
+                      <div key={i}>
+                         <label className="block text-xs text-gray-500 mb-1 text-right">{f.l}</label>
+                         <input 
+                            type="text"
+                            value={f.v}
+                            onChange={e => f.s(e.target.value)}
+                            placeholder={f.p}
+                            disabled={deal?.contract_settings_locked}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm text-center disabled:bg-gray-100" 
+                            dir="rtl"
+                         />
+                      </div>
+                   ))}
+                </div>
+                {(poaNumber || poaLetter || poaYear || poaOffice) && (
+                    <div className="mt-3 p-3 bg-yellow-50 rounded-md border border-yellow-200 text-right text-sm text-yellow-800">
+                       <strong>معاينة: </strong> والوكالة رقم {poaNumber} حرف {poaLetter} لسنة {poaYear} مكتب توثيق {poaOffice}
+                    </div>
+                )}
+             </div>
+
+             <div className="flex items-center gap-3">
+                {!deal?.contract_settings_locked && (
+                    <>
+                       <LoadingButton
+                          onClick={async () => {
+                             try {
+                                const res = await fetch(`${API_URL}/api/deals/${dealId}/contract-settings`, {
+                                   method: 'PUT',
+                                   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+                                   body: JSON.stringify({ contractDate, poaNumber, poaLetter, poaYear, poaOffice })
+                                })
+                                if (res.ok) { notifySuccess('Settings saved'); load(); } 
+                                else notifyError('Failed to save settings')
+                             } catch (e) { notifyError(e, 'Error saving settings') }
+                          }}
+                          className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-md shadow-sm text-sm font-medium"
+                       >
+                          Save Settings
+                       </LoadingButton>
+                       <LoadingButton
+                          onClick={async () => {
+                             if (!confirm('Lock settings? Cannot be changed afterwards.')) return
+                             try {
+                                const res = await fetch(`${API_URL}/api/deals/${dealId}/lock-contract-settings`, {
+                                   method: 'POST',
+                                   headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+                                })
+                                if (res.ok) { notifySuccess('Settings locked'); load(); }
+                                else notifyError('Failed to lock settings')
+                             } catch (e) { notifyError(e, 'Error locking') }
+                          }}
+                          className="bg-red-600 border border-transparent text-white hover:bg-red-700 px-4 py-2 rounded-md shadow-sm text-sm font-medium"
+                       >
+                          Lock Settings
+                       </LoadingButton>
+                    </>
+                )}
+                {deal?.contract_settings_locked && (
+                   <div className="flex items-center gap-2 text-sm">
+                      {pendingUnlockRequest ? (
+                         <span className="text-yellow-600 font-medium">⏳ Unlock Requested</span>
+                      ) : (
+                         <span className="text-gray-500 italic">Settings are locked. Contact manager to unlock.</span>
+                      )}
+                   </div>
+                )}
+             </div>
+          </div>
+
+          {/* Data Preview Toggle */}
+             <div>
                 <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      setActionLoading(true)
-                      const resp = await fetchWithAuth(
-                        `${API_URL}/api/contracts/${contract.id}/submit`,
-                        {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' }
-                        }
-                      )
-                      const data = await resp.json().catch(() => ({}))
-                      if (!resp.ok) throw new Error(data?.error?.message || 'Failed to submit')
-                      notifySuccess('Contract submitted to Contract Manager.')
-                      setShowPdfPreview(false)
-                      if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl)
-                      setPreviewPdfUrl(null)
-                      await load()
-                    } catch (e) {
-                      notifyError(e, 'Failed to submit contract')
-                    } finally {
-                      setActionLoading(false)
-                    }
-                  }}
-                  disabled={actionLoading || !deal?.contract_settings_locked}
-                  title={!deal?.contract_settings_locked ? 'Lock Contract Settings first' : ''}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: 8,
-                    border: '1px solid #d1d5db',
-                    background: (!deal?.contract_settings_locked) ? '#f3f4f6' : '#fff',
-                    color: (!deal?.contract_settings_locked) ? '#9ca3af' : 'inherit',
-                    cursor: (!deal?.contract_settings_locked) ? 'not-allowed' : 'pointer'
-                  }}
+                   onClick={() => setShowDataPreview(!showDataPreview)}
+                   className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-hover focus:outline-none"
                 >
-                  {actionLoading ? 'Submitting…' : 'Submit to CM'}
+                   <span>{showDataPreview ? 'Hide Contract Data' : 'View Contract Data used in Verification'}</span>
+                   <span className="material-symbols-outlined text-lg">{showDataPreview ? 'expand_less' : 'expand_more'}</span>
                 </button>
-              )}
-            </div>
-          </div>
+                {showDataPreview && (
+                   <div className="mt-3 bg-gray-50 rounded-lg border border-gray-200 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {contractDataFields.map((f, i) => (
+                         <div key={i} className="bg-white p-2 rounded border border-gray-100 flex justify-between text-xs">
+                            <span className="text-gray-500 font-medium">{f.label}</span>
+                            <span className="text-gray-900">{f.value}</span>
+                         </div>
+                      ))}
+                   </div>
+                )}
+             </div>
+
         </div>
-      )}
-
-
-      
-      {/* Contract Settings Panel */}
-      <div style={{ background: '#fff', borderRadius: 8, padding: 16, marginBottom: 20, border: '1px solid #e5e7eb' }}>
-        <h3 style={{ margin: '0 0 16px 0', fontSize: 16, fontWeight: 600 }}>Contract Settings (عدادات العقد)</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 6, fontWeight: 500 }}>Contract Date (تاريخ العقد)</label>
-            <input 
-              type="date" 
-              value={contractDate} 
-              disabled={deal?.contract_settings_locked}
-              onChange={e => setContractDate(e.target.value)}
-              style={{ 
-                width: '100%', padding: '8px 12px', borderRadius: 6, 
-                border: '1px solid #d1d5db',
-                backgroundColor: deal?.contract_settings_locked ? '#f3f4f6' : '#fff'
-              }}
-            />
-            <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>Day of week will be auto-calculated.</p>
-          </div>
-        </div>
-        
-        {/* POA Multi-Field Inputs */}
-        <div style={{ marginTop: 16 }}>
-          <label style={{ display: 'block', fontSize: 13, marginBottom: 8, fontWeight: 500 }}>Power of Attorney (بيان التوكيل)</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-            <div>
-              <label style={{ display: 'block', fontSize: 11, color: '#6b7280', marginBottom: 4 }}>رقم التوكيل</label>
-              <input 
-                type="text" 
-                value={poaNumber} 
-                disabled={deal?.contract_settings_locked}
-                onChange={e => setPoaNumber(e.target.value)}
-                placeholder="12345"
-                style={{ 
-                  width: '100%', padding: '8px 12px', borderRadius: 6, 
-                  border: '1px solid #d1d5db', direction: 'rtl', textAlign: 'center',
-                  backgroundColor: deal?.contract_settings_locked ? '#f3f4f6' : '#fff'
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 11, color: '#6b7280', marginBottom: 4 }}>حرف التوكيل</label>
-              <input 
-                type="text" 
-                value={poaLetter} 
-                disabled={deal?.contract_settings_locked}
-                onChange={e => setPoaLetter(e.target.value)}
-                placeholder="ك"
-                style={{ 
-                  width: '100%', padding: '8px 12px', borderRadius: 6, 
-                  border: '1px solid #d1d5db', direction: 'rtl', textAlign: 'center',
-                  backgroundColor: deal?.contract_settings_locked ? '#f3f4f6' : '#fff'
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 11, color: '#6b7280', marginBottom: 4 }}>سنة التوكيل</label>
-              <input 
-                type="text" 
-                value={poaYear} 
-                disabled={deal?.contract_settings_locked}
-                onChange={e => setPoaYear(e.target.value)}
-                placeholder="2025"
-                style={{ 
-                  width: '100%', padding: '8px 12px', borderRadius: 6, 
-                  border: '1px solid #d1d5db', direction: 'rtl', textAlign: 'center',
-                  backgroundColor: deal?.contract_settings_locked ? '#f3f4f6' : '#fff'
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 11, color: '#6b7280', marginBottom: 4 }}>مكتب توثيق</label>
-              <input 
-                type="text" 
-                value={poaOffice} 
-                disabled={deal?.contract_settings_locked}
-                onChange={e => setPoaOffice(e.target.value)}
-                placeholder="الدقي"
-                style={{ 
-                  width: '100%', padding: '8px 12px', borderRadius: 6, 
-                  border: '1px solid #d1d5db', direction: 'rtl', textAlign: 'center',
-                  backgroundColor: deal?.contract_settings_locked ? '#f3f4f6' : '#fff'
-                }}
-              />
-            </div>
-          </div>
-          {/* Live Preview */}
-          {(poaNumber || poaLetter || poaYear || poaOffice) && (
-            <div style={{ marginTop: 12, padding: 12, background: '#fef3c7', borderRadius: 6, direction: 'rtl', textAlign: 'right' }}>
-              <span style={{ fontSize: 12, color: '#92400e', fontWeight: 500 }}>معاينة: </span>
-              <span style={{ fontSize: 13 }}>
-                والوكالة رقم {poaNumber} حرف {poaLetter} لسنة {poaYear} مكتب توثيق {poaOffice}
-              </span>
-            </div>
-          )}
-        </div>
-        
-        {/* Save/Lock Controls */}
-        <div style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
-          {!deal?.contract_settings_locked && (
-            <button
-              onClick={async () => {
-                try {
-                  const res = await fetch(`${API_URL}/api/deals/${dealId}/contract-settings`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
-                    body: JSON.stringify({ contractDate, poaNumber, poaLetter, poaYear, poaOffice })
-                  })
-                  if (res.ok) {
-                    alert('Settings saved!')
-                    // reload deal?
-                    load() 
-                  } else {
-                    alert('Failed to save settings')
-                  }
-                } catch (e) {
-                  console.error(e)
-                  alert('Error saving settings')
-                }
-              }}
-              style={{ padding: '6px 12px', fontSize: 13, borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}
-            >
-              Save Settings
-            </button>
-          )}
-
-          {!deal?.contract_settings_locked && (
-            <button
-              onClick={async () => {
-                if (!confirm('Are you sure you want to LOCK these settings? They cannot be changed afterwards.')) return
-                try {
-                   const res = await fetch(`${API_URL}/api/deals/${dealId}/lock-contract-settings`, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
-                  })
-                  if (res.ok) {
-                    alert('Settings locked!')
-                    load()
-                  } else {
-                    alert('Failed to lock settings')
-                  }
-                } catch (e) {
-                  console.error(e)
-                  alert('Error locking settings')
-                }
-              }}
-              style={{ padding: '6px 12px', fontSize: 13, borderRadius: 6, border: '1px solid #ef4444', background: '#ef4444', color: '#fff', cursor: 'pointer' }}
-            >
-              Lock Settings
-            </button>
-          )}
-
-          {deal?.contract_settings_locked && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                🔒 Locked
-              </span>
-              
-              {/* Show pending request status OR request button */}
-              {pendingUnlockRequest ? (
-                <span style={{ fontSize: 12, color: '#f59e0b', fontWeight: 500 }}>
-                  ⏳ Unlock Requested (pending)
-                </span>
-              ) : (
-                <button
-                  onClick={async () => {
-                    const reason = prompt('Enter reason for requesting settings change:')
-                    if (reason === null) return // cancelled
-                    try {
-                      const res = await fetch(`${API_URL}/api/deals/${dealId}/request-settings-unlock`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
-                        body: JSON.stringify({ reason })
-                      })
-                      const data = await res.json()
-                      if (res.ok) {
-                        alert('Unlock request submitted! Waiting for Contract Manager approval.')
-                        setPendingUnlockRequest(data.request)
-                      } else {
-                        alert(data?.error?.message || 'Failed to submit request')
-                      }
-                    } catch (e) {
-                      console.error(e)
-                      alert('Error submitting request')
-                    }
-                  }}
-                  style={{ padding: '4px 10px', fontSize: 12, borderRadius: 5, border: '1px solid #f59e0b', background: '#fef3c7', color: '#92400e', cursor: 'pointer' }}
-                >
-                  Request Change
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {loading && <div>Loading...</div>}
-      
-      {/* ... existing contract info ... */}
-
-      {/* Actions bar – Phase 2: status transitions and PDF generation */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-        {/* Preview Draft PDF button */}
-        {canPreviewDraft && (
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                setPreviewLoading(true)
-                const body = {
-                  documentType: 'contract',
-                  deal_id: Number(dealId),
-                  language: 'ar',
-                  data: {
-                    contractDate,
-                    poaNumber,
-                    poaLetter,
-                    poaYear,
-                    poaOffice
-                  }
-                }
-                const resp = await fetchWithAuth(`${API_URL}/api/generate-document`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(body)
-                })
-                if (!resp.ok) {
-                  let errMsg = 'Failed to generate preview'
-                  try {
-                    const j = await resp.json()
-                    errMsg = j?.error?.message || errMsg
-                  } catch {}
-                  throw new Error(errMsg)
-                }
-                const blob = await resp.blob()
-                const url = URL.createObjectURL(blob)
-                setPreviewPdfUrl(url)
-                setShowPdfPreview(true)
-              } catch (e) {
-                notifyError(e, 'Failed to preview contract PDF')
-              } finally {
-                setPreviewLoading(false)
-              }
-            }}
-            disabled={previewLoading}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #0ea5e9',
-              background: '#0ea5e9',
-              color: '#fff',
-              cursor: 'pointer'
-            }}
-          >
-            {previewLoading ? 'Loading Preview…' : 'Preview Draft PDF'}
-          </button>
-        )}
-        {canSubmitToCm && (
-          <button
-            type="button"
-            onClick={async () => {
-              if (!deal?.contract_settings_locked) {
-                 alert('Please Lock Contract Settings before submitting.')
-                 return
-              }
-              try {
-                setActionLoading(true)
-                const resp = await fetchWithAuth(
-                  `${API_URL}/api/contracts/${contract.id}/submit`,
-                  {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' }
-                  }
-                )
-                const data = await resp.json().catch(() => ({}))
-                if (!resp.ok) throw new Error(data?.error?.message || 'Failed to submit to CM')
-                notifySuccess('Contract submitted to Contract Manager (pending CM).')
-                await load()
-              } catch (e) {
-                notifyError(e, 'Failed to submit contract to CM')
-              } finally {
-                setActionLoading(false)
-              }
-            }}
-            disabled={actionLoading || !deal?.contract_settings_locked}
-            title={!deal?.contract_settings_locked ? 'Lock Contract Settings first' : ''}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #1f6feb',
-              background: (!deal?.contract_settings_locked) ? '#94a3b8' : '#1f6feb',
-              color: '#fff',
-              cursor: (!deal?.contract_settings_locked) ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {actionLoading ? 'Submitting…' : 'Submit to CM (draft → pending CM)'}
-          </button>
-        )}
-
-        {canApproveAsCm && (
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                setActionLoading(true)
-                const resp = await fetchWithAuth(
-                  `${API_URL}/api/contracts/${contract.id}/approve-cm`,
-                  {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' }
-                  }
-                )
-                const data = await resp.json().catch(() => ({}))
-                if (!resp.ok) throw new Error(data?.error?.message || 'Failed to approve as CM')
-                notifySuccess('Contract approved by Contract Manager (pending TM).')
-                await load()
-              } catch (e) {
-                notifyError(e, 'Failed to approve contract (CM)')
-              } finally {
-                setActionLoading(false)
-              }
-            }}
-            disabled={actionLoading}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #10b981',
-              background: '#10b981',
-              color: '#fff',
-              cursor: 'pointer'
-            }}
-          >
-            {actionLoading ? 'Approving…' : 'Approve (CM → pending TM)'}
-          </button>
-        )}
-
-        {canApproveAsTm && (
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                setActionLoading(true)
-                const resp = await fetchWithAuth(`${API_URL}/api/contracts/${contract.id}/approve-tm`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' }
-                })
-                const data = await resp.json().catch(() => ({}))
-                if (!resp.ok) throw new Error(data?.error?.message || 'Failed to approve as TM')
-                notifySuccess('Contract approved by Top Management.')
-                await load()
-              } catch (e) {
-                notifyError(e, 'Failed to approve contract (TM)')
-              } finally {
-                setActionLoading(false)
-              }
-            }}
-            disabled={actionLoading}
-            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #16a34a', background: '#16a34a', color: '#fff', cursor: 'pointer' }}
-          >
-            {actionLoading ? 'Approving…' : 'Approve (TM → approved)'}
-          </button>
-        )}
-
-        {canRejectAsManager && (
-          <button
-            type="button"
-            onClick={async () => {
-              const reason = window.prompt('Rejection reason (optional, stored server-side when supported):', '') || ''
-              try {
-                setActionLoading(true)
-                const resp = await fetchWithAuth(`${API_URL}/api/contracts/${contract.id}/reject`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ reason })
-                })
-                const data = await resp.json().catch(() => ({}))
-                if (!resp.ok) throw new Error(data?.error?.message || 'Failed to reject contract')
-                notifySuccess('Contract rejected.')
-                await load()
-              } catch (e) {
-                notifyError(e, 'Failed to reject contract')
-              } finally {
-                setActionLoading(false)
-              }
-            }}
-            disabled={actionLoading}
-            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #dc2626', background: '#fff', color: '#dc2626', cursor: 'pointer' }}
-          >
-            {actionLoading ? 'Rejecting…' : 'Reject'}
-          </button>
-        )}
-
-        {canExecute && (
-          <button
-            type="button"
-            onClick={async () => {
-              if (!window.confirm('Mark this contract as executed?')) return
-              try {
-                setActionLoading(true)
-                const resp = await fetchWithAuth(`${API_URL}/api/contracts/${contract.id}/execute`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' }
-                })
-                const data = await resp.json().catch(() => ({}))
-                if (!resp.ok) throw new Error(data?.error?.message || 'Failed to execute contract')
-                notifySuccess('Contract marked as executed.')
-                await load()
-              } catch (e) {
-                notifyError(e, 'Failed to execute contract')
-              } finally {
-                setActionLoading(false)
-              }
-            }}
-            disabled={actionLoading}
-            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #a16207', background: '#a16207', color: '#fff', cursor: 'pointer' }}
-          >
-            {actionLoading ? 'Executing…' : 'Mark as Executed'}
-          </button>
-        )}
-
-        {canGeneratePdf && (
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                setPdfLoading(true)
-                const body = {
-                  documentType: 'contract',
-                  deal_id: Number(dealId),
-                  data: {}
-                }
-                const resp = await fetchWithAuth(`${API_URL}/api/generate-document`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(body)
-                })
-                if (!resp.ok) {
-                  let errMsg = 'Failed to generate contract PDF'
-                  try {
-                    const j = await resp.json()
-                    errMsg = j?.error?.message || errMsg
-                  } catch {}
-                  throw new Error(errMsg)
-                }
-                const blob = await resp.blob()
-                const ts = new Date().toISOString().replace(/[:.]/g, '-')
-                const filename = `contract_${contract.id || dealId || ts}.pdf`
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = filename
-                document.body.appendChild(a)
-                a.click()
-                document.body.removeChild(a)
-                URL.revokeObjectURL(url)
-                notifySuccess('Contract PDF generated successfully.')
-              } catch (e) {
-                notifyError(e, 'Failed to generate contract PDF')
-              } finally {
-                setPdfLoading(false)
-              }
-            }}
-            disabled={pdfLoading}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #4b5563',
-              background: '#fff',
-              color: '#111827',
-              cursor: 'pointer'
-            }}
-          >
-            {pdfLoading ? 'Generating PDF…' : 'Generate Contract PDF'}
-          </button>
-        )}
-
-        {reservationFormId && (
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                setPdfLoading(true)
-                const body = {
-                  deal_id: dealId ? Number(dealId) : undefined,
-                  reservation_form_id: Number(reservationFormId),
-                  // Prefer Arabic by default to match the RF template, but allow
-                  // the server to override with the stored RF language when present.
-                  language: 'ar'
-                }
-                const { blob, filename } = await generateReservationFormPdf(body, API_URL)
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = filename
-                document.body.appendChild(a)
-                a.click()
-                document.body.removeChild(a)
-                URL.revokeObjectURL(url)
-                notifySuccess('Reservation Form PDF generated successfully.')
-              } catch (e) {
-                notifyError(e, 'Failed to generate Reservation Form PDF')
-              } finally {
-                setPdfLoading(false)
-              }
-            }}
-            disabled={pdfLoading}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #4b5563',
-              background: '#fff',
-              color: '#111827',
-              cursor: 'pointer'
-            }}
-          >
-            {pdfLoading ? 'Generating…' : 'View Reservation Form PDF'}
-          </button>
-        )}
-      </div>
-
-      {/* Financial summary (down payment and remaining price) */}
-      <h3>Financial Summary</h3>
-      {dpSummaryError && (
-        <p style={{ fontSize: 13, color: '#e11d48', marginTop: 0 }}>{dpSummaryError}</p>
-      )}
-      {dpSummary ? (
-        <div
-          style={{
-            margin: '6px 0 16px 0',
-            padding: '10px 12px',
-            borderRadius: 10,
-            border: '1px solid #e5e7eb',
-            background: '#fefce8',
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 16
-          }}
-        >
-          <div>
-            <strong>Total Price (excl. maintenance):</strong>{' '}
-            {Number(dpSummary.total_excl || 0).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
-          </div>
-          <div>
-            <strong>Maintenance Deposit:</strong>{' '}
-            {Number(dpSummary.maintenance_deposit || 0).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
-          </div>
-          <div>
-            <strong>Total Down Payment:</strong>{' '}
-            {Number(dpSummary.dp_total || 0).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
-          </div>
-          <div>
-            <strong>Preliminary Payment:</strong>{' '}
-            {Number(dpSummary.preliminary_amount || 0).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
-          </div>
-          <div>
-            <strong>Paid from Down Payment:</strong>{' '}
-            {Number(dpSummary.paid_amount || 0).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
-          </div>
-          <div>
-            <strong>Remaining Down Payment:</strong>{' '}
-            {Number(dpSummary.dp_remaining || 0).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
-          </div>
-          <div>
-            <strong>Remaining Price after DP:</strong>{' '}
-            {Number(dpSummary.remaining_after_dp || 0).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
-          </div>
-        </div>
-      ) : (
-        !dpSummaryError && (
-          <p style={{ fontSize: 13, color: '#6b7280', marginTop: 0 }}>
-            No financial summary available for this contract&apos;s deal yet.
-          </p>
-        )
-      )}
-
-      {/* History table */}
-      <h3>Approval History</h3>
-      <p style={{ fontSize: 13, color: '#6b7280', marginTop: 0 }}>
-        History entries are recorded whenever a contract is created, submitted, approved, rejected, or executed.
-      </p>
-      <div style={{ overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: 10, marginBottom: 16 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={th}>#</th>
-              <th style={th}>When</th>
-              <th style={th}>Action</th>
-              <th style={th}>By</th>
-            </tr>
-          </thead>
-          <tbody>
-            {historyRows.length === 0 && (
-              <tr>
-                <td style={td} colSpan={4}>No history entries yet.</td>
-              </tr>
-            )}
-            {historyRows.map((h, idx) => {
-              const raw = h.change_type || ''
-              let label = raw
-              if (raw === 'create') label = 'Created (Contract Admin)'
-              else if (raw === 'submit') label = 'Submitted to CM'
-              else if (raw === 'approve_cm') label = 'Approved by Contract Manager'
-              else if (raw === 'approve_tm') label = 'Approved by Top Management'
-              else if (raw === 'approve') label = 'Approved' // legacy entries
-              else if (raw === 'reject') label = 'Rejected'
-              else if (raw === 'execute') label = 'Executed (printed/handed over)'
-              return (
-                <tr key={h.id}>
-                  <td style={td}>{idx + 1}</td>
-                  <td style={td}>
-                    {h.created_at ? new Date(h.created_at).toLocaleString() : '-'}
-                  </td>
-                  <td style={td}>{label || '-'}</td>
-                  <td style={td}>{h.changed_by_name || h.changed_by || '-'}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Raw JSON snapshot for debugging */}
-      <h3>Raw Snapshot</h3>
-      <p style={{ fontSize: 13, color: '#6b7280', marginTop: 0 }}>
-        Full contract row as returned by /api/contracts/:id. This is kept for debugging and will be
-        gradually replaced by structured sections.
-      </p>
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, background: '#111827', color: '#e5e7eb', overflow: 'auto' }}>
-        <pre style={{ margin: 0, fontSize: 12 }}>
-{JSON.stringify(contract, null, 2)}
-        </pre>
-      </div>
+      </main>
     </div>
   )
 }

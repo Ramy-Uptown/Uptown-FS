@@ -91,8 +91,8 @@ export default function RegisterView({
                     Work Email
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 material-icons text-slate-400 text-sm">
-                      email
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-sm">
+                      mail
                     </span>
                     <input
                       id="email"
@@ -134,7 +134,7 @@ export default function RegisterView({
                     Password
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 material-icons text-slate-400 text-sm">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-sm">
                       lock
                     </span>
                     <input
@@ -169,11 +169,11 @@ export default function RegisterView({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 px-4 bg-primary hover:bg-[#b8954d] disabled:opacity-70 disabled:cursor-not-allowed active:transform active:scale-[0.98] text-white font-semibold rounded-lg shadow-lg shadow-primary/20 transition-all duration-200 flex items-center justify-center space-x-2"
+                  className="w-full py-3 px-4 bg-primary hover:bg-primary-hover disabled:opacity-70 disabled:cursor-not-allowed active:transform active:scale-[0.98] text-white font-semibold rounded-lg shadow-lg shadow-primary/20 transition-all duration-200 flex items-center justify-center space-x-2"
                 >
                   <span>{loading ? 'Registering…' : 'Complete Registration'}</span>
                   {!loading && (
-                    <span className="material-icons text-sm">
+                    <span className="material-symbols-outlined text-sm">
                       arrow_forward
                     </span>
                   )}
