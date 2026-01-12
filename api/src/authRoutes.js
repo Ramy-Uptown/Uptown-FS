@@ -120,18 +120,33 @@ async function issueRefreshToken(userId) {
 // Registration
 router.post('/register', validate(authRegisterSchema), async (req, res) => {
   try {
-    const { email, password, role } = req.body || {}
+    const { email, password, role, firstName, lastName, department } = req.body || {}
     const normalizedEmail = email.trim().toLowerCase()
 
     const existing = await pool.query('SELECT id FROM users WHERE email=$1', [normalizedEmail])
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: { message: 'Email already registered' } })
     }
+
     const hash = await bcrypt.hash(password, 10)
     const userRole = role && typeof role === 'string' ? role : 'user'
+
+    // Optional profile metadata captured during self-registration
+    const profileMeta = {}
+    const fn = (firstName || '').trim()
+    const ln = (lastName || '').trim()
+    const dept = (department || '').trim()
+
+    if (fn) profileMeta.first_name = fn
+    if (ln) profileMeta.last_name = ln
+    if (fn || ln) profileMeta.name = [fn, ln].filter(Boolean).join(' ')
+    if (dept) profileMeta.department = dept
+
+    const metaJson = Object.keys(profileMeta).length ? profileMeta : {}
+
     const insert = await pool.query(
-      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role',
-      [normalizedEmail, hash, userRole]
+      'INSERT INTO users (email, password_hash, role, meta) VALUES ($1, $2, $3, $4) RETURNING id, email, role, meta',
+      [normalizedEmail, hash, userRole, JSON.stringify(metaJson)]
     )
     const user = insert.rows[0]
     const accessToken = signAccessToken(user)

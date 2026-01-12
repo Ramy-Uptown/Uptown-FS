@@ -33,7 +33,10 @@ export function validate(schema, part = 'body') {
 export const authRegisterSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
-  role: Joi.string().optional()
+  role: Joi.string().optional(),
+  firstName: Joi.string().allow('').optional(),
+  lastName: Joi.string().allow('').optional(),
+  department: Joi.string().allow('').optional()
 })
 
 export const authLoginSchema = Joi.object({
