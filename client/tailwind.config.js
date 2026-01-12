@@ -7,11 +7,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: "#a68341",
-        "background-light": "#f8fafc",
-        "background-dark": "#1a1c1e",
+        primary: "#B08D47",
+        "primary-hover": "#94763b",
+        "background-light": "#F3F4F6",
+        "background-dark": "#1F2124",
         "card-dark": "#2d2f31",
-        "sidebar-dark": "#262b31",
+        "sidebar-dark": "#16181b",
       },
       fontFamily: {
         display: ["Playfair Display", "serif"],

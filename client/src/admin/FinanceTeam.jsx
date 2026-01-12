@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import BrandHeader from '../lib/BrandHeader.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { ctrl, btn, btnPrimary, pageContainer, pageTitle, tableWrap, table, th, td, metaText, errorText } from '../lib/ui.js'
+import AdminSidebar from '../components/AdminSidebar.jsx'
 import LoadingButton from '../components/LoadingButton.jsx'
 import SkeletonRow from '../components/SkeletonRow.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
@@ -26,6 +25,8 @@ export default function FinanceTeam() {
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const canAssign = me?.role === 'superadmin'
   const isFinancialManager = me?.role === 'financial_manager'
+
+  const navigate = useNavigate()
 
   useEffect(() => {
     load()
@@ -119,122 +120,180 @@ export default function FinanceTeam() {
   })
 
   const handleLogout = async () => {
-    try {
-      const rt = localStorage.getItem('refresh_token')
-      if (rt) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: rt })
-        }).catch(() => {})
-      }
-    } finally {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('auth_user')
-      window.location.href = '/login'
-    }
+    window.location.href = '/login'
   }
 
-  const navigate = useNavigate()
-
   return (
-    <div>
-      <BrandHeader onLogout={handleLogout} />
-      <div style={pageContainer}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={pageTitle}>Finance Team</h2>
-          <div>
-            {isFinancialManager ? (
-              <LoadingButton type="button" onClick={() => navigate('/admin/unit-models')}>Unit Models</LoadingButton>
-            ) : null}
-          </div>
+    <div className="flex h-screen w-full bg-background-light font-sans overflow-hidden">
+      <AdminSidebar />
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-background-light relative">
+        <div className="lg:hidden bg-[#1F2124] text-white p-4 flex justify-between items-center shadow-md">
+           <span className="font-light tracking-widest uppercase">Uptown</span>
+           <button className="text-white" onClick={handleLogout}><span className="material-symbols-outlined">logout</span></button>
         </div>
 
-        {canAssign ? (
-          <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input placeholder="Search member by name/email/id…" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} style={ctrl} />
-                <select value={memberId} onChange={e => setMemberId(e.target.value)} style={ctrl}>
-                  <option value="">Select financial admin…</option>
-                  {filteredMembers.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input placeholder="Search manager by name/email/id…" value={managerSearch} onChange={e => setManagerSearch(e.target.value)} style={ctrl} />
-                <select value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl}>
-                  <option value="">Select financial manager…</option>
-                  {filteredManagers.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <LoadingButton type="button" onClick={assign} loading={assigning} variant="primary" disabled={!memberId || !managerId}>Assign</LoadingButton>
-              </div>
-            </div>
-            <div style={{ marginTop: 6 }}>
-              <span style={metaText}>Only active users are listed. Use Admin → Users to activate/deactivate accounts.</span>
-            </div>
-          </div>
-        ) : (
-          <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
-            <span style={metaText}>Read-only view. Only Superadmin can assign members to financial managers.</span>
-          </div>
-        )}
-
-        {error ? <p style={errorText}>{error}</p> : null}
-
-        <div style={tableWrap}>
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>Manager User ID</th>
-                <th style={th}>Member User ID</th>
-                <th style={th}>Active</th>
-                <th style={th}>{canAssign ? 'Actions' : 'Actions (read-only)'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <>
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <SkeletonRow key={i} widths={['lg','lg','sm','lg']} tdStyle={td} />
-                  ))}
-                </>
-              )}
-              {!loading && (memberships || []).map((m, idx) => {
-                const key = `${m.manager_user_id}:${m.member_user_id}`
-                return (
-                <tr key={idx}>
-                  <td style={td}>{m.manager_user_id} {m.manager_email ? <span style={metaText}>({m.manager_email})</span> : null}</td>
-                  <td style={td}>{m.member_user_id} {m.member_email ? <span style={metaText}>({m.member_email})</span> : null}</td>
-                  <td style={td}>{m.active ? 'Yes' : 'No'}</td>
-                  <td style={td}>
-                    {m.active && canAssign ? (
-                      <LoadingButton onClick={() => clearMembership(m.manager_user_id, m.member_user_id)} loading={rowLoading[key]}>Clear</LoadingButton>
-                    ) : (
-                      !canAssign ? <span style={metaText}>No actions</span> : null
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <div className="max-w-7xl mx-auto">
+                <header className="mb-8 flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">Finance Team</h1>
+                        <p className="mt-1 text-sm text-gray-500">Associate Financial Admins with Financial Managers.</p>
+                    </div>
+                    {isFinancialManager && (
+                      <LoadingButton 
+                        onClick={() => navigate('/admin/unit-models')}
+                        className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 shadow-sm"
+                      >
+                        Unit Models
+                      </LoadingButton>
                     )}
-                  </td>
-                </tr>
-              )})}
-              {memberships.length === 0 && !loading && (
-                <tr>
-                  <td style={td} colSpan={4}>No memberships.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                </header>
+
+                {canAssign ? (
+                  <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8">
+                    <h3 className="font-semibold text-gray-800 mb-4">Quick Assign</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] gap-4 items-end">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-gray-500 uppercase">Financial Admin (Member)</label>
+                        <div className="flex gap-2">
+                            <input 
+                                placeholder="Search..." 
+                                value={memberSearch} 
+                                onChange={e => setMemberSearch(e.target.value)} 
+                                className="w-full px-3 py-2 border rounded-lg text-sm"
+                            />
+                            <select 
+                                value={memberId} 
+                                onChange={e => setMemberId(e.target.value)} 
+                                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 max-w-[200px]"
+                            >
+                                <option value="">Select...</option>
+                                {filteredMembers.map(u => (
+                                <option key={u.id} value={u.id}>
+                                    {u.email} (id {u.id})
+                                </option>
+                                ))}
+                            </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-gray-500 uppercase">Financial Manager</label>
+                        <div className="flex gap-2">
+                            <input 
+                                placeholder="Search..." 
+                                value={managerSearch} 
+                                onChange={e => setManagerSearch(e.target.value)} 
+                                className="w-full px-3 py-2 border rounded-lg text-sm"
+                            />
+                            <select 
+                                value={managerId} 
+                                onChange={e => setManagerId(e.target.value)} 
+                                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 max-w-[200px]"
+                            >
+                                <option value="">Select...</option>
+                                {filteredManagers.map(u => (
+                                <option key={u.id} value={u.id}>
+                                    {u.email} (id {u.id})
+                                </option>
+                                ))}
+                            </select>
+                        </div>
+                      </div>
+
+                      <div className="flex">
+                        <LoadingButton 
+                          type="button" 
+                          onClick={assign} 
+                          loading={assigning} 
+                          variant="primary" 
+                          disabled={!memberId || !managerId}
+                          className="w-full md:w-auto h-[38px]"
+                        >
+                          Assign
+                        </LoadingButton>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-gray-400">
+                      Note: Only active users are listed. Use Admin → Users to activate/deactivate accounts.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-8 flex items-center gap-3">
+                    <span className="material-symbols-outlined text-blue-500">info</span>
+                    <span className="text-sm text-blue-700">Read-only view. Only Superadmin can assign members to financial managers.</span>
+                  </div>
+                )}
+
+                {error && <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl mb-6 text-sm">{error}</div>}
+
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 border-b border-gray-100 text-xs text-gray-500 uppercase tracking-wider font-semibold">
+                        <tr>
+                            <th className="px-6 py-4">Manager User ID</th>
+                            <th className="px-6 py-4">Member User ID</th>
+                            <th className="px-6 py-4">Active</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                        {loading && (
+                            Array.from({ length: 5 }).map((_, i) => (
+                                <SkeletonRow key={i} widths={['lg','lg','sm','sm']} />
+                            ))
+                        )}
+                        {!loading && (memberships || []).map((m, idx) => {
+                            const key = `${m.manager_user_id}:${m.member_user_id}`
+                            return (
+                            <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-6 py-4">
+                                <span className="font-medium text-gray-900">{m.manager_user_id}</span>
+                                {m.manager_email && <span className="text-gray-500 ml-2">({m.manager_email})</span>}
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="font-medium text-gray-900">{m.member_user_id}</span>
+                                {m.member_email && <span className="text-gray-500 ml-2">({m.member_email})</span>}
+                              </td>
+                              <td className="px-6 py-4">
+                                {m.active ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                    Yes
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                    No
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                {m.active && canAssign ? (
+                                  <LoadingButton 
+                                    onClick={() => clearMembership(m.manager_user_id, m.member_user_id)} 
+                                    loading={rowLoading[key]}
+                                    className="text-gray-400 hover:text-red-500 transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">close</span>
+                                  </LoadingButton>
+                                ) : (
+                                  <span className="text-gray-300">-</span>
+                                )}
+                              </td>
+                            </tr>
+                        )})}
+                        {!loading && memberships.length === 0 && (
+                            <tr>
+                                <td colSpan={4} className="text-center p-8 text-gray-500">No memberships found.</td>
+                            </tr>
+                        )}
+                        </tbody>
+                    </table>
+                  </div>
+                </div>
+            </div>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { th, td, ctrl, btn, btnPrimary, tableWrap, table, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js'
-import BrandHeader from '../lib/BrandHeader.jsx'
+import AdminSidebar from '../components/AdminSidebar.jsx'
 import LoadingButton from '../components/LoadingButton.jsx'
 import SkeletonRow from '../components/SkeletonRow.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
@@ -9,10 +8,6 @@ import { notifyError, notifySuccess } from '../lib/notifications.js'
 /**
  * SalesTeam — Manager assignment page
  * This page is ONLY for assigning Sales Managers to Property Consultants.
- * It does NOT create employees or write to sales_people.
- * Data sources:
- *  - Users list (to get consultants and managers)
- *  - Sales team memberships (manager_user_id <-> consultant_user_id)
  */
 export default function SalesTeam() {
   const [consultants, setConsultants] = useState([]) // property_consultant users
@@ -205,167 +200,248 @@ export default function SalesTeam() {
   }
 
   const handleLogout = async () => {
-    try {
-      const rt = localStorage.getItem('refresh_token')
-      if (rt) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: rt })
-        }).catch(() => {})
-      }
-    } finally {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('auth_user')
-      window.location.href = '/login'
-    }
+    window.location.href = '/login'
   }
 
   return (
-    <div>
-      <BrandHeader onLogout={handleLogout} />
-      <div style={pageContainer}>
-        <h2 style={pageTitle}>Sales Team — Manager Assignment</h2>
-
-        {/* Quick assign panel */}
-        <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Quick Assign Sales Manager to Property Consultant</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input placeholder="Search consultant by name/email/id…" value={qaConsultantSearch} onChange={e => setQaConsultantSearch(e.target.value)} style={ctrl} />
-              <select value={qaConsultantId} onChange={e => setQaConsultantId(e.target.value)} style={ctrl}>
-                <option value="">Select property consultant…</option>
-                {qaFilteredConsultants.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input placeholder="Search manager by name/email/id…" value={qaManagerSearch} onChange={e => setQaManagerSearch(e.target.value)} style={ctrl} />
-              <select value={qaManagerId} onChange={e => setQaManagerId(e.target.value)} style={ctrl}>
-                <option value="">Select sales manager…</option>
-                {qaFilteredManagers.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.email}{u.meta?.full_name ? ` — ${u.meta.full_name}` : ''} (id {u.id})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <LoadingButton type="button" onClick={saveQuickAssign} loading={quickAssigning} variant="primary" disabled={!qaConsultantId || !qaManagerId || !canAssign}>
-                Assign
-              </LoadingButton>
-            </div>
-          </div>
-          <div style={{ marginTop: 6 }}>
-            <span style={metaText}>This page assigns managers only. Employees are managed in Admin → Users.</span>
-          </div>
+    <div className="flex h-screen w-full bg-background-light font-sans overflow-hidden">
+      <AdminSidebar />
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-background-light relative">
+        <div className="lg:hidden bg-[#1F2124] text-white p-4 flex justify-between items-center shadow-md">
+           <span className="font-light tracking-widest uppercase">Uptown</span>
+           <button className="text-white" onClick={handleLogout}><span className="material-symbols-outlined">logout</span></button>
         </div>
 
-        {/* Filters */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-          <input placeholder="Search consultants…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={ctrl} />
-          <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }} style={ctrl}>
-            <option value={10}>10</option>
-            <option value={20}>20</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-        </div>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <div className="max-w-7xl mx-auto">
+                <header className="mb-8">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">Sales Team</h1>
+                    <p className="mt-1 text-sm text-gray-500">Assign Sales Managers to Property Consultants.</p>
+                </header>
 
-        {error ? <p style={errorText}>{error}</p> : null}
-
-        {/* Table of consultants with current manager */}
-        <div style={tableWrap}>
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>Consultant ID</th>
-                <th style={th}>Email</th>
-                <th style={th}>Name</th>
-                <th style={th}>Current Manager</th>
-                <th style={th}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <>
-                  {Array.from({ length: pageSize }).map((_, i) => (
-                    <SkeletonRow key={i} widths={['sm','lg','lg','lg','lg']} tdStyle={td} />
-                  ))}
-                </>
-              )}
-              {!loading && pageRows.map(c => {
-                const mgrId = memberships[c.id] || ''
-                const mgr = managers.find(m => m.id === Number(mgrId))
-                const isAssigning = assignFor === c.id
-                const keyAssign = `assign:${c.id}`
-                const keyClear = `clear:${c.id}`
-                return (
-                  <tr key={c.id}>
-                    <td style={td}>{c.id}</td>
-                    <td style={td}>{c.email}</td>
-                    <td style={td}>{c.meta?.full_name || ''}</td>
-                    <td style={{ ...td, minWidth: 220 }}>
-                      {isAssigning && canAssign ? (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 6, alignItems: 'center' }}>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <input
-                              placeholder="Search manager by name/email/id…"
-                              value={managerSearch}
-                              onChange={e => setManagerSearch(e.target.value)}
-                              style={{ ...ctrl, minWidth: 180 }}
+                {/* Quick assign panel */}
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8">
+                  <h3 className="font-semibold text-gray-800 mb-4">Quick Assign</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] gap-4 items-end">
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-gray-500 uppercase">Property Consultant</label>
+                        <div className="flex gap-2">
+                            <input 
+                                placeholder="Search..." 
+                                value={qaConsultantSearch} 
+                                onChange={e => setQaConsultantSearch(e.target.value)} 
+                                className="w-full px-3 py-2 border rounded-lg text-sm"
                             />
-                            <select value={assignManagerId} onChange={e => setAssignManagerId(e.target.value)} style={ctrl}>
-                              <option value="">Select manager…</option>
-                              {filteredManagers.map(m => (
-                                <option key={m.id} value={m.id}>
-                                  {m.email}{m.meta?.full_name ? ` — ${m.meta.full_name}` : ''} (id {m.id})
+                            <select 
+                                value={qaConsultantId} 
+                                onChange={e => setQaConsultantId(e.target.value)} 
+                                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 max-w-[200px]"
+                            >
+                                <option value="">Select...</option>
+                                {qaFilteredConsultants.map(u => (
+                                <option key={u.id} value={u.id}>
+                                    {u.email} (id {u.id})
                                 </option>
-                              ))}
+                                ))}
                             </select>
-                          </div>
-                          <LoadingButton onClick={() => saveAssign(c.id)} loading={rowLoading[keyAssign]}>Save</LoadingButton>
-                          <LoadingButton onClick={() => clearAssign(c.id)} loading={rowLoading[keyClear]} disabled={!mgrId}>Clear</LoadingButton>
-                          <LoadingButton onClick={() => setAssignFor(0)}>Cancel</LoadingButton>
                         </div>
-                      ) : (
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                          <span style={metaText}>{mgr ? `${mgr.email}${mgr.meta?.full_name ? ` — ${mgr.meta.full_name}` : ''}` : 'No manager'}</span>
-                          {canAssign ? <LoadingButton onClick={() => openAssign(c.id)}>Change</LoadingButton> : null}
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-gray-500 uppercase">Sales Manager</label>
+                        <div className="flex gap-2">
+                            <input 
+                                placeholder="Search..." 
+                                value={qaManagerSearch} 
+                                onChange={e => setQaManagerSearch(e.target.value)} 
+                                className="w-full px-3 py-2 border rounded-lg text-sm"
+                            />
+                            <select 
+                                value={qaManagerId} 
+                                onChange={e => setQaManagerId(e.target.value)} 
+                                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 max-w-[200px]"
+                            >
+                                <option value="">Select...</option>
+                                {qaFilteredManagers.map(u => (
+                                <option key={u.id} value={u.id}>
+                                    {u.email} (id {u.id})
+                                </option>
+                                ))}
+                            </select>
                         </div>
-                      )}
-                    </td>
-                    <td style={td}>
-                      {canAssign ? <LoadingButton onClick={() => openAssign(c.id)}>Assign</LoadingButton> : <span style={metaText}>No actions</span>}
-                    </td>
-                  </tr>
-                )
-              })}
-              {pageRows.length === 0 && !loading && (
-                <tr>
-                  <td style={td} colSpan={5}>No consultants found.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                    </div>
+                    
+                    <div className="flex">
+                      <LoadingButton 
+                        type="button" 
+                        onClick={saveQuickAssign} 
+                        loading={quickAssigning} 
+                        variant="primary" 
+                        disabled={!qaConsultantId || !qaManagerId || !canAssign}
+                        className="w-full md:w-auto h-[38px]"
+                      >
+                        Assign
+                      </LoadingButton>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-gray-400">
+                    Note: This page manages hierarchical assignments only. Employees are managed in the Users section.
+                  </p>
+                </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-          <span style={metaText}>
-            Page {page} of {totalPages} — {total} consultants
-          </span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <LoadingButton onClick={() => setPage(1)} disabled={page === 1 || loading}>First</LoadingButton>
-            <LoadingButton onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}>Prev</LoadingButton>
-            <LoadingButton onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading}>Next</LoadingButton>
-            <LoadingButton onClick={() => setPage(totalPages)} disabled={page === totalPages || loading}>Last</LoadingButton>
-          </div>
+                {/* Filters */}
+                <div className="flex items-center justify-between gap-4 mb-6 bg-white p-2 rounded-lg border border-gray-200 shadow-sm w-fit">
+                  <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-[18px]">search</span>
+                      <input 
+                        placeholder="Search list..." 
+                        value={search} 
+                        onChange={e => { setSearch(e.target.value); setPage(1) }} 
+                        className="pl-9 pr-4 py-1.5 border-none focus:ring-0 text-sm w-64"
+                      />
+                  </div>
+                  <div className="h-6 w-px bg-gray-200"></div>
+                  <select 
+                    value={pageSize} 
+                    onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }} 
+                    className="border-none py-1.5 text-sm focus:ring-0 text-gray-600 cursor-pointer bg-transparent pr-8"
+                  >
+                    <option value={10}>10 per page</option>
+                    <option value={20}>20 per page</option>
+                    <option value={50}>50 per page</option>
+                    <option value={100}>100 per page</option>
+                  </select>
+                </div>
+
+                {error && <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl mb-6 text-sm">{error}</div>}
+
+                {/* Table */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 border-b border-gray-100 text-xs text-gray-500 uppercase tracking-wider font-semibold">
+                        <tr>
+                            <th className="px-6 py-4">ID</th>
+                            <th className="px-6 py-4">Consultant</th>
+                            <th className="px-6 py-4">Current Manager</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                        {loading && (
+                            Array.from({ length: 5 }).map((_, i) => (
+                                <SkeletonRow key={i} widths={['sm','lg','lg','sm']} />
+                            ))
+                        )}
+                        {!loading && pageRows.map(c => {
+                            const mgrId = memberships[c.id] || ''
+                            const mgr = managers.find(m => m.id === Number(mgrId))
+                            const isAssigning = assignFor === c.id
+                            const keyAssign = `assign:${c.id}`
+                            const keyClear = `clear:${c.id}`
+                            return (
+                            <tr key={c.id} className="hover:bg-gray-50/50 transition-colors">
+                                <td className="px-6 py-4 text-gray-500 w-20">#{c.id}</td>
+                                <td className="px-6 py-4">
+                                    <div className="font-medium text-gray-900">{c.email}</div>
+                                    {c.meta?.full_name && <div className="text-xs text-gray-500">{c.meta.full_name}</div>}
+                                </td>
+                                <td className="px-6 py-4">
+                                {isAssigning && canAssign ? (
+                                    <div className="flex items-center gap-2">
+                                        <select 
+                                            value={assignManagerId} 
+                                            onChange={e => setAssignManagerId(e.target.value)} 
+                                            className="px-2 py-1 text-sm border rounded bg-white max-w-[200px]"
+                                        >
+                                            <option value="">Select manager...</option>
+                                            {filteredManagers.map(m => (
+                                                <option key={m.id} value={m.id}>
+                                                    {m.email} {m.meta?.full_name ? `(${m.meta.full_name})` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <LoadingButton onClick={() => saveAssign(c.id)} loading={rowLoading[keyAssign]} className="text-xs bg-primary text-white px-2 py-1 rounded">Save</LoadingButton>
+                                        <LoadingButton onClick={() => setAssignFor(0)} className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded">Cancel</LoadingButton>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        {mgr ? (
+                                            <div className="flex items-center gap-2">
+                                                <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-md text-xs font-medium">
+                                                    {mgr.email}
+                                                </span>
+                                                {canAssign && (
+                                                    <button onClick={() => openAssign(c.id)} className="text-gray-400 hover:text-primary transition-colors">
+                                                        <span className="material-symbols-outlined text-[16px]">edit</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-400 italic text-xs">Unassigned</span>
+                                        )}
+                                    </div>
+                                )}
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                {canAssign ? (
+                                    isAssigning ? null : (
+                                       <div className="flex justify-end gap-2">
+                                           {!mgr ? (
+                                                <button onClick={() => openAssign(c.id)} className="text-primary hover:text-primary-hover text-sm font-medium">
+                                                    Assign
+                                                </button>
+                                           ) : (
+                                                <LoadingButton 
+                                                    onClick={() => clearMembership(mgrId, c.id)} 
+                                                    loading={rowLoading[keyClear]}
+                                                    className="text-gray-400 hover:text-red-500 transition-colors"
+                                                >
+                                                    <span className="material-symbols-outlined text-[18px]">close</span>
+                                                </LoadingButton>
+                                           )}
+                                       </div>
+                                    )
+                                ) : <span className="text-gray-300">-</span>}
+                                </td>
+                            </tr>
+                            )
+                        })}
+                        {pageRows.length === 0 && !loading && (
+                            <tr>
+                                <td colSpan={4} className="text-center p-8 text-gray-500">No consultants found.</td>
+                            </tr>
+                        )}
+                        </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Pagination */}
+                <div className="flex items-center justify-between mt-6">
+                    <span className="text-sm text-gray-500">
+                        Page <span className="font-medium text-gray-900">{page}</span> of <span className="font-medium text-gray-900">{totalPages}</span>
+                    </span>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => setPage(p => Math.max(1, p - 1))} 
+                            disabled={page === 1 || loading}
+                            className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 hover:bg-gray-50"
+                        >
+                            Previous
+                        </button>
+                        <button 
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))} 
+                            disabled={page === totalPages || loading}
+                            className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 hover:bg-gray-50"
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

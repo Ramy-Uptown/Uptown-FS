@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth, API_URL } from '../lib/apiClient';
-import BrandHeader from '../lib/BrandHeader';
+import AdminSidebar from '../components/AdminSidebar.jsx';
 import LoadingButton from '../components/LoadingButton.jsx';
 import SkeletonRow from '../components/SkeletonRow.jsx';
 import { notifyError, notifySuccess } from '../lib/notifications.js';
@@ -23,8 +23,6 @@ const ROLE_OPTIONS = [
   'vice_chairman',
   'ceo'
 ];
-
-// --- Main Component ---
 
 export default function Users() {
     const navigate = useNavigate();
@@ -105,7 +103,6 @@ export default function Users() {
 
     // --- Event Handlers & Actions ---
 
-    // A generic handler to simplify managing multiple API actions on user rows
     const handleUserAction = async (userId, action, successMsg) => {
         setBusyId(userId);
         setError('');
@@ -231,7 +228,7 @@ export default function Users() {
 
     const handleLogout = () => {
         // In a real app, this would clear tokens and redirect
-        console.log("Logging out...");
+        // But since we use AdminSidebar handling logout, this is just for mobile redundancy if needed
         window.location.href = '/login';
     };
 
@@ -253,215 +250,308 @@ export default function Users() {
         return true;
     });
     
-    const managers = users.filter(u => u.role.includes('manager'));
     const userById = Object.fromEntries(users.map(u => [u.id, u]));
     const isSuperAdmin = me?.role === 'superadmin';
 
-    // helper: resolve manager for a given user based on role
     function getManagerIdForUser(u) {
       if (!u) return null;
       const r = String(u.role || '');
       if (r === 'property_consultant') return assignMap?.sales?.[u.id] || null;
       if (r === 'contract_person') return assignMap?.contracts?.[u.id] || null;
       if (r === 'financial_admin') return assignMap?.finance?.[u.id] || null;
-      // other roles don't have a manager mapping here
       return null;
     }
 
-    // --- Render ---
     return (
-        <div className="bg-gray-50 min-h-screen font-sans">
-            <BrandHeader onLogout={handleLogout} />
-            <main className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
-                <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6">User Management</h2>
+        <div className="flex h-screen w-full bg-background-light font-sans overflow-hidden">
+            <AdminSidebar />
+            
+            <main className="flex-1 flex flex-col h-full overflow-hidden bg-background-light relative">
+                <div className="lg:hidden bg-[#1F2124] text-white p-4 flex justify-between items-center shadow-md">
+                   <span className="font-light tracking-widest uppercase">Uptown</span>
+                   <button className="text-white" onClick={handleLogout}><span className="material-symbols-outlined">logout</span></button>
+                </div>
 
-                {/* Create User Form */}
-                <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
-                    <form onSubmit={createUser} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                        <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-600 mb-1" htmlFor="email">Email</label>
-                                <input id="email" type="email" placeholder="new.user@example.com" value={createForm.email} onChange={e => setCreateForm(s => ({ ...s, email: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg" required />
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+                    <div className="max-w-7xl mx-auto">
+                        <header className="mb-8">
+                            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">User Management</h1>
+                            <p className="mt-1 text-sm text-gray-500">Manage access control and user roles.</p>
+                        </header>
+
+                        {/* Create User Form */}
+                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8">
+                            <h2 className="text-lg font-semibold text-gray-800 mb-4">Create New User</h2>
+                            <form onSubmit={createUser} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                                <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2" htmlFor="email">Email</label>
+                                        <input 
+                                            id="email" 
+                                            type="email" 
+                                            placeholder="new.user@example.com" 
+                                            value={createForm.email} 
+                                            onChange={e => setCreateForm(s => ({ ...s, email: e.target.value }))} 
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" 
+                                            required 
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2" htmlFor="password">Password</label>
+                                        <input 
+                                            id="password" 
+                                            type="password" 
+                                            placeholder="Min 6 characters" 
+                                            value={createForm.password} 
+                                            onChange={e => setCreateForm(s => ({ ...s, password: e.target.value }))} 
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" 
+                                            required 
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2" htmlFor="fullName">Full Name</label>
+                                        <input 
+                                            id="fullName" 
+                                            type="text" 
+                                            placeholder="Employee full name" 
+                                            value={createForm.fullName} 
+                                            onChange={e => setCreateForm(s => ({ ...s, fullName: e.target.value }))} 
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" 
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2" htmlFor="role">Role</label>
+                                    <select 
+                                        id="role" 
+                                        value={createForm.role} 
+                                        onChange={e => setCreateForm(s => ({ ...s, role: e.target.value }))} 
+                                        disabled={!isSuperAdmin}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                                    >
+                                        {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                                    </select>
+                                </div>
+                                <LoadingButton 
+                                    type="submit" 
+                                    loading={creating} 
+                                    className="w-full py-2 px-4 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold shadow-sm transition-all"
+                                >
+                                    {creating ? 'Creating…' : 'Create User'}
+                                </LoadingButton>
+                            </form>
+                        </div>
+
+                        {/* Filters */}
+                        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-[20px]">search</span>
+                                <input 
+                                    type="text" 
+                                    placeholder="Search users..." 
+                                    value={filters.search} 
+                                    onChange={e => setFilters(s => ({ ...s, search: e.target.value }))} 
+                                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" 
+                                />
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-600 mb-1" htmlFor="password">Password</label>
-                                <input id="password" type="password" placeholder="Min 6 characters" value={createForm.password} onChange={e => setCreateForm(s => ({ ...s, password: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg" required />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-600 mb-1" htmlFor="fullName">Full Name</label>
-                                <input id="fullName" type="text" placeholder="Employee full name" value={createForm.fullName} onChange={e => setCreateForm(s => ({ ...s, fullName: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg" />
+                            <select 
+                                value={filters.role} 
+                                onChange={e => setFilters(s => ({ ...s, role: e.target.value }))} 
+                                className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                            >
+                                <option value="all">All Roles</option>
+                                {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                            </select>
+                            <select 
+                                value={filters.status} 
+                                onChange={e => setFilters(s => ({ ...s, status: e.target.value }))} 
+                                className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                            >
+                                <option value="active">Active Users</option>
+                                <option value="inactive">Inactive Users</option>
+                                <option value="all">All Statuses</option>
+                            </select>
+                            <label className="inline-flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                              <input 
+                                type="checkbox" 
+                                checked={filters.onlyNoManager} 
+                                onChange={e => setFilters(s => ({ ...s, onlyNoManager: e.target.checked }))} 
+                                className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                              />
+                              Only without manager
+                            </label>
+                        </div>
+
+                        {error && <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl mb-6 text-sm">{error}</div>}
+
+                        {/* Users Table */}
+                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-gray-50 border-b border-gray-100 text-xs text-gray-500 uppercase tracking-wider font-semibold">
+                                        <tr>
+                                            <th className="px-6 py-4">User</th>
+                                            <th className="px-6 py-4">Role</th>
+                                            <th className="px-6 py-4">Manager</th>
+                                            <th className="px-6 py-4">Status</th>
+                                            <th className="px-6 py-4">Updated</th>
+                                            <th className="px-6 py-4 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {isLoading || !me ? (
+                                            Array.from({ length: 5 }).map((_, i) => (
+                                                <SkeletonRow key={i} widths={['lg','sm','sm','sm','sm','lg']} />
+                                            ))
+                                        ) : filteredUsers.length === 0 ? (
+                                            <tr><td colSpan="6" className="text-center p-8 text-gray-500">No users match criteria.</td></tr>
+                                        ) : (
+                                            filteredUsers.map(u => {
+                                                const isEditing = editingId === u.id;
+                                                const isBusy = busyId === u.id;
+                                                const isSelf = me.id === u.id;
+                                                const mid = getManagerIdForUser(u);
+
+                                                return (
+                                                    <tr key={u.id} className={`hover:bg-gray-50/50 transition-colors ${isBusy ? 'opacity-50' : ''}`}>
+                                                        <td className="px-6 py-4">
+                                                            {isEditing ? (
+                                                                <div className="flex gap-2">
+                                                                    <input value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full px-2 py-1 text-sm border rounded" />
+                                                                    <LoadingButton onClick={() => saveEmail(u.id)} className="text-xs bg-primary text-white px-2 py-1 rounded">Save</LoadingButton>
+                                                                    <LoadingButton onClick={() => setEditingId(null)} className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded">Cancel</LoadingButton>
+                                                                </div>
+                                                            ) : (
+                                                                <div>
+                                                                    <div className="font-medium text-gray-900">{u.email}</div>
+                                                                    {u.meta?.full_name && <div className="text-xs text-gray-500">{u.meta.full_name}</div>}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            {isSuperAdmin ? (
+                                                              <select 
+                                                                value={u.role} 
+                                                                onChange={(e) => changeRole(u.id, e.target.value)} 
+                                                                disabled={isBusy || isSelf} 
+                                                                className="text-xs border-none bg-transparent hover:bg-gray-100 rounded px-2 py-1 cursor-pointer focus:ring-0 text-gray-700 font-medium"
+                                                              >
+                                                                  {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                                                              </select>
+                                                            ) : (
+                                                              <span className="text-gray-700 text-xs font-medium px-2 py-1 bg-gray-100 rounded-md">{String(u.role || '').replace(/_/g, ' ')}</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-xs text-gray-500">
+                                                            {mid ? (
+                                                                <span className="flex items-center gap-1">
+                                                                    <span className="material-symbols-outlined text-[14px]">supervisor_account</span>
+                                                                    {userById[mid]?.email || mid}
+                                                                </span>
+                                                            ) : <span className="text-gray-300">-</span>}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${u.active ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
+                                                                {u.active ? 'Active' : 'Inactive'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-xs text-gray-500">
+                                                            {new Date(u.updated_at).toLocaleDateString()}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <div className="flex justify-end items-center gap-2">
+                                                                <button 
+                                                                    onClick={() => openHistory(u.id)} 
+                                                                    disabled={isBusy}
+                                                                    className="p-1 text-gray-400 hover:text-primary transition-colors"
+                                                                    title="View History"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-[18px]">history</span>
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => { setEditingId(u.id); setEditEmail(u.email); }}
+                                                                    disabled={isBusy}
+                                                                    className="p-1 text-gray-400 hover:text-primary transition-colors"
+                                                                    title="Edit Email"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-[18px]">edit</span>
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => toggleActive(u)} 
+                                                                    disabled={isBusy || isSelf} 
+                                                                    className={`p-1 transition-colors ${u.active ? 'text-gray-400 hover:text-red-500' : 'text-gray-400 hover:text-green-500'}`}
+                                                                    title={u.active ? 'Deactivate' : 'Activate'}
+                                                                >
+                                                                    <span className="material-symbols-outlined text-[18px]">{u.active ? 'block' : 'check_circle'}</span>
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                        {isSuperAdmin ? (
-                          <div>
-                              <label className="block text-sm font-medium text-gray-600 mb-1" htmlFor="role">Role</label>
-                              <select id="role" value={createForm.role} onChange={e => setCreateForm(s => ({ ...s, role: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg">
-                                  {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-                              </select>
-                          </div>
-                        ) : (
-                          <div>
-                              <label className="block text-sm font-medium text-gray-600 mb-1">Role</label>
-                              <input type="text" value="user" readOnly className="w-full p-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600" />
+
+                        {/* Position History Modal */}
+                        {historyForId !== null && (
+                          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+                              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                                <h3 className="text-lg font-bold text-gray-900">Position History</h3>
+                                <button onClick={closeHistory} className="text-gray-400 hover:text-gray-600">
+                                    <span className="material-symbols-outlined">close</span>
+                                </button>
+                              </div>
+                              <div className="p-0 max-h-[60vh] overflow-y-auto">
+                                {historyLoading ? (
+                                  <div className="p-8 text-center text-gray-500">Loading history...</div>
+                                ) : historyItems.length === 0 ? (
+                                  <div className="p-8 text-center text-gray-500 flex flex-col items-center">
+                                      <span className="material-symbols-outlined text-[32px] mb-2 opacity-50">history_toggle_off</span>
+                                      No role changes found for this user.
+                                  </div>
+                                ) : (
+                                  <div className="divide-y divide-gray-50">
+                                    {historyItems.map(item => (
+                                      <div key={item.id} className="p-4 hover:bg-gray-50 transition-colors">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-medium text-gray-500">
+                                                {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
+                                            </span>
+                                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                                                by {userById[item.changed_by]?.email || `id ${item.changed_by}`}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <span className="text-gray-500 font-medium line-through decoration-red-300">
+                                                {String(item._fromRole || '').replace(/_/g,' ') || 'unknown'}
+                                            </span>
+                                            <span className="material-symbols-outlined text-[14px] text-gray-400">arrow_forward</span>
+                                            <span className="text-primary font-bold">
+                                                {String(item._toRole || '').replace(/_/g,' ')}
+                                            </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+                                <button 
+                                    onClick={closeHistory} 
+                                    className="px-4 py-2 bg-white border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+                                >
+                                    Close
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         )}
-                        <LoadingButton type="submit" loading={creating} variant="primary">
-                            {creating ? 'Creating…' : 'Create User'}
-                        </LoadingButton>
-                    </form>
-                </div>
-
-                {/* Filters */}
-                <div className="bg-white p-4 rounded-lg shadow-sm mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-                    <input type="text" placeholder="Search by email or notes..." value={filters.search} onChange={e => setFilters(s => ({ ...s, search: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg" />
-                    <select value={filters.role} onChange={e => setFilters(s => ({ ...s, role: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg">
-                        <option value="all">All Roles</option>
-                        {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-                    </select>
-                    <select value={filters.status} onChange={e => setFilters(s => ({ ...s, status: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-lg">
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="all">All Statuses</option>
-                    </select>
-                    <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                      <input type="checkbox" checked={filters.onlyNoManager} onChange={e => setFilters(s => ({ ...s, onlyNoManager: e.target.checked }))} />
-                      Only without manager
-                    </label>
-                </div>
-                
-                {error && <p className="bg-red-100 text-red-700 p-3 rounded-lg mb-6 text-center">{error}</p>}
-                
-                {/* Users Table */}
-                <div className="overflow-x-auto bg-white rounded-lg shadow-sm">
-                    <table className="w-full text-sm text-left text-gray-700">
-                        <thead className="bg-gray-100 text-xs text-gray-700 uppercase">
-                            <tr>
-                                <th className="px-6 py-3">User</th>
-                                <th className="px-6 py-3">Role</th>
-                                <th className="px-6 py-3">Manager</th>
-                                <th className="px-6 py-3">Status</th>
-                                <th className="px-6 py-3">Role Change</th>
-                                <th className="px-6 py-3">Last Updated</th>
-                                <th className="px-6 py-3 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {isLoading || !me ? (
-                                <>
-                                  {Array.from({ length: 8 }).map((_, i) => (
-                                    <SkeletonRow key={i} widths={['lg','sm','sm','sm','lg','sm','lg']} />
-                                  ))}
-                                </>
-                            ) : filteredUsers.length === 0 ? (
-                                <tr><td colSpan="7" className="text-center p-8 text-gray-500">No users match the current filters.</td></tr>
-                            ) : (
-                                filteredUsers.map(u => {
-                                    const isEditing = editingId === u.id;
-                                    const isBusy = busyId === u.id;
-                                    const isSelf = me.id === u.id;
-                                    const currentManagerId = assignMap[u.id];
-
-                                    return (
-                                        <tr key={u.id} className={`border-b hover:bg-gray-50 ${isBusy ? 'opacity-50' : ''}`}>
-                                            <td className="px-6 py-4">
-                                                {isEditing ? (
-                                                    <div className="flex gap-2">
-                                                        <input value={editEmail} onChange={e => setEditEmail(e.target.value)} className="p-1 border border-gray-300 rounded-md" />
-                                                        <LoadingButton onClick={() => saveEmail(u.id)}>Save</LoadingButton>
-                                                        <LoadingButton onClick={() => setEditingId(null)}>Cancel</LoadingButton>
-                                                    </div>
-                                                ) : (
-                                                    <div className="font-medium text-gray-900">
-                                                        {u.email}
-                                                        {u.meta?.full_name ? <div className="text-xs text-gray-500">{u.meta.full_name}</div> : null}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {isSuperAdmin ? (
-                                                  <select value={u.role} onChange={(e) => changeRole(u.id, e.target.value)} disabled={isBusy || isSelf} className="p-1 border border-gray-300 rounded-md bg-white">
-                                                      {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-                                                  </select>
-                                                ) : (
-                                                  <span className="text-gray-800">{String(u.role || '').replace(/_/g, ' ')}</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 text-xs text-gray-600">
-                                               {
-                                                 (() => {
-                                                   const mid = getManagerIdForUser(u);
-                                                   return mid ? (userById[mid]?.email || `ID: ${mid}`) : 'N/A';
-                                                 })()
-                                               }
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${u.active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-800'}`}>
-                                                    {u.active ? 'Active' : 'Inactive'}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-xs text-gray-600">
-                                                {u.last_role_change_at ? new Date(u.last_role_change_at).toLocaleDateString() : '—'}
-                                                {u.last_role_changed_by ? (
-                                                    <div className="text-[11px] text-gray-500">
-                                                        by {userById[u.last_role_changed_by]?.email || `id ${u.last_role_changed_by}`}
-                                                    </div>
-                                                ) : null}
-                                            </td>
-                                            <td className="px-6 py-4 text-xs text-gray-500">{new Date(u.updated_at).toLocaleDateString()}</td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex justify-end gap-4">
-                                                    <LoadingButton onClick={() => openHistory(u.id)} disabled={isBusy}>Position History</LoadingButton>
-                                                    <LoadingButton onClick={() => navigate(`/admin/users/${u.id}`)} disabled={isBusy}>Edit</LoadingButton>
-                                                    <LoadingButton onClick={() => toggleActive(u)} disabled={isBusy || isSelf} style={{ color: '#a16207', borderColor: '#a16207' }}>
-                                                        {u.active ? 'Deactivate' : 'Activate'}
-                                                    </LoadingButton>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Position History Modal */}
-                {historyForId !== null && (
-                  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl">
-                      <div className="px-5 py-3 border-b flex items-center justify-between">
-                        <h3 className="text-lg font-semibold">Position History — User #{historyForId}</h3>
-                        <LoadingButton onClick={closeHistory}>Close</LoadingButton>
-                      </div>
-                      <div className="p-4 max-h-[65vh] overflow-y-auto">
-                        {historyLoading ? (
-                          <div className="text-gray-500">Loading…</div>
-                        ) : historyItems.length === 0 ? (
-                          <div className="text-gray-500">No role changes found for this user.</div>
-                        ) : (
-                          <ul className="divide-y">
-                            {historyItems.map(item => (
-                              <li key={item.id} className="py-2 text-sm">
-                                <div className="text-gray-800">
-                                  {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
-                                </div>
-                                <div className="text-gray-600">
-                                  Changed by: {userById[item.changed_by]?.email || `id ${item.changed_by}`}
-                                </div>
-                                <div className="text-gray-500">
-                                  {String(item._fromRole || '').replace(/_/g,' ') || 'unknown'} → {String(item._toRole || '').replace(/_/g,' ')}
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                      <div className="px-5 py-3 border-t text-right">
-                        <LoadingButton onClick={closeHistory} variant="primary">Close</LoadingButton>
-                      </div>
                     </div>
-                  </div>
-                )}
+                </div>
             </main>
         </div>
     );
