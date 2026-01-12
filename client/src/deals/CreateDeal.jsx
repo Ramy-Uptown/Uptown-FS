@@ -425,10 +425,7 @@ export default function CreateDeal() {
       {calcLoading && <FullPageLoader text="Calculating…" />}
       <div className="flex justify-between items-baseline mb-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
         <h2 className="text-2xl font-bold text-gray-900 m-0">Create Deal</h2>
-        <div className="flex gap-2">
-          <button onClick={saveAsDraft} disabled={loading || submitting} className="px-4 py-2 rounded-lg border border-primary bg-primary text-white font-semibold hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Saving…' : 'Save as Draft'}</button>
-          <button onClick={saveAndSubmit} disabled={loading || submitting} className="px-4 py-2 rounded-lg border border-primary-dark bg-primary-dark text-white font-semibold hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{submitting ? 'Submitting…' : 'Save and Submit'}</button>
-        </div>
+        {/* Buttons moved to bottom */}
       </div>
       {error && <p className="text-red-600 mb-4 font-medium">{error}</p>}
       
@@ -469,39 +466,7 @@ export default function CreateDeal() {
                   View Deals for This Unit
                 </button>
               )}
-              {(() => {
-                try {
-                  const u = JSON.parse(localStorage.getItem('auth_user') || '{}')
-                  // Only allow Consultants and Sales Managers to request a block
-                  if (u?.role === 'property_consultant' || u?.role === 'sales_manager') {
-                    // Determine acceptance from the embedded calculator snapshot
-                    let canBlock = false
-                    try {
-                      const snapFn = window.__uptown_calc_getSnapshot
-                      if (typeof snapFn === 'function') {
-                        const snap = snapFn()
-                        const decision =
-                          snap?.generatedPlan?.evaluation?.decision ||
-                          snap?.evaluation?.decision ||
-                          null
-                        const overrideApproved = !!(snap?.deal?.override?.approved || snap?.overrideApproved)
-                        canBlock = (decision === 'ACCEPT') || overrideApproved
-                      }
-                    } catch {}
-                    return (
-                      <button
-                        onClick={requestUnitBlock}
-                        className={`px-3 py-1.5 rounded-lg border font-semibold text-white text-sm transition-colors ${canBlock ? 'bg-primary border-primary hover:bg-primary-hover cursor-pointer' : 'bg-gray-400 border-gray-400 cursor-not-allowed opacity-60'}`}
-                        disabled={!canBlock}
-                        title={canBlock ? 'Request a temporary block on this unit' : 'Available after plan is ACCEPTED (or override approved)'}
-                      >
-                        Request Unit Block
-                      </button>
-                    )
-                  }
-                } catch {}
-                return null
-              })()}
+              {/* Block button removed as per request (flow requires saving deal first) */}
             </div>
           </div>
           <div className="grid grid-cols-3 gap-y-2 gap-x-4 text-sm text-gray-700">
@@ -555,7 +520,14 @@ export default function CreateDeal() {
         <CalculatorApp embedded />
       </div>
 
-      
+      <div className="mt-6 flex justify-end gap-3 pb-12">
+        <button onClick={saveAsDraft} disabled={loading || submitting} className="px-6 py-3 rounded-xl border border-primary bg-primary text-white font-bold text-lg shadow-sm hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[160px]">
+          {loading ? 'Saving…' : 'Save as Draft'}
+        </button>
+        <button onClick={saveAndSubmit} disabled={loading || submitting} className="px-6 py-3 rounded-xl border border-primary-dark bg-primary-dark text-white font-bold text-lg shadow-sm hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[160px]">
+          {submitting ? 'Submitting…' : 'Save and Submit'}
+        </button>
+      </div>
     </div>
   )
 }
