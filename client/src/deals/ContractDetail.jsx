@@ -197,7 +197,7 @@ export default function ContractDetail() {
     <div className="flex h-screen bg-gray-50">
       <AdminSidebar role={role} />
       
-      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 lg:ml-0 p-6">
         <div className="w-full mx-auto space-y-6">
           
           {/* Header */}
