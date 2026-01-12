@@ -517,7 +517,7 @@ export default function CreateDeal() {
       
 
       <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white">
-        <CalculatorApp embedded />
+        <CalculatorApp embedded hideBlockButton />
       </div>
 
       <div className="mt-6 flex justify-end gap-3 pb-12">

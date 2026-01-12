@@ -785,15 +785,17 @@ export default function App(props) {
         />
 
         {/* Inline actions aligned with Client Info flow */}
-        <BlockUnitButton
-          role={role}
-          unitInfo={unitInfo}
-          clientInfo={clientInfo}
-          genResult={genResult}
-          language={language}
-          styles={styles}
-          API_URL={API_URL}
-        />
+        {!props.hideBlockButton && (
+          <BlockUnitButton
+            role={role}
+            unitInfo={unitInfo}
+            clientInfo={clientInfo}
+            genResult={genResult}
+            language={language}
+            styles={styles}
+            API_URL={API_URL}
+          />
+        )}
 
         {/* Results Table */}
         <section className={styles.section} dir={isRTL(language) ? 'rtl' : 'ltr'}>
