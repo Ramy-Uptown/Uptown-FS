@@ -354,7 +354,7 @@ router.get(
       if (activeFlag !== null) {
         params.push(activeFlag)
         where.push(`ftm.active = $${params.length}`)
-   _code  new </}
+
 }
 
       const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
