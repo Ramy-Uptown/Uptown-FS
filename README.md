@@ -121,6 +121,10 @@ If no active Standard Plan exists or its values are invalid, the server will att
 
 7) Recent Fixes and Changes
 Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track when changes were applied.
+- [2026-01-12 14:15] Login UI rebrand with Stitch layout and existing auth flow preserved
+  - Client: Replaced the legacy login box and BrandHeader wrapper (client/src/Login.jsx) with a two-column Stitch-inspired layout rendered via LoginView (client/src/ui/auth/LoginView.jsx), including a dark marketing panel, “Account Login” card, email/password fields with icons, a “Keep me logged in” checkbox, and a “No account? Request access” helper, while preserving the same POST /api/auth/login behaviour and localStorage token/user handling.
+  - Client: Added a small CSS utility (.bg-login-pattern in client/src/index.css) to render the dark grid background on the login sidebar, reusing the primary gold color configured for Tailwind so the pattern stays consistent with the newer Register screen and future dashboard rebrand.
+  - Ops: No backend or Dockerfile changes were required for this UI update. If the stack is already running, simply refresh the browser on /login; if the client appears stale inside Docker, run docker compose restart client. API behaviour during login can be monitored with docker logs -f app_api.
 - [2026-01-12 14:00] Register UI rebrand and user profile metadata on signup
   - Client: Replaced the legacy register form (client/src/Register.jsx) with a Stitch-inspired full-screen auth layout wired through a new RegisterView (client/src/ui/auth/RegisterView.jsx), preserving the existing /api/auth/register flow while collecting first/last name, department, and a terms checkbox in the UI.
   - Client: Introduced Tailwind theme tokens and shared fonts for the modern auth experience by extending client/tailwind.config.js with primary gold/background colors and setting Inter/Playfair Display via client/index.html and client/src/index.css, so future pages can reuse the same design language.
