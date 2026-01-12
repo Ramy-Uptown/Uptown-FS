@@ -121,6 +121,14 @@ If no active Standard Plan exists or its values are invalid, the server will att
 
 7) Recent Fixes and Changes
 Timestamp convention: prefix new bullets with [YYYY-MM-DD HH:MM] (UTC) to track when changes were applied.
+- [2026-01-12 16:00] Superadmin-only role and team assignment; admin limited to user creation
+  - API: Tightened team membership write endpoints in api/src/teamsRoutes.js so POST/PATCH /api/workflow/*-teams/members and /api/workflow/*-teams/assign now require role 'superadmin'. Membership and listing GET routes still allow admin and manager roles to read team structures, but only superadmins can add, update, or clear sales, finance, and contracts team assignments.
+  - Client: Updated admin team consoles (client/src/admin/SalesManagerTeam.jsx, client/src/admin/FinanceTeam.jsx, client/src/admin/ContractsTeam.jsx) so only superadmin sees assignment controls. Admins and manager roles can still open these pages but see a read-only view with “No actions” messaging; the SalesTeam assignment UI (client/src/admin/SalesTeam.jsx) already required superadmin and is unchanged.
+  - Client: Confirmed Users management screens respect the same rule set: Superadmin can choose roles at creation time and change user roles later (client/src/admin/Users.jsx, client/src/admin/UserEdit.jsx); Admin can only create new users as plain 'user', edit notes/metadata, and toggle active flags, but cannot change roles.
+  - Ops: Because team route authorization changed on the API, restart the API container to pick up the new guards. If you are running under docker compose, run docker compose up -d --build (or at minimum docker compose restart api). Frontend changes will hot-reload; if the client looks stale inside Docker, use docker compose restart client. To watch authorization decisions while testing the admin/team pages, run:
+    ```bash
+    docker logs -f app_api
+    ```
 - [2026-01-12 15:30] Super Admin landing page and team backend alignment
   - Client: Added a dedicated Super Admin landing page at /admin/superadmin-home (client/src/admin/SuperAdminHome.jsx) that uses the existing BrandHeader and a Stitch-inspired layout trimmed down to only two primary entry points — “Users” and “Teams” — plus Logout, removing any direct superadmin shortcuts into financial or contracts detail consoles.
   - Client: Introduced a Teams hub screen at /admin/teams (client/src/admin/TeamsHub.jsx) and updated BrandHeader shortcuts for the superadmin role (client/src/lib/BrandHeader.jsx) so the header now only exposes “Users” (/admin/users) and “Teams” (/admin/teams); TeamsHub links into the existing SalesTeam, FinanceTeam, ContractsTeam, and SalesManagerTeam pages without adding new finance/contract detail views. Routing was updated in client/src/main.jsx so superadmin now lands on /admin/superadmin-home after login.

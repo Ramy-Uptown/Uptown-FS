@@ -51,7 +51,7 @@ router.get(
 router.post(
   '/sales-teams/members',
   authMiddleware,
-  requireRole(['admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, consultant_user_id, active } = req.body || {}
@@ -78,7 +78,7 @@ router.post(
 router.patch(
   '/sales-teams/members/:id',
   authMiddleware,
-  requireRole(['admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const id = ensureNumber(req.params.id)
@@ -161,7 +161,7 @@ router.get(
 router.post(
   '/sales-teams/assign',
   authMiddleware,
-  requireRole(['admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, consultant_user_id } = req.body || {}
@@ -211,7 +211,7 @@ router.post(
 router.patch(
   '/sales-teams/assign',
   authMiddleware,
-  requireRole(['admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, consultant_user_id, active } = req.body || {}
@@ -287,7 +287,7 @@ router.get(
 router.post(
   '/finance-teams/members',
   authMiddleware,
-  requireRole(['financial_manager', 'admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id, active } = req.body || {}
@@ -314,7 +314,7 @@ router.post(
 router.patch(
   '/finance-teams/members/:id',
   authMiddleware,
-  requireRole(['financial_manager', 'admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const id = ensureNumber(req.params.id)
@@ -387,7 +387,7 @@ router.get(
 router.post(
   '/finance-teams/assign',
   authMiddleware,
-  requireRole(['admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id } = req.body || {}
@@ -437,7 +437,7 @@ router.post(
 router.patch(
   '/finance-teams/assign',
   authMiddleware,
-  requireRole(['admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id, active } = req.body || {}
@@ -513,7 +513,7 @@ router.get(
 router.post(
   '/contracts-teams/members',
   authMiddleware,
-  requireRole(['contract_manager', 'admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id, active } = req.body || {}
@@ -540,7 +540,7 @@ router.post(
 router.patch(
   '/contracts-teams/members/:id',
   authMiddleware,
-  requireRole(['contract_manager', 'admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const id = ensureNumber(req.params.id)
@@ -612,7 +612,7 @@ router.get(
 router.post(
   '/contracts-teams/assign',
   authMiddleware,
-  requireRole(['admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id } = req.body || {}
@@ -662,7 +662,7 @@ router.post(
 router.patch(
   '/contracts-teams/assign',
   authMiddleware,
-  requireRole(['admin', 'superadmin']),
+  requireRole(['superadmin']),
   async (req, res) => {
     try {
       const { manager_user_id, member_user_id, active } = req.body || {}

@@ -39,7 +39,7 @@ export default function SalesTeam() {
   // current user
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
   const isSuperAdmin = me?.role === 'superadmin'
-  const canAssign = isSuperAdmin || me?.role === 'admin' || me?.role === 'sales_manager'
+  const canAssign = isSuperAdmin
 
   async function load() {
     try {

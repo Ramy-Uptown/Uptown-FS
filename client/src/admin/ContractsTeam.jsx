@@ -23,7 +23,7 @@ export default function ContractsTeam() {
   const [managers, setManagers] = useState([])
 
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
-  const canAssign = me?.role === 'admin' || me?.role === 'superadmin'
+  const canAssign = me?.role === 'superadmin'
 
   useEffect(() => {
     load()
