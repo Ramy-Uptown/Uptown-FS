@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { th, td, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
-import BrandHeader from '../lib/BrandHeader.jsx'
+import AdminSidebar from '../components/AdminSidebar.jsx'
 import LoadingButton from '../components/LoadingButton.jsx'
 import SkeletonRow from '../components/SkeletonRow.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
@@ -56,73 +55,78 @@ export default function HoldsCEO() {
     }
   }
 
-  const canCEO = role === 'ceo'
-
-  const handleLogout = async () => {
-    try {
-      const rt = localStorage.getItem('refresh_token')
-      if (rt) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: rt })
-        }).catch(() => {})
-      }
-    } finally {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('auth_user')
-      window.location.href = '/login'
-    }
-  }
+  const canCEO = role === 'ceo' || role === 'chairman' || role === 'vice_chairman'
 
   return (
-    <div>
-      <BrandHeader onLogout={handleLogout} />
-      <div style={{ ...pageContainer, maxWidth: 900 }}>
-        <h2 style={pageTitle}>Hold Override Approvals — {canCEO ? 'CEO' : 'Read Only'}</h2>
-        <LoadingButton onClick={load} loading={loading} style={btn}>Refresh</LoadingButton>
-        {error ? <p style={errorText}>{error}</p> : null}
-        <div style={{ ...tableWrap, marginTop: 12 }}>
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>ID</th>
-                <th style={th}>Unit</th>
-                <th style={th}>Plan</th>
-                <th style={th}>Requested By</th>
-                <th style={th}>Expires</th>
-                <th style={th}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <>
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <SkeletonRow key={i} widths={['sm','sm','sm','lg','sm','lg']} tdStyle={td} />
-                  ))}
-                </>
-              )}
-              {!loading && rows.map(r => (
-                <tr key={r.id}>
-                  <td style={td}>{r.id}</td>
-                  <td style={td}>{r.unit_id}</td>
-                  <td style={td}>{r.payment_plan_id || ''}</td>
-                  <td style={td}>{r.requested_by || ''}</td>
-                  <td style={td}>{r.expires_at ? new Date(r.expires_at).toLocaleString() : ''}</td>
-                  <td style={td}>
-                    {canCEO ? <LoadingButton onClick={() => approve(r.id)} loading={rowLoading[r.id]}>Approve Override</LoadingButton> : <span style={{ color: '#64748b' }}>View only</span>}
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && !loading && (
-                <tr><td style={td} colSpan={6}>No pending requests.</td></tr>
-              )}
-            </tbody>
-          </table>
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-7xl mx-auto space-y-6">
+
+            <div className="flex items-center justify-between">
+                <div>
+                     <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Hold Override Approvals</h2>
+                     <p className="text-sm text-gray-500 mt-1">{canCEO ? 'Review and approve pending hold overrides.' : 'Read-only view of pending overrides.'}</p>
+                </div>
+                <LoadingButton onClick={load} loading={loading} className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                    Refresh
+                </LoadingButton>
+            </div>
+
+            {error && <div className="p-4 bg-red-50 text-red-700 rounded-md border border-red-100">{error}</div>}
+
+            <div className="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-300">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 sm:pl-6">ID</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Unit ID</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Proposed Plan</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Requested By</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Current Expiry</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                            {loading && (
+                                Array.from({ length: 5 }).map((_, i) => (
+                                    <tr key={i}><td colSpan={6} className="px-3 py-4"><SkeletonRow widths={['lg']} /></td></tr>
+                                ))
+                            )}
+                            {!loading && rows.map(r => (
+                                <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{r.id}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{r.unit_id}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{r.payment_plan_id || '-'}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{r.requested_by || '-'}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{r.expires_at ? new Date(r.expires_at).toLocaleString() : '-'}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                        {canCEO ? (
+                                            <LoadingButton 
+                                                onClick={() => approve(r.id)} 
+                                                loading={rowLoading[r.id]}
+                                                className="inline-flex justify-center items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm"
+                                            >
+                                                Approve Override
+                                            </LoadingButton>
+                                        ) : (
+                                            <span className="text-gray-400 italic text-xs">View only</span>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                            {!loading && rows.length === 0 && (
+                                <tr><td colSpan={6} className="px-3 py-8 text-center text-sm text-gray-500">No pending requests found.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
-      </div>
+      </main>
     </div>
   )
 }
-

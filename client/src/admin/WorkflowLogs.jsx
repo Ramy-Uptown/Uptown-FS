@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
 import * as XLSX from 'xlsx'
-import { th, td, ctrl, btn, tableWrap, table, pageContainer, pageTitle, errorText } from '../lib/ui.js'
-import BrandHeader from '../lib/BrandHeader.jsx'
+import AdminSidebar from '../components/AdminSidebar.jsx'
 import LoadingButton from '../components/LoadingButton.jsx'
+import SkeletonRow from '../components/SkeletonRow.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
 import { useLoader } from '../lib/loaderContext.jsx'
 
@@ -16,6 +16,8 @@ export default function WorkflowLogs() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  
+  const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
 
   async function load() {
     try {
@@ -42,24 +44,6 @@ export default function WorkflowLogs() {
   }
 
   useEffect(() => { load() }, [])
-
-  const handleLogout = async () => {
-    try {
-      const rt = localStorage.getItem('refresh_token')
-      if (rt) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: rt })
-        }).catch(() => {})
-      }
-    } finally {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('auth_user')
-      window.location.href = '/login'
-    }
-  }
 
   const { setShow, setMessage } = useLoader()
 
@@ -227,62 +211,106 @@ export default function WorkflowLogs() {
   }
 
   return (
-    <div>
-      <BrandHeader onLogout={handleLogout} />
-      <div style={pageContainer}>
-        <h2 style={pageTitle}>Workflow Logs</h2>
-        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: 12 }}>
-          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={ctrl} />
-          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={ctrl} />
-          <select value={type} onChange={e => setType(e.target.value)} style={ctrl}>
-            <option value="">All Types</option>
-            <option value="offers">Offers</option>
-            <option value="reservations">Reservations</option>
-            <option value="contracts">Contracts</option>
-          </select>
-          <input type="number" placeholder="Consultant User ID" value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl} />
-          <input type="number" placeholder="Sales Manager User ID" value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl} />
-          <div>
-            <LoadingButton onClick={load} loading={loading}>Apply</LoadingButton>
-            <LoadingButton onClick={exportXLSX} disabled={!data}>Export XLSX</LoadingButton>
-            <LoadingButton onClick={exportCSV} disabled={!data}>Export CSV</LoadingButton>
-          </div>
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={user?.role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-9xl mx-auto space-y-6">
+
+             <div className="flex items-center justify-between">
+                <div>
+                     <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Workflow Logs</h2>
+                     <p className="text-sm text-gray-500 mt-1">Comprehensive system activity and transaction logs.</p>
+                </div>
+                 <div className="flex gap-2">
+                     <LoadingButton 
+                        onClick={exportXLSX} 
+                        disabled={!data}
+                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
+                    >
+                         <span className="material-symbols-outlined text-sm mr-1">grid_on</span> Export XLSX
+                     </LoadingButton>
+                     <LoadingButton 
+                        onClick={exportCSV} 
+                        disabled={!data}
+                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
+                    >
+                         <span className="material-symbols-outlined text-sm mr-1">description</span> Export CSV
+                     </LoadingButton>
+                 </div>
+            </div>
+
+            {/* Filters */}
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+                 <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Start Date</label>
+                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-xs" />
+                </div>
+                <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">End Date</label>
+                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-xs" />
+                </div>
+                <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Log Type</label>
+                    <select value={type} onChange={e => setType(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-xs">
+                        <option value="">All Types</option>
+                        <option value="offers">Offers</option>
+                        <option value="reservations">Reservations</option>
+                        <option value="contracts">Contracts</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Consultant ID</label>
+                    <input type="number" placeholder="User ID" value={consultantId} onChange={e => setConsultantId(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-xs" />
+                </div>
+                <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Manager ID</label>
+                    <input type="number" placeholder="User ID" value={managerId} onChange={e => setManagerId(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-xs" />
+                </div>
+                 <div className="flex items-end">
+                     <LoadingButton onClick={load} loading={loading} className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm">
+                        Apply Filters
+                     </LoadingButton>
+                 </div>
+            </div>
+
+            {error ? <div className="p-4 bg-red-50 text-red-700 rounded-md border border-red-100">{error}</div> : null}
+
+            {data && (
+                <div className="space-y-8">
+                     <Section
+                        title="Offers"
+                        rows={data.offers?.rows}
+                        total={data.offers?.total}
+                        byStatus={data.offers?.byStatus}
+                    />
+                    <Section
+                        title="Reservations"
+                        rows={data.reservations?.rows}
+                        total={data.reservations?.total}
+                        byStatus={data.reservations?.byStatus}
+                    />
+                    <Section
+                        title="Contracts"
+                        rows={data.contracts?.rows}
+                        total={data.contracts?.total}
+                        byStatus={data.contracts?.byStatus}
+                    />
+                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-100">
+                         <h3 className="text-lg font-medium text-gray-900 mb-4">Summary Totals</h3>
+                         <SummaryFooter data={data} />
+                    </div>
+                </div>
+            )}
         </div>
-
-        {error ? <p style={errorText}>{error}</p> : null}
-
-        {data && (
-          <>
-            <Section
-              title="Offers"
-              rows={data.offers?.rows}
-              total={data.offers?.total}
-              byStatus={data.offers?.byStatus}
-            />
-            <Section
-              title="Reservations"
-              rows={data.reservations?.rows}
-              total={data.reservations?.total}
-              byStatus={data.reservations?.byStatus}
-            />
-            <Section
-              title="Contracts"
-              rows={data.contracts?.rows}
-              total={data.contracts?.total}
-              byStatus={data.contracts?.byStatus}
-            />
-            <SummaryFooter data={data} />
-          </>
-        )}
-      </div>
+      </main>
     </div>
   )
 }
 
 function Section({ title, rows, total, byStatus }) {
   const list = rows || []
-  const numCols = list.length > 0 ? Object.keys(list[0]).length : 1
-
+  
   const breakdown =
     Array.isArray(byStatus) && byStatus.length
       ? byStatus
@@ -293,48 +321,53 @@ function Section({ title, rows, total, byStatus }) {
   const displayTotal = Number(total || 0) || computedTotal
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ margin: 0 }}>{title}</h3>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontWeight: 700 }}>
-            Total:{' '}
-            {Number(displayTotal || 0).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
-          </div>
-          {breakdown.length > 0 && (
-            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.9 }}>
-              {breakdown.map((b, idx) => (
-                <span key={b.status || idx} style={{ marginLeft: idx ? 12 : 0 }}>
-                  {(b.status || 'unknown').toUpperCase()}: {b.count} /{' '}
-                  {formatTotal(b.total_nominal)}
-                </span>
-              ))}
-            </div>
-          )}
+    <div className="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+             <h3 className="text-lg font-medium leading-6 text-gray-900">{title}</h3>
+             <div className="text-right">
+                  <div className="text-lg font-bold text-gray-900">
+                    Total: <span className="font-mono">{Number(displayTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  {breakdown.length > 0 && (
+                    <div className="mt-1 text-xs text-gray-500 flex flex-wrap gap-x-4 gap-y-1 justify-end">
+                        {breakdown.map((b, idx) => (
+                            <span key={b.status || idx}>
+                                <span className="uppercase font-semibold text-gray-700">{b.status || 'unknown'}</span>: {b.count} <span className="text-gray-400">|</span> {formatTotal(b.total_nominal)}
+                            </span>
+                        ))}
+                    </div>
+                  )}
+             </div>
         </div>
-      </div>
-      <div style={tableWrap}>
-        <table style={table}>
-          <thead>
-            <tr>
-              {list.length > 0 && Object.keys(list[0]).map(k => <th key={k} style={th}>{k}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((r, idx) => (
-              <tr key={idx}>
-                {Object.keys(r).map(k => <td key={k} style={td}>{formatCell(k, r[k])}</td>)}
-              </tr>
-            ))}
-            {list.length === 0 && (
-              <tr><td style={{ ...td, textAlign: 'center' }} colSpan={numCols}>No records.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+
+        <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-300">
+                 <thead className="bg-gray-50">
+                    <tr>
+                         {list.length > 0 && Object.keys(list[0]).map(k => (
+                             <th key={k} scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap">
+                                 {k.replace(/_/g, ' ')}
+                             </th>
+                         ))}
+                         {list.length === 0 && <th className="px-3 py-3.5 text-left text-xs text-gray-500">No Data</th>}
+                    </tr>
+                 </thead>
+                 <tbody className="divide-y divide-gray-200 bg-white">
+                    {list.map((r, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                            {Object.keys(r).map(k => (
+                                <td key={k} className="whitespace-nowrap px-3 py-4 text-xs text-gray-600">
+                                    {formatCell(k, r[k])}
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                    {list.length === 0 && (
+                        <tr><td className="px-3 py-8 text-center text-sm text-gray-500" colSpan="100%">No records found for this period.</td></tr>
+                    )}
+                 </tbody>
+            </table>
+        </div>
     </div>
   )
 }
@@ -365,16 +398,22 @@ function SummaryFooter({ data }) {
   const contractsCount = contractsRows.length
 
   return (
-    <div style={{ marginTop: 12, fontWeight: 700 }}>
-      <div>
-        Offers: {offersCount} — {formatTotal(offersTotal)}
-      </div>
-      <div>
-        Reservations: {reservationsCount} — {formatTotal(reservationsTotal)}
-      </div>
-      <div>
-        Contracts: {contractsCount} — {formatTotal(contractsTotal)}
-      </div>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+       <div className="bg-white p-4 rounded border border-gray-200 shadow-sm">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Offers</div>
+            <div className="text-2xl font-bold text-gray-900">{offersCount}</div>
+            <div className="text-sm text-gray-600 mt-1 font-mono">{formatTotal(offersTotal)} <span className="text-xs text-gray-400">EGP</span></div>
+       </div>
+       <div className="bg-white p-4 rounded border border-gray-200 shadow-sm">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Reservations</div>
+            <div className="text-2xl font-bold text-gray-900">{reservationsCount}</div>
+            <div className="text-sm text-gray-600 mt-1 font-mono">{formatTotal(reservationsTotal)} <span className="text-xs text-gray-400">EGP</span></div>
+       </div>
+       <div className="bg-white p-4 rounded border border-gray-200 shadow-sm">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Contracts</div>
+            <div className="text-2xl font-bold text-gray-900">{contractsCount}</div>
+            <div className="text-sm text-gray-600 mt-1 font-mono">{formatTotal(contractsTotal)} <span className="text-xs text-gray-400">EGP</span></div>
+       </div>
     </div>
   )
 }
@@ -393,4 +432,3 @@ function formatCell(k, v) {
   }
   return String(v ?? '')
 }
-

@@ -2,9 +2,9 @@ import React from 'react'
 
 function InfoRow({ label, value }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151' }}>
-      <span style={{ opacity: 0.8 }}>{label}</span>
-      <span style={{ fontWeight: 600 }}>{value}</span>
+    <div className="flex justify-between items-center text-xs text-gray-600">
+      <span className="opacity-80">{label}</span>
+      <span className="font-semibold text-gray-900">{value}</span>
     </div>
   )
 }
@@ -19,29 +19,6 @@ function InfoRow({ label, value }) {
 export function UnitCard({ unit, mode = 'compact', onCreateOffer }) {
   const isBlocked = String(unit.unit_status || '').toUpperCase() === 'BLOCKED'
 
-  const box = {
-    position: 'relative',
-    border: '1px solid #e6eaf0',
-    borderRadius: 12,
-    padding: 12,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    background: '#fff',
-    overflow: 'hidden'
-  }
-  const header = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'baseline'
-  }
-  const title = {
-    fontWeight: 700,
-    color: '#1f2937'
-  }
-  const sub = { fontSize: 12, color: '#6b7280' }
-  const btn = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
-
   const modelLabel = unit.model_code ? `${unit.model_code} — ${unit.model_name || ''}`.trim() : (unit.model_name || '')
   const gardenLabel = unit.garden_available ? `Yes (${Number(unit.garden_area || 0).toLocaleString()} m²)` : 'No'
   const roofLabel = unit.roof_available ? `Yes (${Number(unit.roof_area || 0).toLocaleString()} m²)` : 'No'
@@ -52,49 +29,27 @@ export function UnitCard({ unit, mode = 'compact', onCreateOffer }) {
   const isAvailable = statusUpper === 'AVAILABLE'
 
   return (
-    <div style={box}>
+    <div className="relative bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-3 hover:shadow-md transition-shadow overflow-hidden">
       {isBlocked && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: 0.08
-          }}
-        >
-          <div
-            style={{
-              padding: '6px 40px',
-              borderRadius: 999,
-              border: '2px solid #dc2626',
-              color: '#dc2626',
-              fontWeight: 800,
-              letterSpacing: 4,
-              fontSize: 26,
-              transform: 'rotate(-18deg)',
-              textTransform: 'uppercase',
-              background: 'transparent'
-            }}
-          >
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.08] z-0">
+          <div className="px-10 py-2 rounded-full border-2 border-red-600 text-red-600 font-extrabold tracking-[0.2em] text-2xl -rotate-12 uppercase">
             Blocked
           </div>
         </div>
       )}
-      <div style={header}>
+      
+      <div className="flex justify-between items-baseline z-10 relative">
         <div>
-          <div style={title}>{unit.code}</div>
-          <div style={sub}>{unit.unit_type_name || unit.unit_type || ''} • {modelLabel || '-'}</div>
+          <div className="font-bold text-gray-900 text-lg">{unit.code}</div>
+          <div className="text-xs text-gray-500">{unit.unit_type_name || unit.unit_type || ''} • {modelLabel || '-'}</div>
         </div>
-        <div style={{ fontWeight: 700, color: '#A97E34' }}>
+        <div className="font-bold text-primary text-base">
           {totalExclMaint} {unit.currency || 'EGP'}
         </div>
       </div>
 
       {/* Core facts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 z-10 relative">
         <InfoRow label="Area" value={unit.area ? `${Number(unit.area).toLocaleString()} m²` : '-'} />
         <InfoRow label="Orientation" value={unit.orientation || '-'} />
         <InfoRow label="Garden" value={gardenLabel} />
@@ -103,30 +58,32 @@ export function UnitCard({ unit, mode = 'compact', onCreateOffer }) {
 
       {/* Expanded: price breakdown */}
       {mode === 'expanded' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-2 border-t border-gray-100 z-10 relative">
           <InfoRow label="Base" value={Number(unit.base_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} />
-          <InfoRow label="Garden" value={Number(unit.garden_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} />
-          <InfoRow label="Roof" value={Number(unit.roof_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} />
+          <InfoRow label="Garden Pay" value={Number(unit.garden_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} />
+          <InfoRow label="Roof Pay" value={Number(unit.roof_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} />
           <InfoRow label="Storage" value={Number(unit.storage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} />
-          <InfoRow label="Garage" value={Number(unit.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} />
-          <InfoRow label="Maintenance" value={Number(unit.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} />
+          <InfoRow label="Garage Pay" value={Number(unit.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} />
+          <InfoRow label="Maint." value={Number(unit.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} />
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={sub}>Status: {statusLabel || '-'}</span>
+      <div className="flex justify-between items-center pt-2 mt-auto z-10 relative">
+        <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Status: <span className={isAvailable ? 'text-green-600' : isBlocked ? 'text-red-600' : 'text-blue-600'}>{statusLabel || '-'}</span></span>
         {typeof onCreateOffer === 'function' ? (
           <button
-            style={{
-              ...btn,
-              ...(isBlocked ? { opacity: 0.6, cursor: 'not-allowed', borderColor: '#fecaca', color: '#b91c1c' } : {})
-            }}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary transition-colors
+              ${isBlocked 
+                 ? 'border-red-200 text-red-700 bg-red-50 opacity-60 cursor-not-allowed' 
+                 : 'border-gray-200 text-primary bg-white hover:bg-primary/5 hover:border-primary/30'
+              }`}
             onClick={() => {
               if (isBlocked) return
               onCreateOffer(unit)
             }}
+            disabled={isBlocked}
           >
-            {isAvailable ? 'Create Offer' : 'Create Offer'}
+            Create Offer
           </button>
         ) : null}
       </div>
@@ -142,18 +99,13 @@ export function UnitCard({ unit, mode = 'compact', onCreateOffer }) {
  * - mode: 'compact' | 'expanded'
  */
 export function UnitCardsGrid({ units, onCreateOffer, mode = 'compact' }) {
-  const grid = {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: 12
-  }
   return (
-    <div style={grid}>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {(units || []).map(u => (
         <UnitCard key={u.id} unit={u} onCreateOffer={onCreateOffer} mode={mode} />
       ))}
       {(units || []).length === 0 && (
-        <div style={{ color: '#6b7280', fontSize: 12 }}>No units found.</div>
+        <div className="col-span-full text-center text-gray-500 text-sm py-8">No units found.</div>
       )}
     </div>
   )

@@ -1,31 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import BrandHeader from '../lib/BrandHeader.jsx'
+import AdminSidebar from '../components/AdminSidebar.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { th, td, ctrl, btn, btnPrimary, btnDanger, tableWrap, table, pageContainer, pageTitle, metaText, errorText } from '../lib/ui.js'
 import LoadingButton from '../components/LoadingButton.jsx'
 import SkeletonRow from '../components/SkeletonRow.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
-
-/*
-  Unit Models management for Financial Manager:
-  Fields:
-    - model_name (string, required)
-    - area (number, required)
-    - orientation (enum: left, right, whole_floor)
-    - has_garden (boolean)
-    - garden_area (number, optional)
-    - has_roof (boolean)
-    - roof_area (number, optional)
-    - garage_area (number, optional)
-    - garage_standard_code (string, optional)
-
-  API (assumed):
-    GET    /api/inventory/unit-models?search=&page=&pageSize=
-    POST   /api/inventory/unit-models
-    PATCH  /api/inventory/unit-models/:id
-    DELETE /api/inventory/unit-models/:id
-    GET    /api/inventory/unit-models/:id/audit   (for history)
-*/
 
 export default function UnitModels() {
   const [items, setItems] = useState([])
@@ -49,6 +27,9 @@ export default function UnitModels() {
     roof_area: '',
     garage_area: ''
   })
+
+  // user role (for sidebar)
+  const role = JSON.parse(localStorage.getItem('auth_user') || '{}')?.role
 
   // History modal
   const [historyForId, setHistoryForId] = useState(null)
@@ -233,214 +214,340 @@ export default function UnitModels() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-  const handleLogout = async () => {
-    try {
-      const rt = localStorage.getItem('refresh_token')
-      if (rt) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: rt })
-        }).catch(() => {})
-      }
-    } finally {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('auth_user')
-      window.location.href = '/login'
-    }
-  }
-
   return (
-    <div>
-      <BrandHeader onLogout={handleLogout} />
-      <div style={pageContainer}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={pageTitle}>Unit Models</h2>
-          {editingId ? <button type="button" onClick={resetForm} style={btn}>New</button> : null}
-        </div>
-
-        <div style={{ border: '1px solid #e6eaf0', borderRadius: 12, padding: 10, marginBottom: 10, background: '#fff' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-            <span style={metaText}>
-              Note: All create/update/delete requests require approval from Top Management before they take effect.
-              You can track status under <a href="/admin/unit-model-changes">Unit Model Changes</a>.
-            </span>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <LoadingButton
-                type="button"
-                onClick={() => { window.location.href = '/admin/unit-model-changes?status=pending_approval' }}
-              >
-                View Pending Requests
-              </LoadingButton>
-              <LoadingButton
-                type="button"
-                onClick={() => { window.location.href = '/admin/unit-model-changes?status=rejected' }}
-              >
-                View Rejected Requests
-              </LoadingButton>
-              <LoadingButton
-                type="button"
-                onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-              >
-                New Model Change Request
-              </LoadingButton>
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-7xl mx-auto space-y-6">
+            
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Unit Models</h2>
+                    <p className="text-sm text-gray-500 mt-1">Define standard unit specifications and areas.</p>
+                </div>
+                {editingId ? (
+                    <button 
+                        type="button" 
+                        onClick={resetForm} 
+                        className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    >
+                        Create New
+                    </button>
+                ) : null}
             </div>
-          </div>
+
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                <span className="text-sm text-blue-900">
+                    <strong>Note:</strong> Create/update/delete requests require Top Management approval.
+                    Track status in <a href="/admin/unit-model-changes" className="underline hover:text-blue-700">Unit Model Changes</a>.
+                </span>
+                <div className="flex flex-wrap gap-2">
+                     <a href="/admin/unit-model-changes?status=pending_approval" className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200">
+                        View Pending
+                     </a>
+                     <a href="/admin/unit-model-changes?status=rejected" className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200">
+                        View Rejected
+                     </a>
+                     <button  
+                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50"
+                        onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); resetForm(); }}
+                     >
+                        New Request
+                     </button>
+                </div>
+            </div>
+
+            {/* Form */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+                <form onSubmit={save} className="space-y-4">
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <input 
+                            placeholder="Model Name (Required)" 
+                            value={form.model_name} 
+                            onChange={e => setForm(s => ({ ...s, model_name: e.target.value }))} 
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                            required
+                        />
+                         <input 
+                            placeholder="Model Code" 
+                            value={form.model_code || ''} 
+                            onChange={e => setForm(s => ({ ...s, model_code: e.target.value }))} 
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                        />
+                         <input 
+                            type="number"
+                            placeholder="Area (m², Required)" 
+                            value={form.area} 
+                            onChange={e => setForm(s => ({ ...s, area: e.target.value }))} 
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                            required
+                        />
+                        <select 
+                            value={form.orientation} 
+                            onChange={e => setForm(s => ({ ...s, orientation: e.target.value }))} 
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                        >
+                            {orientationOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end border-t border-gray-100 pt-4">
+                         {/* Garden */}
+                         <div>
+                            <label className="flex items-center gap-2 mb-2">
+                                <input 
+                                    type="checkbox" 
+                                    checked={form.has_garden} 
+                                    onChange={e => setForm(s => ({ ...s, has_garden: e.target.checked, garden_area: e.target.checked ? s.garden_area : '' }))} 
+                                    className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                                />
+                                <span className="text-sm font-medium text-gray-700">Has Garden</span>
+                            </label>
+                            <input 
+                                type="number" 
+                                placeholder="Garden Area (m²)" 
+                                value={form.garden_area} 
+                                onChange={e => setForm(s => ({ ...s, garden_area: e.target.value }))} 
+                                disabled={!form.has_garden}
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm disabled:bg-gray-100"
+                            />
+                         </div>
+
+                         {/* Roof */}
+                         <div>
+                            <label className="flex items-center gap-2 mb-2">
+                                <input 
+                                    type="checkbox" 
+                                    checked={form.has_roof} 
+                                    onChange={e => setForm(s => ({ ...s, has_roof: e.target.checked, roof_area: e.target.checked ? s.roof_area : '' }))} 
+                                    className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                                />
+                                <span className="text-sm font-medium text-gray-700">Has Roof</span>
+                            </label>
+                            <input 
+                                type="number" 
+                                placeholder="Roof Area (m²)" 
+                                value={form.roof_area} 
+                                onChange={e => setForm(s => ({ ...s, roof_area: e.target.value }))} 
+                                disabled={!form.has_roof}
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm disabled:bg-gray-100"
+                            />
+                         </div>
+
+                         {/* Garage */}
+                         <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Garage Area</label>
+                            <input 
+                                type="number" 
+                                placeholder="m²" 
+                                value={form.garage_area} 
+                                onChange={e => setForm(s => ({ ...s, garage_area: e.target.value }))} 
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                            />
+                         </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-4">
+                        <span className="text-xs text-gray-500">
+                             Garden and Roof areas are optional if not applicable.
+                        </span>
+                        <div className="flex gap-3">
+                             {editingId ? (
+                                <button 
+                                    type="button" 
+                                    onClick={resetForm} 
+                                    className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                                >
+                                    Cancel
+                                </button>
+                             ) : null}
+                             <LoadingButton 
+                                type="submit" 
+                                loading={saving} 
+                                className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm"
+                            >
+                                {saving ? 'Submitting…' : (editingId ? 'Submit Update' : 'Submit Create')}
+                            </LoadingButton>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            {/* Filters */}
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-center justify-between">
+                <input 
+                    placeholder="Search models…" 
+                    value={search} 
+                    onChange={e => setSearch(e.target.value)} 
+                    className="block w-full md:w-64 rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                />
+                <select 
+                    value={pageSize} 
+                    onChange={e => setPageSize(Number(e.target.value))} 
+                    className="block w-20 rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                </select>
+            </div>
+
+            {error && (
+                 <div className="rounded-md bg-red-50 p-4">
+                    <div className="flex">
+                         <span className="material-symbols-outlined text-red-400 mr-2">error</span>
+                         <div className="text-sm text-red-700">{error}</div>
+                    </div>
+                </div>
+            )}
+
+            {/* Table */}
+            <div className="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-300">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 sm:pl-6">ID</th>
+                          <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Model Name</th>
+                          <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Code</th>
+                          <th scope="col" className="px-3 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Area (m²)</th>
+                          <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Orientation</th>
+                          <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Garden</th>
+                          <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Roof</th>
+                          <th scope="col" className="px-3 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Garage Area</th>
+                          <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Created</th>
+                          <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Updated</th>
+                          <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 bg-white">
+                        {loading && (
+                           Array.from({ length: pageSize }).map((_, i) => (
+                            <tr key={i} className="animate-pulse">
+                                <td colSpan={11} className="px-3 py-4"><SkeletonRow widths={['lg']} /></td>
+                            </tr>
+                           ))
+                        )}
+                        {!loading && items.map(it => (
+                            <tr key={it.id} className="hover:bg-gray-50 transition-colors">
+                                <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{it.id}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900 font-medium">{it.model_name}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{it.model_code}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 text-right">{Number(it.area || 0).toLocaleString()}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 capitalize">{String(it.orientation || '').replace(/_/g, ' ')}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{it.has_garden ? `Yes${it.garden_area ? ` (${it.garden_area} m²)` : ''}` : 'No'}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{it.has_roof ? `Yes${it.roof_area ? ` (${it.roof_area} m²)` : ''}` : 'No'}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 text-right">{it.garage_area || 0}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 text-xs">{it.created_at ? new Date(it.created_at).toLocaleString() : '—'}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 text-xs">{it.updated_at ? new Date(it.updated_at).toLocaleString() : '—'}</td>
+                                <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                                    <div className="flex gap-2 justify-end">
+                                        <button onClick={() => startEdit(it)} className="text-primary hover:text-primary/80">Edit</button>
+                                        <button onClick={() => openHistory(it.id)} className="text-gray-600 hover:text-gray-900">History</button>
+                                        <button onClick={() => remove(it.id)} className="text-red-600 hover:text-red-900">Delete</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {items.length === 0 && !loading && (
+                            <tr><td colSpan={11} className="px-3 py-8 text-center text-sm text-gray-500">No models found.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-lg shadow-sm">
+                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                    <div>
+                        <p className="text-sm text-gray-700">
+                            Showing page <span className="font-medium">{page}</span> of <span className="font-medium">{totalPages}</span> — <span className="font-medium">{total}</span> total
+                        </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={() => setPage(1)} disabled={page === 1 || loading} className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">First</button>
+                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading} className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Previous</button>
+                        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || loading} className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Next</button>
+                        <button onClick={() => setPage(totalPages)} disabled={page >= totalPages || loading} className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Last</button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
-        <form onSubmit={save} style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
-          <input placeholder="Model Name" value={form.model_name} onChange={e => setForm(s => ({ ...s, model_name: e.target.value }))} style={ctrl} required />
-          <input placeholder="Model Code" value={form.model_code || ''} onChange={e => setForm(s => ({ ...s, model_code: e.target.value }))} style={ctrl} />
-          <input type="number" placeholder="Area (m²)" value={form.area} onChange={e => setForm(s => ({ ...s, area: e.target.value }))} style={ctrl} required />
-          <select value={form.orientation} onChange={e => setForm(s => ({ ...s, orientation: e.target.value }))} style={ctrl}>
-            {orientationOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="checkbox" checked={form.has_garden} onChange={e => setForm(s => ({ ...s, has_garden: e.target.checked, garden_area: e.target.checked ? s.garden_area : '' }))} />
-            <span style={metaText}>With Garden?</span>
-          </label>
-          <input type="number" placeholder="Garden Area (m²)" value={form.garden_area} onChange={e => setForm(s => ({ ...s, garden_area: e.target.value }))} style={ctrl} disabled={!form.has_garden} />
-          <div>
-            <LoadingButton type="submit" loading={saving} variant="primary">{saving ? 'Submitting…' : (editingId ? 'Submit Update' : 'Submit Create')}</LoadingButton>
-            {editingId ? <LoadingButton type="button" onClick={resetForm} style={btn}>Cancel</LoadingButton> : null}
-          </div>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="checkbox" checked={form.has_roof} onChange={e => setForm(s => ({ ...s, has_roof: e.target.checked, roof_area: e.target.checked ? s.roof_area : '' }))} />
-            <span style={metaText}>With Roof?</span>
-          </label>
-          <input type="number" placeholder="Roof Area (m²)" value={form.roof_area} onChange={e => setForm(s => ({ ...s, roof_area: e.target.value }))} style={ctrl} disabled={!form.has_roof} />
-          <input type="number" placeholder="Garage Area (m²)" value={form.garage_area} onChange={e => setForm(s => ({ ...s, garage_area: e.target.value }))} style={ctrl} />
-          <div style={{ gridColumn: '1 / span 6' }}>
-            <span style={metaText}>
-              You can mark both Garden and Roof if applicable. Areas are optional when unchecked.
-            </span>
-          </div>
-        </form>
-
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-          <input placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} style={ctrl} />
-          <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} style={ctrl}>
-            <option value={10}>10</option>
-            <option value={20}>20</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-        </div>
-
-        {error ? <p style={errorText}>{error}</p> : null}
-
-        <div style={tableWrap}>
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>ID</th>
-                <th style={th}>Model Name</th>
-                <th style={th}>Model Code</th>
-                <th style={th}>Area (m²)</th>
-                <th style={th}>Orientation</th>
-                <th style={th}>Garden</th>
-                <th style={th}>Roof</th>
-                <th style={th}>Garage Area</th>
-                <th style={th}>Created</th>
-                <th style={th}>Updated</th>
-                <th style={th}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <>
-                  {Array.from({ length: pageSize }).map((_, i) => (
-                    <SkeletonRow key={i} widths={['sm','lg','lg','sm','sm','sm','sm','sm','lg','lg','lg']} tdStyle={td} />
-                  ))}
-                </>
-              )}
-              {!loading && items.map(it => (
-                <tr key={it.id}>
-                  <td style={td}>{it.id}</td>
-                  <td style={td}>{it.model_name}</td>
-                  <td style={td}>{it.model_code}</td>
-                  <td style={td}>{Number(it.area || 0).toLocaleString()}</td>
-                  <td style={td}>{String(it.orientation || '').replace(/_/g, ' ')}</td>
-                  <td style={td}>{it.has_garden ? `Yes${it.garden_area ? ` (${it.garden_area} m²)` : ''}` : 'No'}</td>
-                  <td style={td}>{it.has_roof ? `Yes${it.roof_area ? ` (${it.roof_area} m²)` : ''}` : 'No'}</td>
-                  <td style={td}>{it.garage_area || 0}</td>
-                  <td style={td}>{it.created_at ? new Date(it.created_at).toLocaleString() : '—'}</td>
-                  <td style={td}>{it.updated_at ? new Date(it.updated_at).toLocaleString() : '—'}</td>
-                  <td style={{ ...td, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <LoadingButton onClick={() => startEdit(it)}>Edit</LoadingButton>
-                    <LoadingButton onClick={() => openHistory(it.id)}>History</LoadingButton>
-                    <LoadingButton onClick={() => remove(it.id)} style={btnDanger}>Delete</LoadingButton>
-                  </td>
-                </tr>
-              ))}
-              {items.length === 0 && !loading && (
-                <tr>
-                  <td style={td} colSpan={10}>No models.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-          <span style={metaText}>
-            Page {page} of {totalPages} — {total} total
-          </span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <LoadingButton onClick={() => setPage(1)} disabled={page === 1 || loading}>First</LoadingButton>
-            <LoadingButton onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}>Prev</LoadingButton>
-            <LoadingButton onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || loading}>Next</LoadingButton>
-            <LoadingButton onClick={() => setPage(totalPages)} disabled={page >= totalPages || loading}>Last</LoadingButton>
-          </div>
-        </div>
-
+        {/* History Modal */}
         {historyForId !== null && (
-          <div className="fixed inset-0" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-            <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 800 }}>
-              <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Change History — Model #{historyForId}</h3>
-                <LoadingButton onClick={closeHistory}>Close</LoadingButton>
-              </div>
-              <div style={{ padding: 12, maxHeight: '65vh', overflowY: 'auto' }}>
-                {historyLoading ? (
-                  <div style={metaText}>Loading…</div>
-                ) : historyItems.length === 0 ? (
-                  <div style={metaText}>No history found.</div>
-                ) : (
-                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                    {historyItems.map(h => (
-                      <li key={h.id} style={{ borderBottom: '1px solid #f2f5fa', padding: '8px 0' }}>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                          <strong>{h.action || 'update'}</strong>
-                          {h._kind === 'change' ? (
-                            <span style={{ fontSize: 12, padding: '2px 6px', borderRadius: 6, background: h._status === 'rejected' ? '#fee2e2' : '#fef3c7', color: '#374151' }}>
-                              {h._status}
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: 12, padding: '2px 6px', borderRadius: 6, background: '#dcfce7', color: '#065f46' }}>
-                              applied
-                            </span>
-                          )}
-                          <span style={metaText}>— {h.created_at ? new Date(h.created_at).toLocaleString() : ''}</span>
-                        </div>
-                        <div style={metaText}>By: {h.changed_by_email || h.changed_by || ''}</div>
-                        <div style={{ fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                          {h.details ? (typeof h.details === 'string' ? h.details : JSON.stringify(h.details, null, 2)) : ''}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div style={{ padding: '10px 14px', borderTop: '1px solid #e5e7eb', textAlign: 'right' }}>
-                <LoadingButton onClick={closeHistory} variant="primary">Close</LoadingButton>
-              </div>
+          <div className="fixed inset-0 z-[2000] overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+            <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={closeHistory}></div>
+                <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full sm:p-6" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center mb-5">
+                        <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">Change History — Model #{historyForId}</h3>
+                        <button 
+                            onClick={closeHistory}
+                            type="button" 
+                            className="bg-white rounded-md text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                        >
+                            <span className="sr-only">Close</span>
+                             <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+
+                    <div className="mt-2 max-h-[60vh] overflow-y-auto">
+                         {historyLoading ? (
+                              <div className="space-y-4">
+                                <SkeletonRow widths={['lg']} tdStyle={{ padding: 0 }} />
+                                <SkeletonRow widths={['md','lg']} tdStyle={{ padding: 0 }} />
+                            </div>
+                         ) : historyItems.length === 0 ? (
+                            <p className="text-sm text-gray-500 italic">No history found.</p>
+                         ) : (
+                             <ul className="space-y-4">
+                                {historyItems.map((h, idx) => (
+                                    <li key={h.id || idx} className="bg-gray-50 rounded-md p-3 text-sm">
+                                        <div className="flex gap-2 items-center flex-wrap mb-1">
+                                            <span className="font-bold text-gray-800 uppercase text-xs tracking-wide">{h.action || 'update'}</span>
+                                            {h._kind === 'change' ? (
+                                                <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold ${h._status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                    {h._status}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold bg-green-100 text-green-800">
+                                                    Applied
+                                                </span>
+                                            )}
+                                            <span className="text-gray-400 text-xs ml-auto">{h.created_at ? new Date(h.created_at).toLocaleString() : ''}</span>
+                                        </div>
+                                         <div className="text-gray-600 text-xs mb-2">By: {h.changed_by_email || h.changed_by || 'Unknown'}</div>
+                                         {h.details && (
+                                            <div className="bg-white border border-gray-200 rounded p-2 text-xs font-mono text-gray-700 whitespace-pre-wrap overflow-x-auto">
+                                                {typeof h.details === 'string' ? h.details : JSON.stringify(h.details, null, 2)}
+                                            </div>
+                                         )}
+                                    </li>
+                                ))}
+                             </ul>
+                         )}
+                    </div>
+
+                     <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-1 sm:gap-3 sm:grid-flow-row-dense">
+                        <button 
+                            type="button" 
+                            className="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:col-start-1 sm:text-sm"
+                            onClick={closeHistory}
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
             </div>
           </div>
         )}
-      </div>
+      </main>
     </div>
   )
 }

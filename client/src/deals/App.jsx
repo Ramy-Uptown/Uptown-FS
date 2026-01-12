@@ -1,6 +1,6 @@
 import React from 'react'
 import { Routes, Route } from 'react-router-dom'
-import BrandHeader from '../lib/BrandHeader.jsx'
+import AdminSidebar from '../components/AdminSidebar.jsx'
 import Dashboard from './Dashboard.jsx'
 import CreateDeal from './CreateDeal.jsx'
 import DealDetail from './DealDetail.jsx'
@@ -14,51 +14,34 @@ import BlockRequests from './BlockRequests.jsx'
 import ReservationsQueue from './ReservationsQueue.jsx'
 import InventoryList from './InventoryList.jsx'
 import PaymentPlanEdits from './PaymentPlanEdits.jsx'
-import ContractsList from './ContractsList.jsx'
-import ContractDetail from './ContractDetail.jsx'
 
 export default function DealsApp() {
-  const handleLogout = async () => {
-    try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-      const rt = localStorage.getItem('refresh_token')
-      if (rt) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: rt })
-        }).catch(() => {})
-      }
-    } finally {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('auth_user')
-      window.location.href = '/login'
-    }
-  }
+  // Logout logic moved to AdminSidebar
 
   return (
-    <div>
-      <BrandHeader title={import.meta.env.VITE_APP_TITLE || 'Uptown Financial System'} onLogout={handleLogout} />
-      <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-        <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="create" element={<CreateDeal />} />
-        <Route path=":id" element={<DealDetail />} />
-        <Route path="my-proposals" element={<MyProposals />} />
-        <Route path="team-proposals" element={<TeamProposals />} />
-        <Route path="approvals" element={<Approvals />} />
-        <Route path="queues" element={<PaymentPlanQueues />} />
-        <Route path="offer-progress" element={<OfferProgress />} />
-        <Route path="current-blocks" element={<CurrentBlocks />} />
-        <Route path="block-requests" element={<BlockRequests />} />
-        <Route path="reservations-queue" element={<ReservationsQueue />} />
-        <Route path="inventory" element={<InventoryList />} />
-        <Route path="plan-edits" element={<PaymentPlanEdits />} />
-        {/* Contracts list/detail live under /contracts at the top router, not under /deals.
-            These routes are not added here to avoid path confusion. */}
-      </Routes>
-      </div>
+    <div className="flex h-screen w-full bg-background-light font-sans overflow-hidden">
+      <AdminSidebar />
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-background-light relative">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+           <div className="max-w-7xl mx-auto">
+             <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="create" element={<CreateDeal />} />
+                <Route path=":id" element={<DealDetail />} />
+                <Route path="my-proposals" element={<MyProposals />} />
+                <Route path="team-proposals" element={<TeamProposals />} />
+                <Route path="approvals" element={<Approvals />} />
+                <Route path="queues" element={<PaymentPlanQueues />} />
+                <Route path="offer-progress" element={<OfferProgress />} />
+                <Route path="current-blocks" element={<CurrentBlocks />} />
+                <Route path="block-requests" element={<BlockRequests />} />
+                <Route path="reservations-queue" element={<ReservationsQueue />} />
+                <Route path="inventory" element={<InventoryList />} />
+                <Route path="plan-edits" element={<PaymentPlanEdits />} />
+             </Routes>
+           </div>
+        </div>
+      </main>
     </div>
   )
 }

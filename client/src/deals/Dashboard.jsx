@@ -7,11 +7,6 @@ import SkeletonRow from '../components/SkeletonRow.jsx'
 import * as XLSX from 'xlsx'
 import { useLoader } from '../lib/loaderContext.jsx'
 
-const th = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 13, color: '#475569', background: '#f9fbfd' }
-const td = { padding: 10, borderBottom: '1px solid #f2f5fa', fontSize: 14 }
-const ctrl = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6' }
-const btn = { padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer' }
-
 export default function Dashboard() {
   const [deals, setDeals] = useState([])
   const [error, setError] = useState('')
@@ -313,17 +308,33 @@ export default function Dashboard() {
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <h2 style={{ marginTop: 0 }}>All Deals</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <a href="/deals/inventory" style={{ ...btn, textDecoration: 'none', display: 'inline-block' }}>Browse Inventory</a>
-          <a href="/deals/create" style={{ ...btn, textDecoration: 'none', display: 'inline-block' }}>Create Offer</a>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+           <h2 className="text-3xl font-display font-bold text-primary tracking-wide">All Deals</h2>
+           <p className="text-sm text-gray-500 mt-1">Manage and track all sales proposals.</p>
+        </div>
+        
+        <div className="flex flex-wrap gap-3">
+          <a href="/deals/inventory" className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+             <span className="material-symbols-outlined text-[20px] mr-2">apartment</span>
+             Browse Inventory
+          </a>
+          <a href="/deals/create" className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90">
+             <span className="material-symbols-outlined text-[20px] mr-2">add_circle</span>
+             Create Offer
+          </a>
           {(() => {
             try {
               const u = JSON.parse(localStorage.getItem('auth_user') || '{}')
               if (['sales_manager','property_consultant','financial_manager'].includes(u?.role)) {
-                return <a href="/deals/block-requests" style={{ ...btn, textDecoration: 'none', display: 'inline-block' }}>Block Requests</a>
+                return (
+                    <a href="/deals/block-requests" className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        <span className="material-symbols-outlined text-[20px] mr-2">block</span>
+                        Block Requests
+                    </a>
+                )
               }
             } catch {}
             return null
@@ -332,209 +343,293 @@ export default function Dashboard() {
       </div>
 
       {unitIdFilter && (
-        <div style={{ marginTop: 4, marginBottom: 8, padding: '6px 8px', borderRadius: 8, border: '1px solid #fed7aa', background: '#fffbeb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: '#9a3412' }}>
-            Showing deals created for unit_id = {unitIdFilter}. Other filters are ignored while this view is active.
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setUnitIdFilter(null)
-              navigate('/deals', { replace: true })
-            }}
-            style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer', fontSize: 12, color: '#475569' }}
-          >
-            Clear unit filter
-          </button>
+        <div className="rounded-md bg-amber-50 p-4 border border-amber-200">
+          <div className="flex">
+            <div className="flex-shrink-0">
+               <span className="material-symbols-outlined text-amber-500">filter_list</span>
+            </div>
+            <div className="ml-3 flex-1 md:flex md:justify-between">
+              <p className="text-sm text-amber-700">
+                Showing deals created for <strong>unit_id = {unitIdFilter}</strong>. Other filters are ignored while this view is active.
+              </p>
+              <p className="mt-3 text-sm md:mt-0 md:ml-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUnitIdFilter(null)
+                    navigate('/deals', { replace: true })
+                  }}
+                  className="whitespace-nowrap font-medium text-amber-700 hover:text-amber-600"
+                >
+                  Clear unit filter <span aria-hidden="true">&rarr;</span>
+                </button>
+              </p>
+            </div>
+          </div>
         </div>
       )}
-
-      <p style={{ marginTop: 4, marginBottom: 8, fontSize: 12, color: '#64748b' }}>
-        Note: <strong>Deal Status</strong> shows the approval state of the offer itself (draft, pending_approval, approved, rejected).
-        <br />
-        <strong>Unit Availability</strong> shows the live status of the underlying unit (AVAILABLE, BLOCKED, etc.) from Inventory.
-      </p>
 
       {approverBanner.show && (
-        <div style={{ margin: '8px 0 12px', padding: '10px 12px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <span style={{ color: '#9a3412', marginRight: 8 }}>You have pending approvals in your queue.</span>
-            <a href={approverBanner.url} style={{ color: '#1f6feb', textDecoration: 'none', fontWeight: 600 }}>Review Now</a>
+        <div className="rounded-md bg-orange-50 p-4 border border-orange-200 shadow-sm animate-fade-in">
+          <div className="flex">
+            <div className="flex-shrink-0">
+               <span className="material-symbols-outlined text-orange-500">notifications_active</span>
+            </div>
+            <div className="ml-3 flex-1 md:flex md:justify-between">
+              <p className="text-sm text-orange-800">
+                You have pending approvals in your queue.
+              </p>
+              <div className="mt-3 flex gap-4 md:mt-0 md:ml-6">
+                 <a href={approverBanner.url} className="whitespace-nowrap font-medium text-orange-800 hover:text-orange-900">
+                    Review Now <span aria-hidden="true">&rarr;</span>
+                 </a>
+                 <button
+                    type="button"
+                    onClick={() => {
+                      const todayKey = new Date().toISOString().slice(0, 10)
+                      localStorage.setItem('approver_queue_banner_dismissed', todayKey)
+                      setApproverBanner({ show: false, url: '' })
+                    }}
+                    className="whitespace-nowrap text-sm text-orange-600 hover:text-orange-500"
+                  >
+                    Hide for today
+                  </button>
+              </div>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              const todayKey = new Date().toISOString().slice(0, 10)
-              localStorage.setItem('approver_queue_banner_dismissed', todayKey)
-              setApproverBanner({ show: false, url: '' })
-            }}
-            style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d9e6', background: '#fff', cursor: 'pointer', color: '#475569' }}
-          >
-            Hide for today
-          </button>
         </div>
       )}
 
-      <div style={{ display: 'grid', gap: 8, marginBottom: 12, gridTemplateColumns: 'repeat(6, 1fr)' }}>
-        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }} style={ctrl} disabled={loading}>
-          <option value="">All statuses</option>
-          <option value="draft">draft</option>
-          <option value="pending_approval">pending_approval</option>
-          <option value="approved">approved</option>
-          <option value="rejected">rejected</option>
-        </select>
-        <input placeholder="Search title…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
-        <input placeholder="Creator email…" value={creatorEmail} onChange={e => { setCreatorEmail(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
-        <input placeholder="Reviewer email…" value={reviewerEmail} onChange={e => { setReviewerEmail(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
-        <input placeholder="Approver email…" value={approverEmail} onChange={e => { setApproverEmail(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
-        <input placeholder="Unit type…" value={unitType} onChange={e => { setUnitType(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
-        <input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
-        <input type="date" value={endDate} onChange={e => { setEndDate(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
-        <input type="number" placeholder="Min amount" value={minAmount} onChange={e => { setMinAmount(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
-        <input type="number" placeholder="Max amount" value={maxAmount} onChange={e => { setMaxAmount(e.target.value); setPage(1) }} style={ctrl} disabled={loading} />
-        <select value={sortBy} onChange={e => { setSortBy(e.target.value); setPage(1) }} style={ctrl} disabled={loading}>
-          <option value="id">Sort by id</option>
-          <option value="title">Sort by title</option>
-          <option value="amount">Sort by amount</option>
-          <option value="status">Sort by status</option>
-          <option value="created_at">Sort by created</option>
-          <option value="updated_at">Sort by updated</option>
-        </select>
-        <select value={sortDir} onChange={e => { setSortDir(e.target.value); setPage(1) }} style={ctrl} disabled={loading}>
-          <option value="desc">desc</option>
-          <option value="asc">asc</option>
-        </select>
-        <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }} style={ctrl} disabled={loading}>
-          <option value={10}>10</option>
-          <option value={20}>20</option>
-          <option value={50}>50</option>
-        </select>
-        <LoadingButton onClick={() => load(1)} loading={loading} style={btn}>Refresh</LoadingButton>
+      {/* Filters */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+             <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading}>
+                <option value="">All statuses</option>
+                <option value="draft">Draft</option>
+                <option value="pending_approval">Pending Approval</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+            </select>
+            <input placeholder="Search title…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading} />
+            <input placeholder="Creator email…" value={creatorEmail} onChange={e => { setCreatorEmail(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading} />
+            <input placeholder="Reviewer email…" value={reviewerEmail} onChange={e => { setReviewerEmail(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading} />
+            <input placeholder="Approver email…" value={approverEmail} onChange={e => { setApproverEmail(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading} />
+            <input placeholder="Unit type…" value={unitType} onChange={e => { setUnitType(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading} />
+            
+            <input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading} />
+            <input type="date" value={endDate} onChange={e => { setEndDate(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading} />
+            <input type="number" placeholder="Min amount" value={minAmount} onChange={e => { setMinAmount(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading} />
+            <input type="number" placeholder="Max amount" value={maxAmount} onChange={e => { setMaxAmount(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading} />
+            
+            <select value={sortBy} onChange={e => { setSortBy(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading}>
+                <option value="id">Sort by ID</option>
+                <option value="title">Sort by Title</option>
+                <option value="amount">Sort by Amount</option>
+                <option value="status">Sort by Status</option>
+                <option value="created_at">Sort by Created</option>
+                <option value="updated_at">Sort by Updated</option>
+            </select>
+            <select value={sortDir} onChange={e => { setSortDir(e.target.value); setPage(1) }} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" disabled={loading}>
+                <option value="desc">Desc</option>
+                <option value="asc">Asc</option>
+            </select>
+          </div>
+          <div className="flex justify-end mt-4">
+             <LoadingButton 
+                onClick={() => load(1)} 
+                loading={loading} 
+                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+             >
+                <span className="material-symbols-outlined text-[18px] mr-2">refresh</span>
+                Refresh
+             </LoadingButton>
+          </div>
       </div>
-      {error ? <p style={{ color: '#e11d48' }}>{error}</p> : null}
-      <div style={{ overflow: 'auto', border: '1px solid #e6eaf0', borderRadius: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={th}>ID</th>
-              <th style={th}>Title</th>
-              <th style={th}>Amount</th>
-              <th style={th}>Deal Status</th>
-              <th style={th}>Unit Availability</th>
-              <th style={th}>Unit Type</th>
-              <th style={th}>Creator</th>
-              <th style={th}>Offer Date</th>
-              <th style={th}>First Payment Date</th>
-              <th style={th}>Created</th>
-              <th style={th}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <>
-                {Array.from({ length: pageSize }).map((_, i) => (
-                  <SkeletonRow key={i} widths={['sm','lg','sm','sm','sm','lg','lg','sm','sm','sm','sm']} tdStyle={td} />
-                ))}
-              </>
-            )}
-            {!loading && deals.map(d => {
-              const offerDate = d?.details?.calculator?.inputs?.offerDate || '';
-              const firstPaymentDate = d?.details?.calculator?.inputs?.firstPaymentDate || offerDate || '';
-              const liveUnitStatus = d?.current_unit_status || '';
-              const liveAvailable = typeof d?.current_unit_available === 'boolean' ? d.current_unit_available : null;
-              let unitAvailability = '-';
-              if (liveUnitStatus) {
-                unitAvailability = liveUnitStatus;
-              } else if (liveAvailable === true) {
-                unitAvailability = 'AVAILABLE';
-              } else if (liveAvailable === false) {
-                unitAvailability = 'UNAVAILABLE';
-              }
-              const dealStatus = d.status || '';
-              let dealStatusColor = '#64748b';
-              if (dealStatus === 'approved') dealStatusColor = '#16a34a';
-              else if (dealStatus === 'pending_approval') dealStatusColor = '#2563eb';
-              else if (dealStatus === 'rejected') dealStatusColor = '#dc2626';
 
-              let unitAvailabilityColor = '#64748b';
-              const upperAvail = (unitAvailability || '').toString().toUpperCase();
-              if (upperAvail === 'AVAILABLE') unitAvailabilityColor = '#16a34a';
-              else if (upperAvail === 'BLOCKED') unitAvailabilityColor = '#dc2626';
-              else if (upperAvail && upperAvail !== '-') unitAvailabilityColor = '#2563eb';
+      {error && (
+         <div className="rounded-md bg-red-50 p-4">
+            <div className="flex">
+               <div className="flex-shrink-0">
+                  <span className="material-symbols-outlined text-red-400">error</span>
+               </div>
+               <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">Error loading deals</h3>
+                  <div className="mt-2 text-sm text-red-700">
+                     <p>{error}</p>
+                  </div>
+               </div>
+            </div>
+         </div>
+      )}
 
-              return (
-                <tr key={d.id}>
-                  <td style={td}>{d.id}</td>
-                  <td style={td}>{d.title}</td>
-                  <td style={{ ...td, textAlign: 'right' }}>{Number(d.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                  <td style={td}>
-                    <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 12, background: '#f1f5f9', color: dealStatusColor, textTransform: 'none' }}>
-                      {dealStatus}
-                    </span>
-                  </td>
-                  <td style={td}>
-                    <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 12, background: '#f8fafc', color: unitAvailabilityColor, textTransform: 'uppercase', letterSpacing: 0.3 }}>
-                      {unitAvailability}
-                    </span>
-                  </td>
-                  <td style={td}>{d.unit_type || '-'}</td>
-                  <td style={td}>{d.created_by_email || '-'}</td>
-                  <td style={td}>{offerDate}</td>
-                  <td style={td}>{firstPaymentDate}</td>
-                  <td style={td}>{d.created_at ? new Date(d.created_at).toLocaleString() : ''}</td>
-                  <td style={{ ...td, display: 'flex', gap: 8 }}>
-                    <Link to={`/deals/${d.id}`} style={{ textDecoration: 'none', color: '#1f6feb' }}>View</Link>
-                    {(user?.role === 'sales_manager' && d.status === 'pending_approval') && (
-                      <LoadingButton
-                        onClick={async () => {
-                          if (!window.confirm(`Approve deal #${d.id}?`)) return
-                          try {
-                            const resp = await fetchWithAuth(`${API_URL}/api/deals/${d.id}/approve`, { method: 'POST' })
-                            if (!resp.ok) {
-                                const data = await resp.json()
-                                notifyError(data?.error?.message || 'Approval failed')
-                            } else {
-                                notifySuccess('Deal approved')
-                                load(page)
-                            }
-                          } catch (e) { notifyError(e, 'Approval failed') }
-                        }}
-                        style={{ ...btn, color: '#10b981', borderColor: '#10b981' }}
-                      >
-                        Approve
-                      </LoadingButton>
+      {/* Table */}
+      <div className="shadow ring-1 ring-black ring-opacity-5 md:rounded-lg overflow-hidden bg-white">
+        <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-300">
+                <thead className="bg-gray-50">
+                    <tr>
+                        <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 sm:pl-6">ID</th>
+                        <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Title</th>
+                        <th scope="col" className="px-3 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Amount</th>
+                        <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Deal Status</th>
+                        <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Unit Status</th>
+                        <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Type</th>
+                        <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Creator</th>
+                        <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Created</th>
+                        <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                    {loading && (
+                        Array.from({ length: pageSize }).map((_, i) => (
+                             <tr key={i} className="animate-pulse">
+                                 <td className="py-4 pl-4 pr-3 sm:pl-6"><div className="h-4 bg-gray-200 rounded w-8"></div></td>
+                                 <td className="px-3 py-4"><div className="h-4 bg-gray-200 rounded w-48"></div></td>
+                                 <td className="px-3 py-4"><div className="h-4 bg-gray-200 rounded w-24 ml-auto"></div></td>
+                                 <td className="px-3 py-4"><div className="h-6 bg-gray-200 rounded-full w-20"></div></td>
+                                 <td className="px-3 py-4"><div className="h-6 bg-gray-200 rounded-full w-24"></div></td>
+                                 <td className="px-3 py-4"><div className="h-4 bg-gray-200 rounded w-16"></div></td>
+                                 <td className="px-3 py-4"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
+                                 <td className="px-3 py-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                                 <td className="px-3 py-4 text-right"><div className="h-4 bg-gray-200 rounded w-8 ml-auto"></div></td>
+                             </tr>
+                        ))
                     )}
-                    <LoadingButton
-                      onClick={() => handleDelete(d)}
-                      loading={deletingIds.has(d.id)}
-                      style={{ ...btn, border: '1px solid #dc2626', color: '#dc2626' }}
-                    >
-                      Delete
-                    </LoadingButton>
-                  </td>
-                </tr>
-              )
-            })}
-            {deals.length === 0 && !loading && (
-              <tr>
-                <td style={td} colSpan={10}>No deals match your criteria.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-        <span style={{ color: '#64748b', fontSize: 12 }}>
-          Page {page} of {totalPages} — {total} total
-        </span>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <LoadingButton onClick={() => setPage(1)} disabled={page === 1 || loading}>First</LoadingButton>
-          <LoadingButton onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}>Prev</LoadingButton>
-          <LoadingButton onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading}>Next</LoadingButton>
-          <LoadingButton onClick={() => setPage(totalPages)} disabled={page === totalPages || loading}>Last</LoadingButton>
-          <LoadingButton onClick={exportCSV} loading={loading} disabled={total === 0}>Export CSV</LoadingButton>
-          <LoadingButton onClick={exportXLSX} loading={loading} disabled={total === 0}>Export Excel</LoadingButton>
+                    {!loading && deals.map((d) => {
+                        const offerDate = d?.details?.calculator?.inputs?.offerDate || '';
+                        const liveUnitStatus = d?.current_unit_status || '';
+                        const liveAvailable = typeof d?.current_unit_available === 'boolean' ? d.current_unit_available : null;
+                        let unitAvailability = '-';
+                        if (liveUnitStatus) unitAvailability = liveUnitStatus;
+                        else if (liveAvailable === true) unitAvailability = 'AVAILABLE';
+                        else if (liveAvailable === false) unitAvailability = 'UNAVAILABLE';
+
+                        let unitStatusClasses = "bg-gray-100 text-gray-800";
+                        const ua = unitAvailability.toUpperCase();
+                        if (ua === 'AVAILABLE') unitStatusClasses = "bg-green-100 text-green-800";
+                        else if (ua === 'BLOCKED') unitStatusClasses = "bg-red-100 text-red-800";
+                        else if (ua !== '-') unitStatusClasses = "bg-blue-100 text-blue-800";
+
+                        let dealStatusClasses = "bg-gray-100 text-gray-800";
+                        if (d.status === 'approved') dealStatusClasses = "bg-green-100 text-green-800";
+                        else if (d.status === 'pending_approval') dealStatusClasses = "bg-blue-100 text-blue-800";
+                        else if (d.status === 'rejected') dealStatusClasses = "bg-red-100 text-red-800";
+
+                        return (
+                            <tr key={d.id} className="hover:bg-gray-50 transition-colors">
+                                <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{d.id}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900 font-medium">{d.title}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900 text-right font-mono">{Number(d.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                    <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${dealStatusClasses}`}>
+                                        {d.status}
+                                    </span>
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                    <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${unitStatusClasses}`}>
+                                        {unitAvailability}
+                                    </span>
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{d.unit_type || '-'}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{d.created_by_email || '-'}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{d.created_at ? new Date(d.created_at).toLocaleDateString() : ''}</td>
+                                <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6 flex justify-end gap-2 items-center">
+                                    <Link to={`/deals/${d.id}`} className="text-primary hover:text-primary/80 font-bold block mt-1">
+                                        View
+                                    </Link>
+                                    {(user?.role === 'sales_manager' && d.status === 'pending_approval') && (
+                                        <button
+                                            onClick={async () => {
+                                                if (!window.confirm(`Approve deal #${d.id}?`)) return
+                                                try {
+                                                    const resp = await fetchWithAuth(`${API_URL}/api/deals/${d.id}/approve`, { method: 'POST' })
+                                                    if (!resp.ok) {
+                                                        const data = await resp.json()
+                                                        notifyError(data?.error?.message || 'Approval failed')
+                                                    } else {
+                                                        notifySuccess('Deal approved')
+                                                        load(page)
+                                                    }
+                                                } catch (e) { notifyError(e, 'Approval failed') }
+                                            }}
+                                            className="text-green-600 hover:text-green-900 ml-2"
+                                            title="Approve"
+                                        >
+                                            <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => handleDelete(d)}
+                                        disabled={deletingIds.has(d.id)}
+                                        className="text-red-600 hover:text-red-900 ml-2 opacity-60 hover:opacity-100"
+                                        title="Delete"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">delete</span>
+                                    </button>
+                                </td>
+                            </tr>
+                        )
+                    })}
+                     {deals.length === 0 && !loading && (
+                        <tr>
+                            <td colSpan={9} className="px-3 py-8 text-center text-sm text-gray-500">
+                                No deals match your criteria.
+                            </td>
+                        </tr>
+                    )}
+                </tbody>
+            </table>
         </div>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-lg shadow-sm">
+         <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+            <div>
+               <p className="text-sm text-gray-700">
+                  Showing page <span className="font-medium">{page}</span> of <span className="font-medium">{totalPages}</span> — <span className="font-medium">{total}</span> results
+               </p>
+            </div>
+            <div className="flex gap-2">
+                <button
+                    onClick={() => setPage(1)}
+                    disabled={page === 1 || loading}
+                    className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                    First
+                </button>
+                <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1 || loading}
+                    className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                    Previous
+                </button>
+                <button
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages || loading}
+                    className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                    Next
+                </button>
+                <button
+                    onClick={() => setPage(totalPages)}
+                    disabled={page === totalPages || loading}
+                    className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                    Last
+                </button>
+
+                <div className="ml-4 flex gap-2">
+                     <LoadingButton onClick={exportCSV} loading={loading} disabled={total === 0} className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm">
+                        Export CSV
+                     </LoadingButton>
+                     <LoadingButton onClick={exportXLSX} loading={loading} disabled={total === 0} className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm">
+                        Export Excel
+                     </LoadingButton>
+                </div>
+            </div>
+         </div>
       </div>
     </div>
   )
