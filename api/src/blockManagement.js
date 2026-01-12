@@ -1,6 +1,7 @@
 import express from 'express'
 import { pool } from './db.js'
 import { authMiddleware, requireRole } from './authRoutes.js'
+import { emitNotification } from './socket.js'
 import { validate, blockRequestSchema, blockApproveSchema, blockExtendSchema } from './validation.js'
 
 const router = express.Router()
@@ -211,16 +212,24 @@ router.post(
       )
 
       // Notifications
-      // Notify Financial Managers
+      // Notify Financial Managers (Real-time)
       try {
-        await pool.query(
-          `INSERT INTO notifications (user_id, type, ref_table, ref_id, message)
-           SELECT u.id, 'block_request_pending', 'blocks', $1, 'New block request created for unit ' || (SELECT code FROM units WHERE id=$2)
-           FROM users u
-           WHERE u.role = 'financial_manager' AND u.active = TRUE`,
-          [ins.rows[0].id, unitId]
-        )
-      } catch (_) {}
+        const fms = await pool.query("SELECT id FROM users WHERE role='financial_manager' AND active=TRUE")
+        const uCodeRes = await pool.query('SELECT code FROM units WHERE id=$1', [unitId])
+        const uCode = uCodeRes.rows[0]?.code || unitId
+        
+        for (const fm of fms.rows) {
+          await emitNotification(
+            'block_request_pending',
+            fm.id,
+            'blocks',
+            ins.rows[0].id,
+            `New block request created for unit ${uCode}`
+          )
+        }
+      } catch (err) {
+        console.error('Notify FMs error:', err)
+      }
 
       if (decision !== 'ACCEPT') {
         await createNotification('block_override_requested', req.user.id, 'blocks', ins.rows[0].id, 'Block override requested (pending Sales Manager).')
