@@ -24,7 +24,7 @@ export default function FinanceTeam() {
   const [managers, setManagers] = useState([])
 
   const me = JSON.parse(localStorage.getItem('auth_user') || '{}')
-  const canAssign = me?.role === 'admin' || me?.role === 'superadmin'
+  const canAssign = me?.role === 'superadmin'
   const isFinancialManager = me?.role === 'financial_manager'
 
   useEffect(() => {
@@ -186,7 +186,7 @@ export default function FinanceTeam() {
           </div>
         ) : (
           <div style={{ border: '1px solid #ead9bd', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fff' }}>
-            <span style={metaText}>Read-only view. Only Admin and Superadmin can assign members to financial managers.</span>
+            <span style={metaText}>Read-only view. Only Superadmin can assign members to financial managers.</span>
           </div>
         )}
 
