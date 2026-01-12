@@ -467,11 +467,11 @@ router.post(
             <table class="plan-table">
               <thead>
                 <tr>
-                  <th style="width:8%;">#</th>
-                  <th style="width:32%;">${rtl ? 'الوصف' : 'Label'}</th>
-                  <th style="width:22%;">${rtl ? 'القيمة' : 'Amount'}</th>
-                  <th style="width:18%;">${rtl ? 'التاريخ' : 'Date'}</th>
-                  <th style="width:20%;">${
+                  <th style="width:6%;">#</th>
+                  <th style="width:24%;">${rtl ? 'الوصف' : 'Description'}</th>
+                  <th style="width:20%;">${rtl ? 'القيمة' : 'Amount'}</th>
+                  <th style="width:15%;">${rtl ? 'التاريخ' : 'Date'}</th>
+                  <th style="width:35%;">${
                     rtl ? 'المبلغ بالحروف' : 'Amount in Words'
                   }</th>
                 </tr>

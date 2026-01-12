@@ -756,13 +756,37 @@ router.post('/generate-plan', authMiddleware, validate(generatePlanSchema), asyn
 
     const baseDate = effInputs.baseDate || effInputs.contractDate || null
 
+    const getTrans = (text, opts) => {
+      if (lang !== 'ar') return text
+      const map = {
+        'Down Payment': 'الدفعة المقدمة',
+        'Down Payment (Y1 split)': 'دفعة تعاقد (تقسيم السنة الأولى)',
+        'First Year': 'السنة الأولى',
+        'Handover': 'دفعة استلام',
+        'Maintenance Deposit': 'وديعة الصيانة',
+        'Garage Fee': 'رسوم الجراج',
+        'Equal Installment': 'أقساط متساوية',
+        'monthly': 'شهري',
+        'quarterly': 'ربع سنوي',
+        'bi-annually': 'نصف سنوي',
+        'annually': 'سنوي'
+      }
+      if (text.startsWith('Year') && opts) {
+        // dynamic year
+        const f = map[opts.freq] || opts.freq
+        return `السنة ${opts.year} (${f})`
+      }
+      return map[text] || text
+    }
+
     const splitY1 = !!effInputs.splitFirstYearPayments
     if (splitY1) {
       for (const p of (effInputs.firstYearPayments || [])) {
-        pushEntry(p.type === 'dp' ? 'Down Payment (Y1 split)' : 'First Year', p.month, p.amount, baseDate)
+        const lbl = p.type === 'dp' ? 'Down Payment (Y1 split)' : 'First Year'
+        pushEntry(getTrans(lbl), p.month, p.amount, baseDate)
       }
     } else {
-      pushEntry('Down Payment', 0, result.downPaymentAmount, baseDate)
+      pushEntry(getTrans('Down Payment'), 0, result.downPaymentAmount, baseDate)
     }
 
     const subs = effInputs.subsequentYears || []
@@ -778,11 +802,15 @@ router.post('/generate-plan', authMiddleware, validate(generatePlanSchema), asyn
       const per = (Number(y.totalNominal) || 0) / (nInYear || 1)
       const startAfterYear = (splitY1 ? 1 : 0) + idx
       const months = getPaymentMonths(nInYear, y.frequency, startAfterYear)
-      months.forEach((m, i) => pushEntry(`Year ${startAfterYear + 1} (${y.frequency})`, m, per, baseDate))
+      months.forEach((m, i) => {
+        const lbl = getTrans(`Year`, { year: startAfterYear + 1, freq: y.frequency })
+        const fallback = `Year ${startAfterYear + 1} (${y.frequency})`
+        pushEntry(lang === 'ar' ? lbl : fallback, m, per, baseDate)
+      })
     })
 
     if ((Number(effInputs.additionalHandoverPayment) || 0) > 0 && (Number(effInputs.handoverYear) || 0) > 0) {
-      pushEntry('Handover', Number(effInputs.handoverYear) * 12, effInputs.additionalHandoverPayment, baseDate)
+      pushEntry(getTrans('Handover'), Number(effInputs.handoverYear) * 12, effInputs.additionalHandoverPayment, baseDate)
     }
 
     let maintAmt = (Number(unitId) > 0) ? (Number(maintFromPricing) || 0) : (Number(effInputs.maintenancePaymentAmount) || 0)
@@ -813,15 +841,15 @@ router.post('/generate-plan', authMiddleware, validate(generatePlanSchema), asyn
         maintMonth = mNum
       }
     }
-    if (maintAmt > 0) pushEntry('Maintenance Deposit', maintMonth, maintAmt, baseDate)
+    if (maintAmt > 0) pushEntry(getTrans('Maintenance Deposit'), maintMonth, maintAmt, baseDate)
 
     const garAmt = Number(effInputs.garagePaymentAmount) || 0
     const garMonth = Number(effInputs.garagePaymentMonth) || 0
-    if (garAmt > 0) pushEntry('Garage Fee', garMonth, garAmt, baseDate)
+    if (garAmt > 0) pushEntry(getTrans('Garage Fee'), garMonth, garAmt, baseDate)
 
     const eqMonths = result.equalInstallmentMonths || []
     const eqAmt = Number(result.equalInstallmentAmount) || 0
-    eqMonths.forEach((m, i) => pushEntry('Equal Installment', m, eqAmt, baseDate))
+    eqMonths.forEach((m, i) => pushEntry(getTrans('Equal Installment'), m, eqAmt, baseDate))
 
     schedule.sort((a, b) => (a.month - b.month) || a.label.localeCompare(b.label))
 
