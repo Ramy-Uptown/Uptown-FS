@@ -39,6 +39,7 @@ import BulkUnitCreation from './units/BulkUnitCreation.jsx'
 import DraftUnits from './admin/DraftUnits.jsx'
 import SuperAdminHome from './admin/SuperAdminHome.jsx'
 import TeamsHub from './admin/TeamsHub.jsx'
+import NotificationsFullPage from './components/notifications/NotificationsFullPage.jsx'
 
 function RoleBasedRoute({ children, allowedRoles }) {
   const token = localStorage.getItem('auth_token');
@@ -427,7 +428,8 @@ createRoot(document.getElementById('root')).render(
               </RoleBasedRoute>
             }
           />
-          <Route path="/" element={<HomeRedirect />} />
+          <Route path="/notifications" element={<RoleBasedRoute allowedRoles={['property_consultant', 'sales_manager', 'financial_admin', 'financial_manager', 'contract_manager', 'contract_person', 'admin', 'superadmin', 'ceo', 'chairman', 'vice_chairman', 'top_management']}><NotificationsFullPage /></RoleBasedRoute>} />
+        <Route path="/" element={<HomeRedirect />} />
           <Route path="*" element={<Navigate to="/deals" replace />} />
         </Routes>
         <ToastContainer position="top-right" newestOnTop closeOnClick pauseOnHover />

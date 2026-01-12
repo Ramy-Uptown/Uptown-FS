@@ -38,6 +38,9 @@ export default function AdminSidebar() {
 
   // Define menu structure
   const menus = []
+  
+  // Common for all logged-in users
+  menus.push({ label: 'Notifications', to: '/notifications', icon: 'notifications' })
 
   // SUPERADMIN
   if (isSuper) {
