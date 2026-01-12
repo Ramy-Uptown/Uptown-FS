@@ -39,7 +39,7 @@ export default function SuperAdminHome() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 lg:p-12">
-          <div className="max-w-7xl mx-auto">
+          <div className="w-full mx-auto">
             <div className="mb-10">
               <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
                 Administration Home

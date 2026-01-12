@@ -23,7 +23,7 @@ export default function DealsApp() {
       <AdminSidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-background-light relative">
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-           <div className="max-w-7xl mx-auto">
+           <div className="w-full mx-auto">
              <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="create" element={<CreateDeal />} />

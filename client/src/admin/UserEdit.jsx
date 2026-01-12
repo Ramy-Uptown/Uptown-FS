@@ -263,7 +263,7 @@ export default function UserEdit() {
       <div className="flex h-screen bg-gray-50">
         <AdminSidebar role={me?.role} />
          <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
-            <div className="max-w-4xl mx-auto">
+            <div className="w-full mx-auto">
                <h2 className="text-3xl font-display font-bold text-gray-900 mb-6">Edit User</h2>
                {error ? <div className="p-4 bg-red-50 text-red-700 rounded-md border border-red-100">{error}</div> : <div className="text-gray-500">Loading user data...</div>}
             </div>
@@ -279,7 +279,7 @@ export default function UserEdit() {
       <AdminSidebar role={me?.role} />
       
       <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="w-full mx-auto space-y-6">
 
             <div className="flex items-center justify-between">
                 <div>

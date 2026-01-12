@@ -97,7 +97,7 @@ export default function ReservationFormDetail() {
       <AdminSidebar role={role} />
       
       <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="w-full mx-auto space-y-6">
           
           {/* Header */}
           <div className="flex items-center gap-4">

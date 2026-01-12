@@ -162,7 +162,7 @@ export default function UnitHistory() {
       <AdminSidebar role={user?.role} />
       
       <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="w-full mx-auto space-y-6">
 
             <div>
                 <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Unit Lifecycle History</h2>

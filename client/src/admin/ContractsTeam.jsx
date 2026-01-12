@@ -129,7 +129,7 @@ export default function ContractsTeam() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-            <div className="max-w-7xl mx-auto">
+            <div className="w-full mx-auto">
                 <header className="mb-8">
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">Contracts Team</h1>
                     <p className="mt-1 text-sm text-gray-500">Associate Contract Persons with Contract Managers.</p>

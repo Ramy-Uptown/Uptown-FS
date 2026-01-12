@@ -103,7 +103,7 @@ export default function InventoryDrafts() {
       <AdminSidebar role={user?.role} />
       
       <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
-        <div className="max-w-9xl mx-auto space-y-6">
+        <div className="w-full mx-auto space-y-6">
 
             <div className="flex items-center justify-between">
                 <div>
