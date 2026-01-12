@@ -117,7 +117,7 @@ router.get(
       const activeFlag = parseActiveFilter(active)
       if (activeFlag !== null) {
         params.push(activeFlag)
-        where.push(`stm.active = ${params.length}`)
+        where.push(`stm.active = $${params.length}`)
       }
 
       if (consultant_user_id) {
@@ -126,7 +126,7 @@ router.get(
           return bad(res, 400, 'Invalid consultant_user_id')
         }
         params.push(cid)
-        where.push(`stm.consultant_user_id = ${params.length}`)
+        where.push(`stm.consultant_user_id = $${params.length}`)
       }
 
       const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
@@ -579,7 +579,7 @@ router.get(
       const activeFlag = parseActiveFilter(active)
       if (activeFlag !== null) {
         params.push(activeFlag)
-        where.push(`ctm.active = ${params.length}`)
+        where.push(`ctm.active = $${params.length}`)
       }
 
       const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
