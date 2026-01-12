@@ -71,7 +71,7 @@ export default function LivePreview({
 
   // compute summaries here based on preview? Parent can still compute; we leave display minimal here.
   return (
-    <div style={{ ...styles.blockFull, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
+    <div className={styles.blockFull} style={{ border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}>
       <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>Live Preview (Calculation)</h3>
       {/* Parent renders messages/summaries using its computed values; keeping component focused on effect */}
       {/* If you prefer, we can pass summaries and previewError down and render them here */}
