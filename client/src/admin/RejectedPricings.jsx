@@ -1,14 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import BrandHeader from '../lib/BrandHeader.jsx';
+import React, { useEffect, useState } from 'react';
+import AdminSidebar from '../components/AdminSidebar.jsx';
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js';
-import { th, td, ctrl, btn, btnPrimary, btnDanger, btnSuccess, tableWrap, table, pageContainer, pageTitle, metaText, errorText } from '../lib/ui.js';
 import LoadingButton from '../components/LoadingButton.jsx';
 import SkeletonRow from '../components/SkeletonRow.jsx';
 import { notifyError, notifySuccess } from '../lib/notifications.js';
 import ConfirmModal from '../components/ConfirmModal.jsx';
 
 export default function RejectedPricings() {
-  const role = JSON.parse(localStorage.getItem('auth_user') || '{}')?.role;
+  const user = JSON.parse(localStorage.getItem('auth_user') || '{}');
+  const role = user?.role;
   const [pricings, setPricings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -46,24 +46,6 @@ export default function RejectedPricings() {
     }
     load();
   }, []);
-
-  const handleLogout = async () => {
-    try {
-      const rt = localStorage.getItem('refresh_token');
-      if (rt) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: rt })
-        }).catch(() => {});
-      }
-    } finally {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('auth_user');
-      window.location.href = '/login';
-    }
-  };
 
   function startEdit(p) {
     setEditing(p);
@@ -142,173 +124,192 @@ export default function RejectedPricings() {
   }
 
   return (
-    <div>
-      <BrandHeader onLogout={handleLogout} />
-      <div style={pageContainer}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={pageTitle}>Rejected Standard Pricing Requests</h2>
-          <div>
-            <a href="/admin/standard-pricing" style={{ ...btn, textDecoration: 'none', display: 'inline-block' }}>
-              Back to Standard Pricing
-            </a>
-          </div>
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={user?.role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-[1920px] mx-auto space-y-6">
+
+            <div className="flex items-center justify-between">
+                <div>
+                     <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Rejected Pricings</h2>
+                     <p className="text-sm text-gray-500 mt-1">Review, Edit, and Resubmit rejected pricing proposals.</p>
+                </div>
+                <a href="/admin/standard-pricing" className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                   &larr; Back to Standard Pricing
+                </a>
+            </div>
+
+            {role !== 'financial_manager' && (
+                <div className="bg-red-50 p-4 rounded-md text-red-700 border border-red-200">
+                    Only Financial Managers can access this page.
+                </div>
+            )}
+
+            {editing && (
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 transition-all">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 pb-2 border-b border-gray-100">Edit & Resubmit: <span className="text-primary">{editing.model_name}</span></h3>
+                    <form onSubmit={resubmit} className="space-y-6">
+                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Base Unit Price (EGP)</label>
+                                <input type="number" value={price} onChange={e => setPrice(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                             </div>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Garden Price (EGP)</label>
+                                <input
+                                  type="number"
+                                  value={garden_price}
+                                  onChange={e => setGardenPrice(e.target.value)}
+                                  placeholder={editing?.has_garden ? 'e.g. 120,000' : 'N.A (no garden)'}
+                                  disabled={!editing?.has_garden}
+                                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm disabled:bg-gray-50 disabled:text-gray-400"
+                                />
+                             </div>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Roof Price (EGP)</label>
+                                <input
+                                  type="number"
+                                  value={roof_price}
+                                  onChange={e => setRoofPrice(e.target.value)}
+                                  placeholder={editing?.has_roof ? 'e.g. 180,000' : 'N.A (no roof)'}
+                                  disabled={!editing?.has_roof}
+                                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm disabled:bg-gray-50 disabled:text-gray-400"
+                                />
+                             </div>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Storage Price (EGP)</label>
+                                <input type="number" value={storage_price} onChange={e => setStoragePrice(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                             </div>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Garage Price (EGP)</label>
+                                <input type="number" value={garage_price} onChange={e => setGaragePrice(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                             </div>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Maintenance Price (EGP)</label>
+                                <input type="number" value={maintenance_price} onChange={e => setMaintenancePrice(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                             </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 bg-gray-50 p-4 rounded-md border border-gray-200">
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Down Payment (%)</label>
+                                <input type="number" value={dpPercent} onChange={e => setDpPercent(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                             </div>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Duration (years)</label>
+                                <input type="number" value={years} onChange={e => setYears(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                             </div>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
+                                <select value={frequency} onChange={e => setFrequency(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm">
+                                  <option value="monthly">monthly</option>
+                                  <option value="quarterly">quarterly</option>
+                                  <option value="bi-annually">bi-annually</option>
+                                  <option value="annually">annually</option>
+                                </select>
+                             </div>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Annual Rate (%)</label>
+                                <input type="number" value={annualRate} onChange={e => setAnnualRate(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                             </div>
+                        </div>
+
+                        <div className="flex gap-3 justify-end pt-4">
+                             <LoadingButton type="button" onClick={() => setEditing(null)} className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 shadow-sm">
+                                Cancel
+                             </LoadingButton>
+                             <LoadingButton type="submit" className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 shadow-sm">
+                                Resubmit Proposal
+                             </LoadingButton>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {error && <div className="p-4 bg-red-50 text-red-700 rounded-md border border-red-100">{error}</div>}
+
+            <div className="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-300">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 sm:pl-6 sticky left-0 bg-gray-50 z-10">ID</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Model</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Code</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Area</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Price</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Garden</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Roof</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Storage</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Garage</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Maint</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Rejected By</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Reason</th>
+                                <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6 sticky right-0 bg-gray-50 z-10"><span className="sr-only">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                            {loading && Array.from({ length: 5 }).map((_, i) => (
+                                <tr key={i}><td colSpan={13} className="px-3 py-4"><SkeletonRow widths={['lg']} /></td></tr>
+                            ))}
+                            {!loading && pricings.map(p => (
+                                <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
+                                    <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6 sticky left-0 bg-white group-hover:bg-gray-50 z-10 border-r border-gray-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{p.id}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-900">{p.model_name}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-xs text-gray-500 font-mono">{p.model_code || ''}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{Number(p.area || 0).toLocaleString()}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">{Number(p.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{
+                                        (() => {
+                                        const hasGarden = p.has_garden ?? (p.garden_area != null ? Number(p.garden_area) > 0 : null);
+                                        const val = Number(p.garden_price || 0);
+                                        if (hasGarden === false) return <span className="text-gray-300">N.A</span>;
+                                        return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasGarden === false ? 'N.A' : '0.00');
+                                        })()
+                                    }</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{
+                                        (() => {
+                                        const hasRoof = p.has_roof ?? (p.roof_area != null ? Number(p.roof_area) > 0 : null);
+                                        const val = Number(p.roof_price || 0);
+                                        if (hasRoof === false) return <span className="text-gray-300">N.A</span>;
+                                        return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasRoof === false ? 'N.A' : '0.00');
+                                        })()
+                                    }</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{Number(p.storage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{Number(p.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{Number(p.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{p.approved_by_email || ''}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-red-600 italic">{p.reject_reason || p.reason || ''}</td>
+                                    <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6 sticky right-0 bg-white group-hover:bg-gray-50 z-10 border-l border-gray-100 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                         <div className="flex gap-2 justify-end">
+                                            <LoadingButton 
+                                                onClick={() => startEdit(p)}
+                                                className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm"
+                                            >
+                                                Edit
+                                            </LoadingButton>
+                                            <LoadingButton
+                                                onClick={() => setConfirmDelete(p)}
+                                                loading={rowLoading[`delete:${p.id}`]}
+                                                className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-sm"
+                                            >
+                                                Delete
+                                            </LoadingButton>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {!loading && pricings.length === 0 && (
+                                <tr><td colSpan={13} className="px-3 py-8 text-center text-sm text-gray-500">No rejected requests found.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
-
-        {role !== 'financial_manager' ? (
-          <p style={errorText}>Only Financial Managers can access this page.</p>
-        ) : null}
-
-        {editing && (
-          <form onSubmit={resubmit} style={{ border: '1px solid #e6eaf0', borderRadius: 10, padding: 12, marginBottom: 16, background: '#fff' }}>
-            <h3 style={{ marginTop: 0 }}>Edit and Resubmit</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
-              <div>
-                <div style={metaText}>Base Unit Price (EGP)</div>
-                <input type="number" value={price} onChange={e => setPrice(e.target.value)} style={ctrl} />
-              </div>
-              <div>
-                <div style={metaText}>Garden Price (EGP)</div>
-                <input
-                  type="number"
-                  value={garden_price}
-                  onChange={e => setGardenPrice(e.target.value)}
-                  style={ctrl}
-                  placeholder={editing?.has_garden ? 'e.g. 120,000' : 'N.A (no garden)'}
-                  disabled={!editing?.has_garden}
-                />
-              </div>
-              <div>
-                <div style={metaText}>Roof Price (EGP)</div>
-                <input
-                  type="number"
-                  value={roof_price}
-                  onChange={e => setRoofPrice(e.target.value)}
-                  style={ctrl}
-                  placeholder={editing?.has_roof ? 'e.g. 180,000' : 'N.A (no roof)'}
-                  disabled={!editing?.has_roof}
-                />
-              </div>
-              <div>
-                <div style={metaText}>Storage Price (EGP)</div>
-                <input type="number" value={storage_price} onChange={e => setStoragePrice(e.target.value)} style={ctrl} />
-              </div>
-              <div>
-                <div style={metaText}>Garage Price (EGP)</div>
-                <input type="number" value={garage_price} onChange={e => setGaragePrice(e.target.value)} style={ctrl} />
-              </div>
-              <div>
-                <div style={metaText}>Maintenance Price (EGP)</div>
-                <input type="number" value={maintenance_price} onChange={e => setMaintenancePrice(e.target.value)} style={ctrl} />
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
-              <div>
-                <div style={metaText}>Down Payment (%)</div>
-                <input type="number" value={dpPercent} onChange={e => setDpPercent(e.target.value)} style={ctrl} />
-              </div>
-              <div>
-                <div style={metaText}>Plan Duration (years)</div>
-                <input type="number" value={years} onChange={e => setYears(e.target.value)} style={ctrl} />
-              </div>
-              <div>
-                <div style={metaText}>Installment Frequency</div>
-                <select value={frequency} onChange={e => setFrequency(e.target.value)} style={ctrl}>
-                  <option value="monthly">monthly</option>
-                  <option value="quarterly">quarterly</option>
-                  <option value="bi-annually">bi-annually</option>
-                  <option value="annually">annually</option>
-                </select>
-              </div>
-              <div>
-                <div style={metaText}>Annual Financial Rate (%)</div>
-                <input type="number" value={annualRate} onChange={e => setAnnualRate(e.target.value)} style={ctrl} />
-              </div>
-            </div>
-
-            <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-              <LoadingButton type="submit">Resubmit for Approval</LoadingButton>
-              <LoadingButton type="button" onClick={() => setEditing(null)}>Cancel</LoadingButton>
-            </div>
-          </form>
-        )}
-
-        {error ? <p style={errorText}>{error}</p> : null}
-
-        <div style={tableWrap}>
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>ID</th>
-                <th style={th}>Model</th>
-                <th style={th}>Code</th>
-                <th style={th}>Area</th>
-                <th style={th}>Price</th>
-                <th style={th}>Garden</th>
-                <th style={th}>Roof</th>
-                <th style={th}>Storage</th>
-                <th style={th}>Garage</th>
-                <th style={th}>Maintenance</th>
-                <th style={th}>Rejected By</th>
-                <th style={th}>Reason</th>
-                <th style={th}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && Array.from({ length: 10 }).map((_, i) => (
-                <SkeletonRow key={i} widths={['sm','lg','sm','sm','sm','sm','sm','sm','sm','sm','lg','lg','lg']} tdStyle={td} />
-              ))}
-              {!loading && pricings.map(p => (
-                <tr key={p.id}>
-                  <td style={td}>{p.id}</td>
-                  <td style={td}>{p.model_name}</td>
-                  <td style={td}>{p.model_code || ''}</td>
-                  <td style={td}>{Number(p.area || 0).toLocaleString()}</td>
-                  <td style={td}>{Number(p.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{
-                    (() => {
-                      const hasGarden = p.has_garden ?? (p.garden_area != null ? Number(p.garden_area) > 0 : null);
-                      const val = Number(p.garden_price || 0);
-                      if (hasGarden === false) return 'N.A';
-                      return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasGarden === false ? 'N.A' : '0.00');
-                    })()
-                  }</td>
-                  <td style={td}>{
-                    (() => {
-                      const hasRoof = p.has_roof ?? (p.roof_area != null ? Number(p.roof_area) > 0 : null);
-                      const val = Number(p.roof_price || 0);
-                      if (hasRoof === false) return 'N.A';
-                      return val ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (hasRoof === false ? 'N.A' : '0.00');
-                    })()
-                  }</td>
-                  <td style={td}>{Number(p.storage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{Number(p.garage_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{Number(p.maintenance_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td style={td}>{p.approved_by_email || ''}</td>
-                  <td style={td}>{p.reject_reason || p.reason || ''}</td>
-                  <td style={td}>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <LoadingButton onClick={() => startEdit(p)}>Edit & Resubmit</LoadingButton>
-                      <LoadingButton
-                        onClick={() => setConfirmDelete(p)}
-                        loading={rowLoading[`delete:${p.id}`]}
-                        style={btnDanger}
-                      >
-                        Delete
-                      </LoadingButton>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {pricings.length === 0 && !loading && (
-                <tr>
-                  <td style={td} colSpan={13}><span style={metaText}>No rejected requests.</span></td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      </main>
 
       <ConfirmModal
         open={!!confirmDelete}

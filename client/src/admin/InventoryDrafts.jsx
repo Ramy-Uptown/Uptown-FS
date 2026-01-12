@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import BrandHeader from '../lib/BrandHeader.jsx'
+import AdminSidebar from '../components/AdminSidebar.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { th, td, btn, btnPrimary, tableWrap, table, pageContainer, pageTitle, metaText, errorText } from '../lib/ui.js'
 import LoadingButton from '../components/LoadingButton.jsx'
 import SkeletonRow from '../components/SkeletonRow.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
@@ -13,7 +12,8 @@ export default function InventoryDrafts() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(0)
-  // Removed linkMap: model linking requests are disabled; units are created already linked to a model
+  
+  const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
 
   const handleLogout = async () => {
     try {
@@ -42,9 +42,6 @@ export default function InventoryDrafts() {
       if (!resp.ok) throw new Error(data?.error?.message || 'Failed to load drafts')
       const list = data.units || []
       setUnits(list)
-
-      // Model linking requests are disabled; units are created already linked to a model.
-      // No additional fetch required here.
     } catch (e) {
       const msg = e.message || String(e)
       setError(msg)
@@ -101,61 +98,94 @@ export default function InventoryDrafts() {
     }
   }
 
-  // Removed renderLinkCell: drafts now show direct model info from API
-
   return (
-    <div>
-      <BrandHeader onLogout={handleLogout} />
-      <div style={pageContainer}>
-        <h2 style={pageTitle}>Inventory Drafts Approval (Top Management)</h2>
-        {error ? <p style={errorText}>{error}</p> : null}
-        <div style={tableWrap}>
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>ID</th>
-                <th style={th}>Code</th>
-                <th style={th}>Unit Model</th>
-                <th style={th}>Created By</th>
-                <th style={th}>Status</th>
-                <th style={th}>Created At</th>
-                <th style={th}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <>
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <SkeletonRow key={i} widths={['sm','lg','lg','lg','sm','lg','lg']} tdStyle={td} />
-                  ))}
-                </>
-              )}
-              {!loading && units.map(u => (
-                <tr key={u.id}>
-                  <td style={td}>{u.id}</td>
-                  <td style={td}>{u.code}</td>
-                  <td style={td}>{u.model_code ? `${u.model_code} — ${u.model_name || ''}`.trim() : (u.model_name || (u.model_id ? `#${u.model_id}` : '-'))}</td>
-                  <td style={td}>{u.created_by_email || '-'}</td>
-                  <td style={td}>{u.unit_status}</td>
-                  <td style={td}>{(u.created_at || '').replace('T', ' ').replace('Z', '')}</td>
-                  <td style={td}>
-                    <LoadingButton disabled={busyId === u.id} onClick={() => approve(u.id)} loading={busyId === u.id} variant="primary">Approve</LoadingButton>
-                    <LoadingButton disabled={busyId === u.id} onClick={() => reject(u.id)} loading={busyId === u.id} style={btn}>Reject</LoadingButton>
-                  </td>
-                </tr>
-              ))}
-              {units.length === 0 && !loading && (
-                <tr>
-                  <td style={td} colSpan={8}>No drafts awaiting approval.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={user?.role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-9xl mx-auto space-y-6">
+
+            <div className="flex items-center justify-between">
+                <div>
+                     <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Inventory Approvals</h2>
+                     <p className="text-sm text-gray-500 mt-1">Review and approve draft units for release.</p>
+                </div>
+            </div>
+
+            {error && <div className="p-4 bg-red-50 text-red-700 rounded-md border border-red-100">{error}</div>}
+
+            <div className="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-300">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 sm:pl-6">ID</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Code</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Unit Model</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Created By</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Status</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Created At</th>
+                                <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                            {loading && (
+                                Array.from({ length: 5 }).map((_, i) => (
+                                    <tr key={i}><td colSpan={7} className="px-3 py-4"><SkeletonRow widths={['lg']} /></td></tr>
+                                ))
+                            )}
+                            {!loading && units.map(u => (
+                                <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{u.id}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900 font-mono font-semibold">{u.code}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.model_code ? `${u.model_code} — ${u.model_name || ''}`.trim() : (u.model_name || (u.model_id ? `#${u.model_id}` : '-'))}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.created_by_email || '-'}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            {u.unit_status}
+                                        </span>
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{(u.created_at || '').replace('T', ' ').replace('Z', '')}</td>
+                                    <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                                        <div className="flex gap-2 justify-end">
+                                            <LoadingButton 
+                                                disabled={busyId === u.id} 
+                                                onClick={() => approve(u.id)} 
+                                                loading={busyId === u.id} 
+                                                className="inline-flex justify-center items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm"
+                                            >
+                                                Approve
+                                            </LoadingButton>
+                                            <LoadingButton 
+                                                disabled={busyId === u.id} 
+                                                onClick={() => reject(u.id)} 
+                                                loading={busyId === u.id} 
+                                                className="inline-flex justify-center items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm"
+                                            >
+                                                Reject
+                                            </LoadingButton>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {!loading && units.length === 0 && (
+                                <tr><td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-500">No drafts awaiting approval.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex gap-3 text-sm text-blue-900">
+                <span className="material-symbols-outlined text-blue-500">info</span>
+                <div>
+                     Draft units are created by CRM Admin already linked to a Unit Model with approved standard pricing. Once approved by Top Management, they become <strong>AVAILABLE</strong>.
+                </div>
+            </div>
+
         </div>
-        <p style={metaText}>
-          Notes: Draft units are created by CRM Admin already linked to a Unit Model with approved standard pricing. Once approved by Top Management, they become AVAILABLE.
-        </p>
-      </div>
+      </main>
+
       <ConfirmModal
         open={!!confirmApproveId}
         title="Approve Draft Unit"

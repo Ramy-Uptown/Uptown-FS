@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { ctrl, btn, pageContainer, pageTitle, errorText, metaText } from '../lib/ui.js'
-import BrandHeader from '../lib/BrandHeader.jsx'
+import AdminSidebar from '../components/AdminSidebar.jsx'
 import LoadingButton from '../components/LoadingButton.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
 
@@ -9,23 +8,24 @@ export default function SalesAssignments() {
   const [managerId, setManagerId] = useState('')
   const [consultantId, setConsultantId] = useState('')
   const [active, setActive] = useState(true)
-  const [memberships, setMemberships] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  
+  const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
 
+  // We do not have a list assignments endpoint on this page, it focuses on assign/unassign actions
+  // But we could potentially fetch current assignments if needed. For now, matching existing functionality.
   async function load() {
     try {
       setLoading(true)
       setError('')
-      // Minimal fetch: list latest assignments for quick view
       const resp = await fetchWithAuth(`${API_URL}/api/sales?role=property_consultant&page=1&pageSize=100`)
-      const cons = await resp.json()
-      // We do not have a list assignments endpoint, so this page focuses on assign/unassign actions
-      setMemberships(cons.sales || [])
+      await resp.json()
     } catch (e) {
       const msg = e.message || String(e)
       setError(msg)
-      notifyError(e, 'Unable to load assignmen_code    } finally {
+      notifyError(e, 'Unable to load metadata.')
+    } finally {
       setLoading(false)
     }
   }
@@ -76,49 +76,84 @@ export default function SalesAssignments() {
     }
   }
 
-  const handleLogout = async () => {
-    try {
-      const rt = localStorage.getItem('refresh_token')
-      if (rt) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: rt })
-        }).catch(() => {})
-      }
-    } finally {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('auth_user')
-      window.location.href = '/login'
-    }
-  }
-
   return (
-    <div>
-      <BrandHeader onLogout={handleLogout} />
-      <div style={{ ...pageContainer, maxWidth: 800 }}>
-        <h2 style={pageTitle}>Sales Team Assignments</h2>
-        {error ? <p style={errorText}>{error}</p> : null}
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={user?.role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-4xl mx-auto space-y-6">
 
-        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 12 }}>
-          <input placeholder="Manager User ID" value={managerId} onChange={e => setManagerId(e.target.value)} style={ctrl} />
-          <input placeholder="Consultant User ID" value={consultantId} onChange={e => setConsultantId(e.target.value)} style={ctrl} />
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
-            Active
-          </label>
-          <div>
-            <LoadingButton onClick={assign} loading={loading}>Assign</LoadingButton>
-            <LoadingButton onClick={updateActive} loading={loading}>Update</LoadingButton>
-          </div>
+            <div className="flex items-center justify-between">
+                <div>
+                     <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Sales Team Assignments</h2>
+                     <p className="text-sm text-gray-500 mt-1">Manually assign Consultants to Manager teams.</p>
+                </div>
+            </div>
+
+            {error && <div className="p-4 bg-red-50 text-red-700 rounded-md border border-red-100">{error}</div>}
+
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Manager User ID</label>
+                        <input 
+                            placeholder="e.g. 101" 
+                            value={managerId} 
+                            onChange={e => setManagerId(e.target.value)} 
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                        />
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Consultant User ID</label>
+                        <input 
+                            placeholder="e.g. 202" 
+                            value={consultantId} 
+                            onChange={e => setConsultantId(e.target.value)} 
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                        />
+                     </div>
+
+                     <div className="md:col-span-2">
+                         <label className="flex items-center gap-2">
+                             <input 
+                                type="checkbox" 
+                                checked={active} 
+                                onChange={e => setActive(e.target.checked)} 
+                                className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                            />
+                             <span className="text-sm text-gray-700">Active Membership</span>
+                         </label>
+                         <p className="text-xs text-gray-500 mt-1 ml-6">Uncheck to deactivate an existing assignment.</p>
+                     </div>
+                </div>
+
+                <div className="mt-6 flex gap-4 border-t border-gray-100 pt-4">
+                     <LoadingButton 
+                        onClick={assign} 
+                        loading={loading}
+                        className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm"
+                    >
+                        Create Assignment
+                     </LoadingButton>
+                     <LoadingButton 
+                        onClick={updateActive} 
+                        loading={loading}
+                        className="inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm"
+                    >
+                        Update Status
+                     </LoadingButton>
+                </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex gap-3 text-sm text-blue-900">
+                <span className="material-symbols-outlined text-blue-500">info</span>
+                <div>
+                    <strong>Tip:</strong> Use the <a href="/admin/users" className="underline hover:text-blue-700">Users Page</a> or <a href="/admin/sales-teams" className="underline hover:text-blue-700">Sales Teams Page</a> to find User IDs. This tool is for manual overrides or fixes.
+                </div>
+            </div>
+
         </div>
-
-        <p style={metaText}>
-          Tip: Use the Users or Sales Team pages to find user IDs. This page lets you assign/unassign manager-consultant pairs.
-        </p>
-      </div>
+      </main>
     </div>
   )
 }
-

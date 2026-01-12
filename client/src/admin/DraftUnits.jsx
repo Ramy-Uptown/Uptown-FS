@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import BrandHeader from '../lib/BrandHeader.jsx'
+import AdminSidebar from '../components/AdminSidebar.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { th, td, btn, btnPrimary, tableWrap, table, pageContainer, pageTitle, metaText, errorText } from '../lib/ui.js'
 import LoadingButton from '../components/LoadingButton.jsx'
 import SkeletonRow from '../components/SkeletonRow.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
@@ -14,24 +13,8 @@ export default function DraftUnits() {
   const [selectedIds, setSelectedIds] = useState([])
   const [selectedModelId, setSelectedModelId] = useState('')
   const [linking, setLinking] = useState(false)
-
-  const handleLogout = async () => {
-    try {
-      const rt = localStorage.getItem('refresh_token')
-      if (rt) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: rt })
-        }).catch(() => {})
-      }
-    } finally {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('auth_user')
-      window.location.href = '/login'
-    }
-  }
+  
+  const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
 
   async function load() {
     try {
@@ -71,14 +54,14 @@ export default function DraftUnits() {
 
   const handleLinkModel = async () => {
     if (selectedIds.length === 0) {
-      alert('Please select at least one unit')
+      notifyError('Please select at least one unit')
       return
     }
     if (!selectedModelId) {
-      alert('Please select a model')
+      notifyError('Please select a model')
       return
     }
-    if (!confirm(`Link ${selectedIds.length} units to the selected model? TM approval will be required for them to become AVAILABLE.`)) return
+    if (!window.confirm(`Link ${selectedIds.length} units to the selected model? TM approval will be required for them to become AVAILABLE.`)) return
 
     try {
       setLinking(true)
@@ -101,90 +84,108 @@ export default function DraftUnits() {
   }
 
   return (
-    <div>
-      <BrandHeader onLogout={handleLogout} />
-      <div style={pageContainer}>
-        <h2 style={pageTitle}>Draft Units (Pending Model Assignment)</h2>
-        <p style={metaText}>
-          These units were bulk-created and need to be linked to a Unit Model before becoming available.
-        </p>
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={user?.role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-9xl mx-auto space-y-6">
 
-        {error && <p style={errorText}>{error}</p>}
+             <div className="flex items-center justify-between">
+                <div>
+                     <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Draft Units</h2>
+                     <p className="text-sm text-gray-500 mt-1">Pending Model Assignment.</p>
+                </div>
+            </div>
 
-        {/* Bulk Link Controls */}
-        <div style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select
-            value={selectedModelId}
-            onChange={e => setSelectedModelId(e.target.value)}
-            style={{ padding: 8, fontSize: 14, border: '1px solid #cbd5e1', borderRadius: 6, minWidth: 200 }}
-          >
-            <option value="">-- Select Model --</option>
-            {models.map(m => (
-              <option key={m.id} value={m.id}>{m.model_name} ({m.model_code})</option>
-            ))}
-          </select>
-          <LoadingButton
-            onClick={handleLinkModel}
-            disabled={selectedIds.length === 0 || !selectedModelId || linking}
-            loading={linking}
-            variant="primary"
-          >
-            Link {selectedIds.length} Selected to Model
-          </LoadingButton>
-          <span style={{ fontSize: 13, color: '#64748b' }}>
-            {selectedIds.length} of {units.length} selected
-          </span>
+            {error && <div className="p-4 bg-red-50 text-red-700 rounded-md border border-red-100">{error}</div>}
+
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-wrap gap-4 items-center">
+                 <div className="flex-1 min-w-[200px]">
+                     <select
+                        value={selectedModelId}
+                        onChange={e => setSelectedModelId(e.target.value)}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                    >
+                        <option value="">-- Select Model to Assign --</option>
+                        {models.map(m => (
+                            <option key={m.id} value={m.id}>{m.model_name} ({m.model_code})</option>
+                        ))}
+                    </select>
+                 </div>
+                 <div className="flex items-center gap-4">
+                     <span className="text-sm text-gray-500">
+                        {selectedIds.length} unit{selectedIds.length !== 1 ? 's' : ''} selected
+                    </span>
+                     <LoadingButton
+                        onClick={handleLinkModel}
+                        disabled={selectedIds.length === 0 || !selectedModelId || linking}
+                        loading={linking}
+                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 shadow-sm"
+                    >
+                        Link Model
+                    </LoadingButton>
+                 </div>
+            </div>
+
+            <div className="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-300">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th scope="col" className="relative px-6 py-3 w-12">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={selectedIds.length === units.length && units.length > 0} 
+                                        onChange={selectAll}
+                                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                                    />
+                                </th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">ID</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Code</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Type</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Zone</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Block</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Building</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Status</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Created At</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                            {loading && (
+                                Array.from({ length: 10 }).map((_, i) => (
+                                    <tr key={i}><td colSpan={9} className="px-3 py-4"><SkeletonRow widths={['lg']} /></td></tr>
+                                ))
+                            )}
+                            {!loading && units.map(u => (
+                                <tr key={u.id} className={`${selectedIds.includes(u.id) ? 'bg-green-50' : 'hover:bg-gray-50'} transition-colors`}>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedIds.includes(u.id)} 
+                                            onChange={() => toggleSelect(u.id)}
+                                            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                                        />
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.id}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900 font-mono font-semibold">{u.code}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.unit_type || '-'}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.zone || '-'}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.block_sector || '-'}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.building_number || '-'}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.unit_status}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{(u.created_at || '').replace('T', ' ').substring(0, 16)}</td>
+                                </tr>
+                            ))}
+                            {!loading && units.length === 0 && (
+                                <tr><td colSpan={9} className="px-3 py-8 text-center text-sm text-gray-500">No INVENTORY_DRAFT units found. You can create some using Bulk Unit Creation.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
-
-        <div style={tableWrap}>
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>
-                  <input type="checkbox" checked={selectedIds.length === units.length && units.length > 0} onChange={selectAll} />
-                </th>
-                <th style={th}>ID</th>
-                <th style={th}>Code</th>
-                <th style={th}>Type</th>
-                <th style={th}>Zone</th>
-                <th style={th}>Block</th>
-                <th style={th}>Building</th>
-                <th style={th}>Status</th>
-                <th style={th}>Created At</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <>
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <SkeletonRow key={i} widths={['xs','sm','lg','sm','sm','sm','sm','sm','lg']} tdStyle={td} />
-                  ))}
-                </>
-              )}
-              {!loading && units.map(u => (
-                <tr key={u.id} style={{ background: selectedIds.includes(u.id) ? '#f0fdf4' : undefined }}>
-                  <td style={td}>
-                    <input type="checkbox" checked={selectedIds.includes(u.id)} onChange={() => toggleSelect(u.id)} />
-                  </td>
-                  <td style={td}>{u.id}</td>
-                  <td style={{ ...td, fontFamily: 'monospace', fontWeight: 600 }}>{u.code}</td>
-                  <td style={td}>{u.unit_type || '-'}</td>
-                  <td style={td}>{u.zone || '-'}</td>
-                  <td style={td}>{u.block_sector || '-'}</td>
-                  <td style={td}>{u.building_number || '-'}</td>
-                  <td style={td}>{u.unit_status}</td>
-                  <td style={td}>{(u.created_at || '').replace('T', ' ').substring(0, 16)}</td>
-                </tr>
-              ))}
-              {units.length === 0 && !loading && (
-                <tr>
-                  <td style={td} colSpan={9}>No INVENTORY_DRAFT units found. Create some using Bulk Unit Creation.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      </main>
     </div>
   )
 }

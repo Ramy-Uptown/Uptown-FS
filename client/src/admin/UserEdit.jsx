@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import BrandHeader from '../lib/BrandHeader.jsx'
+import AdminSidebar from '../components/AdminSidebar.jsx'
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js'
-import { pageContainer, pageTitle, errorText, metaText, ctrl, btn, btnPrimary, btnDanger, table, th, td, tableWrap } from '../lib/ui.js'
 import LoadingButton from '../components/LoadingButton.jsx'
 import { notifyError, notifySuccess } from '../lib/notifications.js'
+import SkeletonRow from '../components/SkeletonRow.jsx'
 
 export default function UserEdit() {
   const { id } = useParams()
@@ -258,32 +258,16 @@ export default function UserEdit() {
     }
   }
 
-  const handleLogout = async () => {
-    try {
-      const rt = localStorage.getItem('refresh_token')
-      if (rt) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: rt })
-        }).catch(() => {})
-      }
-    } finally {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('auth_user')
-      window.location.href = '/login'
-    }
-  }
-
   if (!user) {
     return (
-      <div>
-        <BrandHeader onLogout={handleLogout} />
-        <div style={{ ...pageContainer, maxWidth: 800 }}>
-          <h2 style={pageTitle}>Edit User</h2>
-          {error ? <p style={errorText}>{error}</p> : <p style={metaText}>Loading…</p>}
-        </div>
+      <div className="flex h-screen bg-gray-50">
+        <AdminSidebar role={me?.role} />
+         <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+            <div className="max-w-4xl mx-auto">
+               <h2 className="text-3xl font-display font-bold text-gray-900 mb-6">Edit User</h2>
+               {error ? <div className="p-4 bg-red-50 text-red-700 rounded-md border border-red-100">{error}</div> : <div className="text-gray-500">Loading user data...</div>}
+            </div>
+         </main>
       </div>
     )
   }
@@ -291,116 +275,155 @@ export default function UserEdit() {
   const isSelf = me.id === user.id
 
   return (
-    <div>
-      <BrandHeader onLogout={handleLogout} />
-      <div style={{ ...pageContainer, maxWidth: 900 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={pageTitle}>Edit User #{user.id}</h2>
-          <button type="button" onClick={() => navigate('/admin/users')} style={btn}>Back</button>
-        </div>
+    <div className="flex h-screen bg-gray-50">
+      <AdminSidebar role={me?.role} />
+      
+      <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+        <div className="max-w-4xl mx-auto space-y-6">
 
-        {error ? <p style={errorText}>{error}</p> : null}
-
-        <form onSubmit={saveBasics} style={{ display: 'grid', gap: 10, marginBottom: 20 }}>
-          <label>
-            <div style={metaText}>Email</div>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={ctrl} required disabled={!isSuperAdmin} />
-            {!isSuperAdmin && <div style={{ ...metaText, marginTop: 4 }}>Only Superadmin can edit email</div>}
-          </label>
-
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <label>
-              <div style={metaText}>Role</div>
-              <select value={role} onChange={e => setRole(e.target.value)} disabled={isSelf || !isSuperAdmin} style={ctrl}>
-                {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} disabled={isSelf} />
-              <span style={metaText}>Active</span>
+            <div className="flex items-center justify-between">
+                <div>
+                     <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Edit User #{user.id}</h2>
+                     <p className="text-sm text-gray-500 mt-1">Update user details, role, and settings.</p>
+                </div>
+                <button type="button" onClick={() => navigate('/admin/users')} className="px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm">
+                   Back to Users
+                </button>
             </div>
-          </div>
 
-          <label>
-            <div style={metaText}>Full Name</div>
-            <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} style={ctrl} disabled={!isSuperAdmin} placeholder="Employee full name" />
-            {!isSuperAdmin && <div style={{ ...metaText, marginTop: 4 }}>Only Superadmin can edit name</div>}
-          </label>
+            {error && <div className="p-4 bg-red-50 text-red-700 rounded-md border border-red-100">{error}</div>}
 
-          <label>
-            <div style={metaText}>Notes</div>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} style={{ ...ctrl, minHeight: 80 }} placeholder="Internal notes..." />
-          </label>
+            <div className="bg-white px-6 py-6 rounded-lg shadow-sm border border-gray-100">
+                <form onSubmit={saveBasics} className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm disabled:bg-gray-50 disabled:text-gray-500" required disabled={!isSuperAdmin} />
+                        {!isSuperAdmin && <p className="mt-1 text-xs text-gray-500">Only Superadmin can edit email.</p>}
+                    </div>
 
-          <label>
-            <div style={metaText}>Metadata (JSON)</div>
-            <textarea value={metaTextState} onChange={e => setMetaTextState(e.target.value)} rows={6} style={{ ...ctrl, fontFamily: 'monospace', minHeight: 120 }} placeholder='{"key":"value"}' />
-            {!isSuperAdmin && <div style={{ ...metaText, marginTop: 4 }}>Note: Name is managed separately and cannot be changed by Admin.</div>}
-          </label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                           <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                           <select value={role} onChange={e => setRole(e.target.value)} disabled={isSelf || !isSuperAdmin} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm disabled:bg-gray-50 disabled:text-gray-500">
+                                {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                           </select>
+                        </div>
+                        <div className="flex items-end pb-3">
+                           <label className="inline-flex items-center">
+                              <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} disabled={isSelf} className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4" />
+                              <span className="ml-2 text-sm text-gray-700">Active Account</span>
+                           </label>
+                        </div>
+                    </div>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="submit" disabled={busy} style={btnPrimary}>Save email/notes/meta</button>
-            <button type="button" onClick={saveRole} disabled={busy || isSelf || !isSuperAdmin} style={btn}>Save role</button>
-            <button type="button" onClick={saveActive} disabled={busy || isSelf} style={btnDanger}>{active ? 'Deactivate' : 'Activate'}</button>
-          </div>
-        </form>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                        <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm disabled:bg-gray-50 disabled:text-gray-500" disabled={!isSuperAdmin} placeholder="Employee full name" />
+                        {!isSuperAdmin && <p className="mt-1 text-xs text-gray-500">Only Superadmin can edit name.</p>}
+                    </div>
+                    
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" placeholder="Internal notes..." />
+                    </div>
 
-        {canAssignManager && (
-          <div style={{ marginTop: 24, marginBottom: 24 }}>
-            <h3 style={{ ...pageTitle, fontSize: 18 }}>Manager Assignment</h3>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <select value={assignManagerId} onChange={e => setAssignManagerId(e.target.value)} style={ctrl}>
-                <option value="">Select manager…</option>
-                {managers.map(m => <option key={m.id} value={m.id}>{m.email} (id {m.id})</option>)}
-              </select>
-              <LoadingButton type="button" onClick={assignManager} disabled={busy || !assignManagerId}>Assign</LoadingButton>
-              {currentManagerId ? <LoadingButton type="button" onClick={clearManager} disabled={busy} style={btnDanger}>Clear</LoadingButton> : null}
-              <span style={metaText}>{currentManagerId ? `Current: ${currentManagerEmail}` : 'No manager assigned'}</span>
+                    <div>
+                         <label className="block text-sm font-medium text-gray-700 mb-1">Metadata (JSON)</label>
+                         <textarea value={metaTextState} onChange={e => setMetaTextState(e.target.value)} rows={6} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm font-mono bg-slate-50" placeholder='{"key":"value"}' />
+                         {!isSuperAdmin && <p className="mt-1 text-xs text-gray-500">Note: Name is managed separately and cannot be changed by Admin.</p>}
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-100">
+                         <LoadingButton type="submit" loading={busy} className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm">
+                            Save basic info
+                         </LoadingButton>
+                         <LoadingButton type="button" onClick={saveRole} disabled={busy || isSelf || !isSuperAdmin} className="inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm disabled:opacity-50">
+                            Save role
+                         </LoadingButton>
+                         <LoadingButton type="button" onClick={saveActive} disabled={busy || isSelf} className={`inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white focus:outline-none focus:ring-2 focus:ring-offset-2 shadow-sm disabled:opacity-50 ${active ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'}`}>
+                            {active ? 'Deactivate' : 'Activate'}
+                         </LoadingButton>
+                    </div>
+                </form>
             </div>
-          </div>
-        )}
 
-        <form onSubmit={savePassword} style={{ display: 'grid', gap: 10, marginTop: 8 }}>
-          <h3 style={{ ...pageTitle, fontSize: 18 }}>Set Password</h3>
-          <input type="password" placeholder="New password" value={pw1} onChange={e => setPw1(e.target.value)} style={ctrl} />
-          <input type="password" placeholder="Confirm new password" value={pw2} onChange={e => setPw2(e.target.value)} style={ctrl} />
-          <button type="submit" disabled={busy} style={btn}>Update Password</button>
-          <p style={metaText}>Note: Updating a password invalidates existing sessions.</p>
-        </form>
+            {canAssignManager && (
+              <div className="bg-white px-6 py-6 rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Manager Assignment</h3>
+                <div className="flex flex-wrap gap-4 items-end">
+                  <div className="flex-1 min-w-[200px]">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Assign Manager</label>
+                      <select value={assignManagerId} onChange={e => setAssignManagerId(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm">
+                        <option value="">Select manager…</option>
+                        {managers.map(m => <option key={m.id} value={m.id}>{m.email} (id {m.id})</option>)}
+                      </select>
+                  </div>
+                  <LoadingButton type="button" onClick={assignManager} disabled={busy || !assignManagerId} className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm">
+                    Assign
+                  </LoadingButton>
+                  {currentManagerId ? (
+                      <LoadingButton type="button" onClick={clearManager} disabled={busy} className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-sm">
+                        Clear
+                      </LoadingButton>
+                   ) : null}
+                </div>
+                <p className="mt-2 text-sm text-gray-500">{currentManagerId ? `Current Manager: ${currentManagerEmail}` : 'No manager assigned'}</p>
+              </div>
+            )}
 
-        <div style={{ marginTop: 24 }}>
-          <h3 style={{ ...pageTitle, fontSize: 18 }}>Audit History</h3>
-          <div style={tableWrap}>
-            <table style={table}>
-              <thead>
-                <tr>
-                  <th style={th}>When</th>
-                  <th style={th}>Action</th>
-                  <th style={th}>By (user id)</th>
-                  <th style={th}>Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {audit.map(a => (
-                  <tr key={a.id}>
-                    <td style={td}>{a.created_at ? new Date(a.created_at).toLocaleString() : ''}</td>
-                    <td style={td}>{a.action}</td>
-                    <td style={td}>{a.changed_by}</td>
-                    <td style={td}>
-                      <code style={{ fontSize: 12 }}>{a.details ? JSON.stringify(a.details) : ''}</code>
-                    </td>
-                  </tr>
-                ))}
-                {audit.length === 0 && (
-                  <tr>
-                    <td style={td} colSpan={4}><span style={metaText}>No audit items.</span></td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+            <div className="bg-white px-6 py-6 rounded-lg shadow-sm border border-gray-100">
+                <form onSubmit={savePassword} className="space-y-4">
+                  <h3 className="text-lg font-medium text-gray-900">Set Password</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <input type="password" placeholder="New password" value={pw1} onChange={e => setPw1(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                      <input type="password" placeholder="Confirm new password" value={pw2} onChange={e => setPw2(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                  </div>
+                  <div className="flex justify-between items-center pt-2">
+                       <p className="text-xs text-gray-500">Note: Updating a password invalidates existing sessions.</p>
+                       <LoadingButton type="submit" disabled={busy} className="inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm">
+                         Update Password
+                       </LoadingButton>
+                  </div>
+                </form>
+            </div>
+
+            <div className="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200">
+                     <h3 className="text-lg font-medium text-gray-900">Audit History</h3>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-300">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th scope="col" className="py-3.5 pl-6 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">When</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Action</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">By (user id)</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                            {audit.map((a, i) => (
+                                <tr key={a.id || i} className="hover:bg-gray-50">
+                                    <td className="whitespace-nowrap py-4 pl-6 pr-3 text-sm text-gray-500">{a.created_at ? new Date(a.created_at).toLocaleString() : ''}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-900">{a.action}</td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{a.changed_by}</td>
+                                    <td className="px-3 py-4 text-xs font-mono text-gray-500 break-all">
+                                        {a.details ? JSON.stringify(a.details) : ''}
+                                    </td>
+                                </tr>
+                            ))}
+                            {audit.length === 0 && (
+                                <tr>
+                                    <td colSpan={4} className="px-6 py-10 text-center text-sm text-gray-500">No audit items found.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
-      </div>
+      </main>
     </div>
   )
 }

@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import BrandHeader from '../lib/BrandHeader.jsx';
+import AdminSidebar from '../components/AdminSidebar.jsx';
 import { fetchWithAuth, API_URL } from '../lib/apiClient.js';
 import LoadingButton from '../components/LoadingButton.jsx';
 import { notifyError, notifySuccess } from '../lib/notifications.js';
 import * as XLSX from 'xlsx';
 import { useLoader } from '../lib/loaderContext.jsx';
+import SkeletonRow from '../components/SkeletonRow.jsx';
 
 /**
  * CommissionsReport Component
  * Displays a filterable report of sales commissions.
  */
 export default function CommissionsReport() {
+    const user = JSON.parse(localStorage.getItem('auth_user') || '{}');
+    
     // State for the commission data, total, and loading/error status
     const [rows, setRows] = useState([]);
     const [total, setTotal] = useState(0);
@@ -98,25 +101,6 @@ export default function CommissionsReport() {
         }));
     };
 
-    // Handler for user logout
-    const handleLogout = async () => {
-        try {
-            const refreshToken = localStorage.getItem('refresh_token');
-            if (refreshToken) {
-                await fetch(`${API_URL}/api/auth/logout`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ refreshToken })
-                }).catch(() => {});
-            }
-        } finally {
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('refresh_token');
-            localStorage.removeItem('auth_user');
-            window.location.href = '/login';
-        }
-    };
-    
     // Helper function to format currency consistently
     const formatCurrency = (amount) => {
         return Number(amount || 0).toLocaleString(undefined, {
@@ -196,97 +180,109 @@ export default function CommissionsReport() {
     }
 
     return (
-        <div className="bg-gray-50 min-h-screen font-sans">
-            <BrandHeader onLogout={handleLogout} />
+        <div className="flex h-screen bg-gray-50">
+            <AdminSidebar role={user?.role} />
 
-            <main className="p-4 sm:p-6 md:p-8">
-                <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6">Commissions Report</h2>
-
-                {/* Filter Controls */}
-                <div className="bg-white p-4 rounded-lg shadow-sm mb-6 print:hidden">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
-                        <div className="flex flex-col">
-                            <label htmlFor="sales_person_id" className="text-sm font-medium text-gray-600 mb-1">Sales Person</label>
-                            <select id="sales_person_id" name="sales_person_id" value={filters.sales_person_id} onChange={handleFilterChange} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
-                                <option value="">All Sales People</option>
-                                {salesPeople.map(s => <option key={s.id} value={s.id}>{s.name} {s.email ? `(${s.email})` : ''}</option>)}
-                            </select>
+            <main className="flex-1 overflow-y-auto ml-0 md:ml-64 p-6">
+                 <div className="max-w-[1920px] mx-auto space-y-6">
+                    
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-3xl font-display font-bold text-primary tracking-wide">Commissions Report</h2>
+                            <p className="text-sm text-gray-500 mt-1">View and filter sales commission data.</p>
                         </div>
-
-                        <div className="flex flex-col">
-                            <label htmlFor="policy_id" className="text-sm font-medium text-gray-600 mb-1">Policy</label>
-                            <select id="policy_id" name="policy_id" value={filters.policy_id} onChange={handleFilterChange} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
-                                <option value="">All Policies</option>
-                                {policies.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </select>
-                        </div>
-                        
-                        <div className="flex flex-col">
-                            <label htmlFor="startDate" className="text-sm font-medium text-gray-600 mb-1">Start Date</label>
-                            <input id="startDate" name="startDate" type="date" value={filters.startDate} onChange={handleFilterChange} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
-                        </div>
-
-                        <div className="flex flex-col">
-                             <label htmlFor="endDate" className="text-sm font-medium text-gray-600 mb-1">End Date</label>
-                            <input id="endDate" name="endDate" type="date" value={filters.endDate} onChange={handleFilterChange} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
-                        </div>
-                        
-                        <LoadingButton onClick={loadReport} loading={isLoading} variant="primary">
-                            {isLoading ? 'Loading...' : 'Apply Filters'}
-                        </LoadingButton>
-                        <LoadingButton onClick={exportXLSX} disabled={!rows || rows.length === 0}>Export XLSX</LoadingButton>
-                        <LoadingButton onClick={exportCSV} disabled={!rows || rows.length === 0}>Export CSV</LoadingButton>
                     </div>
-                </div>
 
-                {/* Display Error Message */}
-                {error && <p className="bg-red-100 text-red-700 p-3 rounded-lg mb-6 text-center">{error}</p>}
+                    {/* Filter Controls */}
+                    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 print:hidden">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
+                            <div className="space-y-1">
+                                <label htmlFor="sales_person_id" className="block text-sm font-medium text-gray-700">Sales Person</label>
+                                <select id="sales_person_id" name="sales_person_id" value={filters.sales_person_id} onChange={handleFilterChange} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm">
+                                    <option value="">All Sales People</option>
+                                    {salesPeople.map(s => <option key={s.id} value={s.id}>{s.name} {s.email ? `(${s.email})` : ''}</option>)}
+                                </select>
+                            </div>
 
-                {/* Data Table */}
-                <div className="overflow-x-auto bg-white rounded-lg shadow-sm">
-                    <table className="w-full min-w-max text-sm text-left text-gray-700">
-                        <thead className="bg-gray-100 text-xs text-gray-700 uppercase">
-                            <tr>
-                                <th scope="col" className="px-6 py-3">ID</th>
-                                <th scope="col" className="px-6 py-3">Deal</th>
-                                <th scope="col" className="px-6 py-3">Sales Person</th>
-                                <th scope="col" className="px-6 py-3">Policy</th>
-                                <th scope="col" className="px-6 py-3 text-right">Amount</th>
-                                <th scope="col" className="px-6 py-3">Calculated At</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map(r => (
-                                <tr key={r.id} className="bg-white border-b hover:bg-gray-50">
-                                    <td className="px-6 py-4 font-medium text-gray-900">{r.id}</td>
-                                    <td className="px-6 py-4">{r.deal_title || r.deal_id}</td>
-                                    <td className="px-6 py-4">{r.sales_name || r.sales_person_id}</td>
-                                    <td className="px-6 py-4">{r.policy_name || r.policy_id}</td>
-                                    <td className="px-6 py-4 text-right font-mono">{formatCurrency(r.amount)}</td>
-                                    <td className="px-6 py-4">{formatDate(r.calculated_at)}</td>
-                                </tr>
-                            ))}
-                            {/* Show a message when loading or when there are no results */}
-                            {isLoading && (
-                                <tr>
-                                    <td colSpan="6" className="px-6 py-10 text-center text-gray-500">Loading data...</td>
-                                </tr>
-                            )}
-                            {rows.length === 0 && !isLoading && (
-                                <tr>
-                                    <td colSpan="6" className="px-6 py-10 text-center text-gray-500">No results found.</td>
-                                </tr>
-                            )}
-                        </tbody>
-                        <tfoot className="bg-gray-100 font-semibold text-gray-800">
-                            <tr>
-                                <td colSpan="4" className="px-6 py-4 text-right">Total</td>
-                                <td className="px-6 py-4 text-right font-mono">{formatCurrency(total)}</td>
-                                <td className="px-6 py-4"></td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
+                            <div className="space-y-1">
+                                <label htmlFor="policy_id" className="block text-sm font-medium text-gray-700">Policy</label>
+                                <select id="policy_id" name="policy_id" value={filters.policy_id} onChange={handleFilterChange} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm">
+                                    <option value="">All Policies</option>
+                                    {policies.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                            </div>
+                            
+                            <div className="space-y-1">
+                                <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">Start Date</label>
+                                <input id="startDate" name="startDate" type="date" value={filters.startDate} onChange={handleFilterChange} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                            </div>
+
+                            <div className="space-y-1">
+                                 <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">End Date</label>
+                                <input id="endDate" name="endDate" type="date" value={filters.endDate} onChange={handleFilterChange} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                            </div>
+                            
+                            <LoadingButton onClick={loadReport} loading={isLoading} className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm w-full">
+                                {isLoading ? 'Loading' : 'Apply Filters'}
+                            </LoadingButton>
+                            
+                            <div className="flex gap-2">
+                                <LoadingButton onClick={exportXLSX} disabled={!rows || rows.length === 0} className="w-1/2 justify-center py-2 px-2 text-xs bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-md shadow-sm font-medium">XLSX</LoadingButton>
+                                <LoadingButton onClick={exportCSV} disabled={!rows || rows.length === 0} className="w-1/2 justify-center py-2 px-2 text-xs bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-md shadow-sm font-medium">CSV</LoadingButton>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Display Error Message */}
+                    {error && <p className="bg-red-50 text-red-700 p-4 rounded-lg border border-red-100">{error}</p>}
+
+                    {/* Data Table */}
+                    <div className="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-300">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 sm:pl-6">ID</th>
+                                        <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Deal</th>
+                                        <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Sales Person</th>
+                                        <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Policy</th>
+                                        <th scope="col" className="px-3 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Amount</th>
+                                        <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Calculated At</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                    {isLoading && (
+                                        Array.from({ length: 5 }).map((_, i) => (
+                                            <tr key={i}><td colSpan={6} className="px-3 py-4"><SkeletonRow widths={['sm','lg','lg','lg','sm','lg']} /></td></tr>
+                                        ))
+                                    )}
+                                    {!isLoading && rows.map(r => (
+                                        <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{r.id}</td>
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">{r.deal_title || r.deal_id}</td>
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{r.sales_name || r.sales_person_id}</td>
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{r.policy_name || r.policy_id}</td>
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm text-right font-mono font-medium text-gray-900">{formatCurrency(r.amount)}</td>
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{formatDate(r.calculated_at)}</td>
+                                        </tr>
+                                    ))}
+                                    {rows.length === 0 && !isLoading && (
+                                        <tr>
+                                            <td colSpan="6" className="px-3 py-12 text-center text-sm text-gray-500">No results found.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                                <tfoot className="bg-gray-50">
+                                    <tr>
+                                        <td colSpan="4" className="py-3.5 pl-4 pr-3 text-right text-sm font-bold text-gray-900 sm:pl-6">Total</td>
+                                        <td className="px-3 py-3.5 text-right text-sm font-bold font-mono text-gray-900">{formatCurrency(total)}</td>
+                                        <td className="px-6 py-4"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                 </div>
             </main>
         </div>
     );
