@@ -108,6 +108,7 @@ export default function AdminSidebar() {
   if (['ceo', 'chairman', 'vice_chairman', 'top_management'].includes(role)) {
       menus.push({ label: 'Dashboard', to: '/deals/queues', icon: 'dashboard' })
       menus.push({ label: 'Approvals', to: '/admin/standard-pricing-approvals', icon: 'check_circle' })
+      menus.push({ label: 'Unit Approvals', to: '/admin/inventory-changes', icon: 'fact_check' })
       menus.push({ label: 'Contracts', to: '/contracts', icon: 'gavel' })
       menus.push({ label: 'Inventory', to: '/admin/inventory', icon: 'apartment' })
       menus.push({ label: 'Logs', to: '/admin/workflow-logs', icon: 'history' })
