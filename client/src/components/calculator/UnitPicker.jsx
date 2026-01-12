@@ -52,11 +52,11 @@ export default function UnitPicker({
   return (
     <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
       <div>
-        <select value={selectedTypeId} onChange={e => setSelectedTypeId(e.target.value)} style={styles.select()}>
+        <select value={selectedTypeId} onChange={e => setSelectedTypeId(e.target.value)} className={styles.select}>
           <option value="">Select type…</option>
           {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
-        {loadingTypes ? <small style={styles.metaText}>Loading types…</small> : null}
+        {loadingTypes ? <small className={styles.metaText}>Loading types…</small> : null}
       </div>
       <div>
         <select
@@ -136,7 +136,7 @@ export default function UnitPicker({
               }))
             }
           }}
-          style={styles.select()}
+          className={styles.select}
           disabled={!selectedTypeId || loadingUnits || units.length === 0}
         >
           <option value="">{loadingUnits ? 'Loading…' : (units.length ? 'Select unit…' : 'No units')}</option>

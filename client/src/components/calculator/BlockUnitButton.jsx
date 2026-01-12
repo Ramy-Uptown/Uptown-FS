@@ -51,8 +51,8 @@ export default function BlockUnitButton({ role, unitInfo, clientInfo, genResult,
         type="button"
         onClick={requestUnitBlock}
         disabled={!canBlock}
+        className={styles?.btnPrimary}
         style={{
-          ...(styles?.btnPrimary || {}),
           opacity: canBlock ? 1 : 0.6,
           cursor: canBlock ? 'pointer' : 'not-allowed',
           minWidth: 180
