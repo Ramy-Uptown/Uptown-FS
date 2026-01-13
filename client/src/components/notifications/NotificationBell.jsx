@@ -1,6 +1,80 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { fetchWithAuth } from '../../lib/apiClient.js'
 
+// Get action URL based on notification type and ref_table/ref_id
+function getActionUrl(notification) {
+  const { type, ref_table, ref_id } = notification || {}
+  const t = String(type || '').toLowerCase()
+
+  // Block-related notifications
+  if (t.includes('block') || t.includes('unblock')) {
+    return '/deals/block-requests'
+  }
+
+  // Inventory drafts
+  if (t === 'inventory_unit_draft') {
+    return '/admin/inventory-drafts'
+  }
+
+  // Inventory changes
+  if (t === 'unit_inventory_change_request') {
+    return '/admin/inventory-changes'
+  }
+
+  // Model changes
+  if (t === 'unit_model_change_rejected' || t.includes('unit_model')) {
+    return '/admin/unit-model-changes'
+  }
+
+  // Hold-related notifications
+  if (t.includes('hold')) {
+    // For CEO/TM users, go to hold-approvals; otherwise holds
+    const user = JSON.parse(localStorage.getItem('auth_user') || '{}')
+    const tmRoles = ['ceo', 'chairman', 'vice_chairman', 'top_management', 'contract_manager', 'sales_manager']
+    if (tmRoles.includes(user?.role)) {
+      return '/admin/hold-approvals'
+    }
+    return '/admin/holds'
+  }
+
+  // Pricing-related
+  if (t.includes('pricing') || t.includes('price')) {
+    return '/admin/standard-pricing'
+  }
+
+  // Threshold-related
+  if (t.includes('threshold')) {
+    return '/admin/payment-thresholds'
+  }
+
+  // Offer/deal-related
+  if (t.includes('offer') || t.includes('deal')) {
+    if (ref_table === 'deals' && ref_id) {
+      return `/deals/${ref_id}`
+    }
+    return '/deals/queues'
+  }
+
+  // Reservation-related
+  if (t.includes('reservation')) {
+    if (ref_id) {
+      return `/reservation-forms/${ref_id}`
+    }
+    return '/deals/queues'
+  }
+
+  // Contract-related
+  if (t.includes('contract')) {
+    if (ref_id) {
+      return `/contracts/${ref_id}`
+    }
+    return '/contracts'
+  }
+
+  // Default: go to notifications full page
+  return '/notifications'
+}
+
 export default function NotificationBell() {
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
   const [open, setOpen] = useState(false)
@@ -63,12 +137,19 @@ export default function NotificationBell() {
     } catch {}
   }
 
-  async function markRead(id) {
+  async function markRead(id, e) {
+    if (e) e.stopPropagation()
     try {
       await fetchWithAuth(`${API_URL}/api/notifications/${id}/read`, { method: 'PATCH' })
       setItems(it => it.map(n => n.id === id ? { ...n, is_read: true } : n))
       setCount(c => Math.max(0, c - 1))
     } catch {}
+  }
+
+  function handleNotificationClick(n) {
+    const url = getActionUrl(n)
+    setOpen(false)
+    window.location.href = url
   }
 
   return (
@@ -87,13 +168,42 @@ export default function NotificationBell() {
             {loading && <div style={{ padding: 10, color: '#64748b' }}>Loading…</div>}
             {!loading && items.length === 0 && <div style={{ padding: 10, color: '#64748b' }}>No notifications</div>}
             {!loading && items.map(n => (
-              <div key={n.id} style={{ padding: 10, borderBottom: '1px solid #f1f5f9', background: n.is_read ? '#fff' : '#f9fafb' }}>
-                <div style={{ fontSize: 13, color: '#111827' }}>{n.message || n.type}</div>
-                <div style={{ fontSize: 11, color: '#64748b' }}>{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</div>
-                {!n.is_read && <button style={{ ...linkBtn, marginTop: 6 }} onClick={() => markRead(n.id)}>Mark read</button>}
+              <div 
+                key={n.id} 
+                onClick={() => handleNotificationClick(n)}
+                style={{ 
+                  padding: 10, 
+                  borderBottom: '1px solid #f1f5f9', 
+                  background: n.is_read ? '#fff' : '#fffbeb',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+                onMouseLeave={e => e.currentTarget.style.background = n.is_read ? '#fff' : '#fffbeb'}
+              >
+                <div style={{ fontSize: 13, color: '#111827', fontWeight: n.is_read ? 400 : 500 }}>{n.message || n.type}</div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                  <span style={{ fontSize: 11, color: '#2563eb' }}>View →</span>
+                  {!n.is_read && (
+                    <button 
+                      style={{ ...linkBtn, fontSize: 11 }} 
+                      onClick={(e) => markRead(n.id, e)}
+                    >
+                      Mark read
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
+          {items.length > 0 && (
+            <div style={{ padding: 8, borderTop: '1px solid #e5e7eb', textAlign: 'center' }}>
+              <a href="/notifications" style={{ color: '#2563eb', fontSize: 12, textDecoration: 'none' }}>
+                View all notifications
+              </a>
+            </div>
+          )}
         </div>
       )}
     </div>
