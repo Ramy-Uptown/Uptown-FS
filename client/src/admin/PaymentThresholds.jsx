@@ -279,7 +279,8 @@ export default function PaymentThresholds() {
                                 <LoadingButton 
                                     onClick={submitProposal} 
                                     loading={saving}
-                                    className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-sm"
+                                    style={{ backgroundColor: '#B08D47' }}
+                                    className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-600 shadow-sm"
                                 >
                                     Submit for Approval
                                 </LoadingButton>
