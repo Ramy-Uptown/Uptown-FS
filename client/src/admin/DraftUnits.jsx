@@ -120,7 +120,8 @@ export default function DraftUnits() {
                         onClick={handleLinkModel}
                         disabled={selectedIds.length === 0 || !selectedModelId || linking}
                         loading={linking}
-                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 shadow-sm"
+                        style={{ backgroundColor: '#B08D47' }}
+                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-600 disabled:opacity-50 shadow-sm"
                     >
                         Link Model
                     </LoadingButton>
